@@ -215,13 +215,20 @@
         <li>
           <strong>Hover only</strong>
           <small>
-            — the recommended setting alongside another blame extension. Nothing is drawn on the
-            line, so nothing collides, and you keep the hover that shows the diff which produced the
-            line you are pointing at.
+            — the recommended setting alongside another blame extension. RefHaven stops drawing on
+            the line, so the duplicate there goes away, and you keep the hover that shows the diff
+            which produced the line you are pointing at.
           </small>
         </li>
         <li><strong>Off</strong> <small>— no per-line surfaces at all</small></li>
       </ul>
+      <p>
+        One thing this cannot do: VS Code merges every extension's hover into a single widget, and
+        an extension can only withhold its own. So with two blame extensions the hover keeps showing
+        both cards. To see one, switch RefHaven to <strong>Off</strong>, set
+        <code>refhaven.lineHover.enabled</code> to false while keeping the line text, or turn off
+        hovers in the other extension's settings.
+      </p>
       <p>
         Comparisons, review tracking, file and line history, stashes, patch export, and the merge
         forecast are unaffected by this setting and never overlap with another extension. Keeping

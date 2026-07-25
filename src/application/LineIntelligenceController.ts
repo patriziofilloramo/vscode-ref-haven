@@ -28,8 +28,9 @@ const MODE_LABELS: Readonly<Record<LineIntelligenceMode, string>> = {
 
 const MODE_DETAILS: Readonly<Record<LineIntelligenceMode, string>> = {
   full: "Inline blame on the current line, the rich line hover, and the status bar entry.",
-  hoverOnly: "Only the rich line hover. Use this alongside another blame extension.",
-  off: "No per-line surfaces. Comparisons, history, stashes, and patches are unaffected.",
+  hoverOnly:
+    "Only the rich line hover. Removes the duplicate on the line; a second extension's hover still appears alongside ours.",
+  off: "No per-line surfaces at all. Comparisons, history, stashes, and patches are unaffected.",
 };
 
 /**
@@ -72,6 +73,8 @@ export class LineIntelligenceController {
    */
   public async noticeOverlapOnce(): Promise<void> {
     if (this.context.globalState.get<boolean>(OVERLAP_NOTICE_KEY) === true) return;
+    // Only for someone still on untouched defaults. Anyone who has already
+    // chosen a mode, or their own combination, has met this decision.
     if (this.currentMode() !== "full") return;
     if (!hasOtherBlameExtension(installedExtensionManifests(), this.context.extension.id)) return;
 
@@ -85,7 +88,7 @@ export class LineIntelligenceController {
     // "the line reads twice" alone tells the user something is wrong without
     // telling them what they gain or give up by fixing it.
     const action = await vscode.window.showInformationMessage(
-      "Another installed extension also shows blame on the current line, so it appears twice. RefHaven can show only its hover instead: the duplicate goes away and you keep the diff that produced the line.",
+      "Another installed extension also shows blame on the current line, so it appears twice. RefHaven can drop its own line text and keep just its hover, which shows the diff that produced the line.",
       useHoverOnly,
       keepEverything,
       learnMore,
@@ -98,7 +101,8 @@ export class LineIntelligenceController {
     }
   }
 
-  private currentMode(): LineIntelligenceMode {
+  /** Null when the three settings form an arrangement no mode names. */
+  private currentMode(): LineIntelligenceMode | null {
     return lineIntelligenceMode({
       inlineBlame: this.readFlag(
         EXTENSION_SETTINGS.inlineBlameEnabled,

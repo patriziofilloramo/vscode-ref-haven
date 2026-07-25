@@ -23,6 +23,32 @@ export function formatRelativeTime(epochMs: number, nowMs: number = Date.now()):
   return "just now";
 }
 
+/**
+ * Clock time for a commit, at the precision that is actually informative.
+ *
+ * "3 hours ago" answers how long ago; it does not answer which change this
+ * was, and two commits an hour apart round to the same phrase. The exact time
+ * disambiguates them. What matters changes with distance, so the format does
+ * too: for today the clock alone is enough, within the year the date carries
+ * it, and beyond that the year has to be said.
+ *
+ * Rendered in the reader's locale, from the reader's clock — the commit's own
+ * UTC offset is a separate fact and belongs to the commit, not to this line.
+ */
+export function formatExactTime(epochMs: number, nowMs: number = Date.now()): string {
+  const moment = new Date(epochMs);
+  const now = new Date(nowMs);
+  const clock = moment.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+  if (moment.toDateString() === now.toDateString()) return clock;
+  const day = moment.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    ...(moment.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+  return `${day}, ${clock}`;
+}
+
 export function formatCount(value: number): string {
   return value.toLocaleString("en-US");
 }

@@ -30,6 +30,10 @@ is no earlier published version to compare against.
   commit message, the diff section that produced the hovered line, file
   statistics, and actions for details, diffs, history, and copy. Both work in
   unsaved buffers.
+- Every blame surface names the clock time of the change, not only how long
+  ago it was: "2 hours ago" cannot separate two commits an hour apart, and the
+  precision shown adapts to distance — the clock alone for today, the date
+  within the year, the year beyond it.
 - Time-travel blame: the hover works inside readonly revision documents and can
   open the file as it was before the blamed commit.
 - File history, line history, commit search, commit details, and read-only

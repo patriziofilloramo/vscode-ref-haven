@@ -2,7 +2,7 @@ import type { RichLineHover } from "../../domain/blame";
 import { shortSha } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { COMMAND_IDS } from "../commands/commandIds";
-import { formatDiffStats, formatRelativeTime, pluralize } from "../format";
+import { formatDiffStats, formatExactTime, formatRelativeTime, pluralize } from "../format";
 import { BROWSER_AUTOLINK_COMMANDS, escapeMarkdownWithAutolinks } from "../browserAutolinks";
 import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 import { blameAuthorLabel, blameCommitInfo } from "./blamePresentation";
@@ -38,7 +38,7 @@ export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()):
   // message), what actually changed, and only then the supporting metadata.
   // The full SHA lives behind "Copy SHA" instead of consuming a line here.
   const lines = [
-    `**${author}** · ${formatRelativeTime(blame.authorDate, nowMs)} · \`${shortSha(blame.sha)}\``,
+    `**${author}** · ${formatRelativeTime(blame.authorDate, nowMs)} · ${formatExactTime(blame.authorDate, nowMs)} · \`${shortSha(blame.sha)}\``,
     `**${
       blame.summary.length > 0
         ? escapeMarkdownWithAutolinks(blame.summary, data.repositoryRoot)
@@ -54,11 +54,9 @@ export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()):
 
 /**
  * Supporting facts, kept below the diff: scope of the commit, where the line
- * came from, the exact timestamp and email, and a committer that differs from
- * the author.
+ * came from, the author's email, and a committer that differs from the author.
  */
 function metadataLines(data: RichLineHover, nowMs: number): readonly string[] {
-  const { blame } = data;
   const details = data.commitDetails;
   const lines: string[] = [];
 
@@ -74,9 +72,9 @@ function metadataLines(data: RichLineHover, nowMs: number): readonly string[] {
   if (location) scope.push(location);
   if (scope.length > 0) lines.push(`$(files) ${scope.join(" · ")}`);
 
-  const identity = [new Date(blame.authorDate).toLocaleString()];
-  if (details?.authorEmail) identity.push(`<${escapeMarkdown(details.authorEmail)}>`);
-  lines.push(`$(calendar) ${identity.join(" · ")}`);
+  // The identity line already carries the exact time; repeating a full
+  // timestamp here would say the same thing twice.
+  if (details?.authorEmail) lines.push(`$(mail) <${escapeMarkdown(details.authorEmail)}>`);
 
   if (
     details &&

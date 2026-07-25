@@ -1,7 +1,7 @@
 import type { LineBlame } from "../../domain/blame";
 import { shortSha, type CommitInfo } from "../../domain/comparisonResult";
 import { COMMAND_IDS } from "../commands/commandIds";
-import { formatRelativeTime } from "../format";
+import { formatExactTime, formatRelativeTime } from "../format";
 import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 
 /** Commands that blame hover links may execute; used for MarkdownString trust. */
@@ -38,7 +38,8 @@ export function inlineBlameText(
   const author = blameAuthorLabel(blame, currentUserName);
   if (!blame.isCommitted) return `${author} · Uncommitted changes`;
   const summary = blame.summary.length > 0 ? ` · ${blame.summary}` : "";
-  return `${author}, ${formatRelativeTime(blame.authorDate, nowMs)}${summary}`;
+  const when = `${formatRelativeTime(blame.authorDate, nowMs)} (${formatExactTime(blame.authorDate, nowMs)})`;
+  return `${author}, ${when}${summary}`;
 }
 
 export function statusBarBlameText(
@@ -48,7 +49,7 @@ export function statusBarBlameText(
 ): string {
   const author = blameAuthorLabel(blame, currentUserName);
   if (!blame.isCommitted) return `$(git-commit) ${author}, uncommitted`;
-  return `$(git-commit) ${author}, ${formatRelativeTime(blame.authorDate, nowMs)}`;
+  return `$(git-commit) ${author}, ${formatRelativeTime(blame.authorDate, nowMs)} (${formatExactTime(blame.authorDate, nowMs)})`;
 }
 
 /**

@@ -52,11 +52,17 @@ the line reads twice.
 
 Run **RefHaven: Line Intelligence** from `Ctrl+Shift+P` and choose:
 
-| Mode           | What stays                                     |
-| -------------- | ---------------------------------------------- |
-| **Full**       | Inline blame, hover, status bar (default)      |
-| **Hover only** | Just the hover — recommended when running both |
-| **Off**        | No per-line surfaces                           |
+| Mode           | What stays                                         |
+| -------------- | -------------------------------------------------- |
+| **Full**       | Inline blame, hover, status bar (default)          |
+| **Hover only** | Just the hover — removes the duplicate on the line |
+| **Off**        | No per-line surfaces                               |
+
+One limit worth knowing: VS Code merges every extension's hover into a single
+widget, and an extension can only withhold its own. With two blame extensions
+the hover still shows both cards. To see one, use **Off**, set
+`refhaven.lineHover.enabled` to `false` while keeping the line text, or turn
+off hovers in the other extension.
 
 Everything else — comparisons, review tracking, history, stashes, patch export,
 merge forecast — never overlaps, so keeping both extensions installed is a
@@ -113,7 +119,7 @@ conflicts`) with the conflicted files named in the tooltip — computed
 Hover any tracked line to answer more than “who changed this?”
 
 - Author and email.
-- Exact and relative commit dates.
+- Relative and exact commit times, at the precision that distance makes useful.
 - Full commit SHA and message.
 - Original file path and line.
 - Commit and file statistics.
@@ -124,7 +130,7 @@ Hover any tracked line to answer more than “who changed this?”
 Optional inline blame keeps the current line concise:
 
 ```text
-You, 2 hours ago · fix: reject unsafe revision paths
+You, 2 hours ago (14:32) · fix: reject unsafe revision paths
 ```
 
 The same hover works in RefHaven's historical readonly documents, so you can

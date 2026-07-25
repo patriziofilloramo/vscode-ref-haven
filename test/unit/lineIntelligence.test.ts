@@ -41,10 +41,16 @@ suite("line intelligence", () => {
     for (const mode of ["full", "hoverOnly", "off"] as const) {
       assert.equal(lineIntelligenceMode(lineIntelligenceSettings(mode)), mode);
     }
-    // A combination no mode produces reports the default rather than throwing.
+    // Keeping the line text while switching the hover off is a documented way
+    // to coexist with another extension. No mode names it, and claiming one
+    // would report untouched defaults to someone who has already tuned them.
+    assert.equal(
+      lineIntelligenceMode({ inlineBlame: true, lineHover: false, statusBar: true }),
+      null,
+    );
     assert.equal(
       lineIntelligenceMode({ inlineBlame: true, lineHover: false, statusBar: false }),
-      "full",
+      null,
     );
   });
 

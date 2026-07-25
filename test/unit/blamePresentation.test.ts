@@ -6,8 +6,12 @@ import {
   inlineBlameText,
   statusBarBlameText,
 } from "../../src/ui/blame/blamePresentation";
+import { formatExactTime } from "../../src/ui/format";
 
 const NOW = 1_700_000_000_000 + 2 * 60 * 60 * 1000;
+// Rendered in the running machine's locale and zone, so it is derived
+// rather than hard-coded.
+const EXACT = formatExactTime(1_700_000_000_000, NOW);
 
 const COMMITTED: LineBlame = {
   authorDate: 1_700_000_000_000,
@@ -31,14 +35,14 @@ suite("blame presentation", () => {
   test("formats inline blame with author, relative time, and summary", () => {
     assert.equal(
       inlineBlameText(COMMITTED, null, NOW),
-      "Patrizio Filloramo, 2 hours ago · feat: add blame support",
+      `Patrizio Filloramo, 2 hours ago (${EXACT}) · feat: add blame support`,
     );
   });
 
   test("replaces the configured Git user with You", () => {
     assert.equal(
       inlineBlameText(COMMITTED, "Patrizio Filloramo", NOW),
-      "You, 2 hours ago · feat: add blame support",
+      `You, 2 hours ago (${EXACT}) · feat: add blame support`,
     );
   });
 
@@ -50,7 +54,7 @@ suite("blame presentation", () => {
   test("formats the status bar entry", () => {
     assert.equal(
       statusBarBlameText(COMMITTED, "someone else", NOW),
-      "$(git-commit) Patrizio Filloramo, 2 hours ago",
+      `$(git-commit) Patrizio Filloramo, 2 hours ago (${EXACT})`,
     );
   });
 

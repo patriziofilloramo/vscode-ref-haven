@@ -4,8 +4,10 @@
  *
  * They are grouped because they conflict as a group. VS Code renders every
  * extension's decorations and merges every extension's hovers, so a second
- * blame extension does not replace ours — it doubles it. One switch turns the
- * overlap off; three separate settings make the user hunt for it.
+ * blame extension does not replace ours — it doubles each surface. The modes
+ * are shortcuts through the three settings, not a complete vocabulary: the
+ * settings stay independent, and a combination outside these three is a valid
+ * arrangement rather than an error.
  */
 export type LineIntelligenceMode = "full" | "hoverOnly" | "off";
 
@@ -19,9 +21,10 @@ export function lineIntelligenceSettings(mode: LineIntelligenceMode): LineIntell
   switch (mode) {
     case "full":
       return { inlineBlame: true, lineHover: true, statusBar: true };
-    // The hover survives because it is the surface where overlap costs least:
-    // two hovers stack in one widget, while two decorations collide on the
-    // same line and two status-bar entries claim the same strip.
+    // Removes the duplicate on the line and in the status bar. It does not
+    // remove the doubled hover: VS Code merges every extension's hover into
+    // one widget and an extension can only withhold its own, so this keeps
+    // the surface RefHaven is strongest on rather than ending all overlap.
     case "hoverOnly":
       return { inlineBlame: false, lineHover: true, statusBar: false };
     case "off":
@@ -29,18 +32,29 @@ export function lineIntelligenceSettings(mode: LineIntelligenceMode): LineIntell
   }
 }
 
-export function lineIntelligenceMode(settings: LineIntelligenceSettings): LineIntelligenceMode {
-  for (const mode of ["full", "hoverOnly", "off"] as const) {
-    const candidate = lineIntelligenceSettings(mode);
-    if (
-      candidate.inlineBlame === settings.inlineBlame &&
-      candidate.lineHover === settings.lineHover &&
-      candidate.statusBar === settings.statusBar
-    ) {
-      return mode;
-    }
-  }
-  return "full";
+/**
+ * The mode these settings correspond to, or null when they correspond to none.
+ *
+ * The three settings are independent, so combinations exist that no mode
+ * produces — keeping the line text while switching the hover off is a
+ * documented way to coexist with another extension. Null says exactly that:
+ * the user chose their own arrangement. Reporting a mode anyway would claim
+ * they are on defaults when they are not, and would let advice aimed at
+ * untouched settings reach someone who has already tuned them.
+ */
+export function lineIntelligenceMode(
+  settings: LineIntelligenceSettings,
+): LineIntelligenceMode | null {
+  return (
+    (["full", "hoverOnly", "off"] as const).find((mode) => {
+      const candidate = lineIntelligenceSettings(mode);
+      return (
+        candidate.inlineBlame === settings.inlineBlame &&
+        candidate.lineHover === settings.lineHover &&
+        candidate.statusBar === settings.statusBar
+      );
+    }) ?? null
+  );
 }
 
 /** The parts of an installed extension's manifest this detection reads. */
