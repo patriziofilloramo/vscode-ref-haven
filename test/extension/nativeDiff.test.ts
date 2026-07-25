@@ -9,6 +9,8 @@ import * as vscode from "vscode";
 import { calculateComparison } from "../../src/application/ComparisonEngine";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
 import {
+  blameFile,
+  listChangedLineRanges,
   listFileHistory,
   listLineHistory,
   listWorktrees,
@@ -178,6 +180,28 @@ suite("native branch diff", () => {
     assert.ok(worktree);
     assert.equal(worktree.branchFullName, "refs/heads/feature/native-diff");
     assert.equal(worktree.detached, false);
+  });
+
+  test("loads whole-file blame and changed line ranges locally", async () => {
+    const committed = await blameFile(repositoryRoot, "modified.txt");
+    assert.equal(committed.length, 1);
+    assert.equal(committed[0]?.blame.isCommitted, true);
+
+    const unsaved = await blameFile(repositoryRoot, "modified.txt", "unsaved buffer\n");
+    assert.equal(unsaved.length, 1);
+    assert.equal(unsaved[0]?.blame.isCommitted, false);
+
+    writeFileSync(join(repositoryRoot, "modified.txt"), "after\nnew line\n", "utf8");
+    try {
+      const ranges = await listChangedLineRanges(
+        repositoryRoot,
+        git("rev-parse", "HEAD"),
+        "modified.txt",
+      );
+      assert.deepEqual(ranges, [{ lineCount: 1, startLine: 2 }]);
+    } finally {
+      writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+    }
   });
 
   function git(...args: string[]): string {

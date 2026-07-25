@@ -29,7 +29,7 @@ local Git enumeration before use.
 
 ## Stored and displayed data
 
-Only comparison specifications are persisted, in VS Code `workspaceState`. Computed history, diffs, blame results, and file contents are not persisted. Revision content is loaded on demand into a bounded in-memory cache and revision URIs are authenticated with a session-only HMAC.
+Only comparison specifications are persisted, in VS Code `workspaceState`. Computed history, diffs, blame and annotation results, selected changes-annotation references, and file contents are not persisted. The non-sensitive whole-file annotation mode (`off`, `blame`, or `heatmap`) may be saved as a VS Code user setting. Revision content is loaded on demand into a bounded in-memory cache and revision URIs are authenticated with a session-only HMAC.
 
 Logs exclude file contents and redact credential-, secret-, environment-, token-, and remote-related metadata. Copy commands write only the explicitly selected value to the operating-system clipboard.
 

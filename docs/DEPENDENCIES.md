@@ -1,6 +1,6 @@
 # Dependency policy
 
-RefHaven ships with zero production dependencies. All direct packages are development-only, exact-pinned in `package.json`, integrity-pinned in `package-lock.json`, and omitted from the VSIX.
+RefHaven ships with zero production dependencies. All direct packages are development-only, exact-pinned in `package.json`, integrity-pinned in `package-lock.json`, and omitted from the VSIX. Source maps remain available for local development but are excluded from the package, which contains only compiled JavaScript and documentation.
 
 ## Direct development dependencies
 

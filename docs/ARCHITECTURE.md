@@ -41,6 +41,7 @@ src/
     ComparisonController.ts
     ComparisonEngine.ts
     ComparisonStore.ts
+    FileAnnotationsController.ts
     FileHistoryController.ts
     Logger.ts
     RepositoryNavigationController.ts
@@ -53,6 +54,7 @@ src/
       branchRefs.ts
       commitLog.ts
       commitDetails.ts
+      diffHunks.ts
       fileHistory.ts
       nameStatus.ts
       numstat.ts
@@ -172,6 +174,11 @@ The `TreeDataProvider` maps controller state to repository, comparison, commit-s
 
 The controller creates restored nodes synchronously in `notComputed`. Expansion or visibility requests schedule computation through the controller. `onDidChangeTreeData` updates only affected nodes where possible.
 
+The provider implements `getParent` for comparison roots, their sections, and
+commit nodes. This is part of the reveal contract: VS Code cannot reliably
+select or expand a programmatically revealed node unless it can reconstruct
+that node's path to the tree root.
+
 ### Revision document provider
 
 The readonly `refhaven:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be canonical forward-slash Git paths and cannot be absolute, traverse, or change meaning on Windows. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
@@ -197,6 +204,15 @@ worktree mutation is intentionally absent.
 ### BlameController
 
 Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders a dimmed end-of-line decoration and a status-bar item; both carry a trusted-markdown hover whose fixed command links reuse existing copy/open commands. All Git-controlled Markdown is escaped before trust is enabled.
+
+### FileAnnotationsController
+
+Runs opt-in whole-file `git blame --line-porcelain` for gutter blame and the
+five-bucket age heatmap; unsaved text is supplied over stdin. Changes mode
+parses zero-context diff hunks against a locally resolved immutable base SHA
+and deliberately waits for a dirty editor to be saved. Updates are debounced,
+generation-checked, cancellable, capped at 5,000 lines, escaped before Markdown
+rendering, and never persisted.
 
 ### RepositoryWatcher
 

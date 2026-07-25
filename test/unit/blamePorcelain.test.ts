@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   GitBlameParseError,
+  parseBlameFilePorcelain,
   parseBlamePorcelain,
 } from "../../src/infrastructure/git/blamePorcelain";
 
@@ -77,5 +78,22 @@ suite("Git blame porcelain parser", () => {
       () => parseBlamePorcelain(porcelain(SHA, { "author-time": "yesterday" })),
       GitBlameParseError,
     );
+  });
+
+  test("parses repeated line-porcelain records in final-line order", () => {
+    const second = porcelain(SHA).replace(`${SHA} 3 3 1`, `${SHA} 4 2 1`);
+    const first = porcelain(SHA).replace(`${SHA} 3 3 1`, `${SHA} 2 1 1`);
+
+    const records = parseBlameFilePorcelain(second + first);
+
+    assert.deepEqual(
+      records.map(({ lineNumber }) => lineNumber),
+      [1, 2],
+    );
+    assert.equal(records[0]?.blame.authorName, "Patrizio Filloramo");
+  });
+
+  test("rejects duplicate final line numbers", () => {
+    assert.throws(() => parseBlameFilePorcelain(porcelain(SHA) + porcelain(SHA)), /final line/u);
   });
 });

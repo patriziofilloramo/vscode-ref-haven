@@ -1,5 +1,6 @@
 export const COMMAND_IDS = {
   changeComparisonMode: "refhaven.changeComparisonMode",
+  changeFileAnnotations: "refhaven.changeFileAnnotations",
   closeComparison: "refhaven.closeComparison",
   compareCurrentBranch: "refhaven.compareCurrentBranch",
   compareBranchWithCurrent: "refhaven.compareBranchWithCurrent",

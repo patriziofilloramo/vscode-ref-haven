@@ -3,18 +3,20 @@ import { promisify } from "node:util";
 
 import * as vscode from "vscode";
 
-import type { LineBlame } from "../../domain/blame";
+import type { FileBlameLine, LineBlame } from "../../domain/blame";
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
 import type { CommitDetails, CommitSearchKind } from "../../domain/commitDetails";
 import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
 import type { FileHistoryEntry } from "../../domain/history";
+import type { ChangedLineRange } from "../../domain/fileAnnotations";
 import { assertRepositoryRelativeGitPath, pathIdentityKey } from "../../domain/pathValidation";
 import type { StashEntry } from "../../domain/stash";
 import type { WorktreeInfo } from "../../domain/worktree";
-import { parseBlamePorcelain } from "./blamePorcelain";
+import { parseBlameFilePorcelain, parseBlamePorcelain } from "./blamePorcelain";
 import { parseBranchRefs, parseComparisonRefs } from "./branchRefs";
 import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
 import { COMMIT_DETAILS_FORMAT, parseCommitDetails } from "./commitDetails";
+import { parseChangedLineRanges } from "./diffHunks";
 import { FILE_HISTORY_LOG_FORMAT, parseFileHistory } from "./fileHistory";
 import { parseNameStatusZ } from "./nameStatus";
 import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
@@ -469,6 +471,7 @@ export async function blameLine(
   contents?: string,
   signal?: AbortSignal,
 ): Promise<LineBlame | null> {
+  assertRepositoryRelativeGitPath(filePath);
   const args = [
     "blame",
     "--porcelain",
@@ -485,6 +488,45 @@ export async function blameLine(
   } catch {
     return null;
   }
+}
+
+export async function blameFile(
+  repositoryRoot: string,
+  filePath: string,
+  contents?: string,
+  signal?: AbortSignal,
+): Promise<FileBlameLine[]> {
+  assertRepositoryRelativeGitPath(filePath);
+  const args = [
+    "blame",
+    "--line-porcelain",
+    "--root",
+    ...(contents === undefined ? [] : ["--contents", "-"]),
+    "--",
+    filePath,
+  ];
+  const stdout = await runGitWithInput(repositoryRoot, args, contents, signal).catch(
+    (error: unknown) => failGitOperation(error, "Git could not annotate this file."),
+  );
+  return parseBlameFilePorcelain(stdout);
+}
+
+export async function listChangedLineRanges(
+  repositoryRoot: string,
+  baseSha: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<ChangedLineRange[]> {
+  assertRepositoryRelativeGitPath(filePath);
+  if (!/^[0-9a-f]{40,64}$/u.test(baseSha)) throw new Error("The base commit SHA is invalid.");
+  const stdout = await runGit(
+    repositoryRoot,
+    ["diff", "--no-ext-diff", "--no-textconv", "--unified=0", baseSha, "--", filePath],
+    signal,
+  ).catch((error: unknown) =>
+    failGitOperation(error, "Git could not annotate changes for this file."),
+  );
+  return parseChangedLineRanges(stdout);
 }
 
 export async function readFileAtRevision(

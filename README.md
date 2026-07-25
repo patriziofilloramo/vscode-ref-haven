@@ -38,6 +38,14 @@ fix: prevent duplicates` — including in unsaved buffers.
   File at This Revision** actions; the same info lives in the status bar.
 - Toggle via the `RefHaven: Toggle Inline Blame` command or settings.
 
+### File annotations
+
+- **Whole-file blame** adds a gutter marker and hover to every line, including
+  unsaved buffers.
+- **File heatmap** colors lines by the age of their last commit.
+- **Changes relative to…** marks saved working-tree lines against any locally
+  available reference. All modes are native, cancellable, and off by default.
+
 ### File and line history
 
 - The **File History** Source Control view follows the active file across
@@ -81,6 +89,7 @@ most common entry points:
 | `Search Commits...`              | Search commits already available locally         |
 | `Open File at Revision...`       | Open the active file at a chosen branch revision |
 | `Toggle Inline Blame`            | Show or hide current-line blame                  |
+| `Change File Annotations...`     | Blame, heatmap, changes, or off                  |
 
 ## Settings
 
@@ -88,6 +97,7 @@ most common entry points:
 | --------------------------------- | ------- | ------------------------------------- |
 | `refhaven.inlineBlame.enabled`    | `true`  | Inline blame text on the current line |
 | `refhaven.statusBarBlame.enabled` | `true`  | Blame entry in the status bar         |
+| `refhaven.fileAnnotations.mode`   | `off`   | Whole-file blame or heatmap mode      |
 | `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
 
 ## Development

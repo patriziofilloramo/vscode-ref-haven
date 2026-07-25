@@ -35,6 +35,7 @@ export async function pickBranch(
   currentBranchName?: string | null,
   repositoryRoot?: string,
   allowWorkingTree = false,
+  title = "RefHaven: New Comparison",
 ): Promise<BranchRef | null> {
   const local = sortBranches(
     branches.filter((branch) => branch.kind === "localBranch"),
@@ -88,7 +89,7 @@ export async function pickBranch(
   const selected = await vscode.window.showQuickPick(items, {
     matchOnDescription: true,
     placeHolder,
-    title: "RefHaven: New Comparison",
+    title,
   });
   if (selected?.action === "enterRevision" && repositoryRoot) {
     const value = await vscode.window.showInputBox({

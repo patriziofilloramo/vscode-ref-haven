@@ -5,6 +5,7 @@ import { CommitDetailsController } from "./application/CommitDetailsController";
 import { ComparisonController } from "./application/ComparisonController";
 import { ComparisonStore } from "./application/ComparisonStore";
 import { FileHistoryController } from "./application/FileHistoryController";
+import { FileAnnotationsController } from "./application/FileAnnotationsController";
 import { RepositoryWatcher } from "./application/RepositoryWatcher";
 import { RepositoryNavigationController } from "./application/RepositoryNavigationController";
 import { StashController } from "./application/StashController";
@@ -95,6 +96,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     logger,
   );
   const blameController = new BlameController(logger);
+  const fileAnnotationsController = new FileAnnotationsController(logger);
   const repositoryWatcher = new RepositoryWatcher(() => {
     controller.refreshAll();
     void repositoryNavigationController.refresh().catch((error: unknown) => {
@@ -110,6 +112,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
       });
     });
     blameController.refresh();
+    fileAnnotationsController.refresh();
     void fileHistoryController.refresh(true).catch((error: unknown) => {
       logger.error("Automatic file history refresh failed", {
         message: error instanceof Error ? error.message : String(error),
@@ -206,6 +209,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     stashTreeView,
     worktreesTreeView,
     blameController,
+    fileAnnotationsController,
     fileHistoryController,
     repositoryWatcher,
     workspaceFoldersListener,
@@ -237,6 +241,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     logger,
     controller,
     repositoryNavigationController,
+    fileAnnotationsController,
     commitDetailsController,
     fileHistoryController,
     stashController,

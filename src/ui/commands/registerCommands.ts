@@ -4,6 +4,7 @@ import type { BlameController } from "../../application/BlameController";
 import type { CommitDetailsController } from "../../application/CommitDetailsController";
 import type { ComparisonController } from "../../application/ComparisonController";
 import type { FileHistoryController } from "../../application/FileHistoryController";
+import type { FileAnnotationsController } from "../../application/FileAnnotationsController";
 import type { Logger } from "../../application/Logger";
 import type { RepositoryNavigationController } from "../../application/RepositoryNavigationController";
 import type { StashController } from "../../application/StashController";
@@ -24,6 +25,7 @@ export function registerCommands(
   logger: Logger,
   controller: ComparisonController,
   repositoryNavigationController: RepositoryNavigationController,
+  fileAnnotationsController: FileAnnotationsController,
   commitDetailsController: CommitDetailsController,
   fileHistoryController: FileHistoryController,
   stashController: StashController,
@@ -32,6 +34,7 @@ export function registerCommands(
   const handlers: Readonly<Record<CommandId, CommandHandler>> = {
     [COMMAND_IDS.changeComparisonMode]: (node) =>
       controller.changeComparisonMode(requireComparison(node)),
+    [COMMAND_IDS.changeFileAnnotations]: () => fileAnnotationsController.changeAnnotations(),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
     [COMMAND_IDS.compareCurrentBranch]: () => controller.compareCurrentBranch(),
     [COMMAND_IDS.compareBranchWithCurrent]: (node) =>

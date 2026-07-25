@@ -22,6 +22,42 @@ suite("comparison tree lifecycle", () => {
     }
   });
 
+  test("resolves reveal parents back to the tree roots", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    const commit = {
+      authorDate: 1,
+      authorName: "Author",
+      sha: "3".repeat(40),
+      subject: "feat: add fixture",
+    };
+    provider.setComparisons([comparison]);
+    provider.setComparisonLoader(() =>
+      Promise.resolve(createResult(comparison, { aheadCommits: [commit], aheadCount: 1 })),
+    );
+
+    try {
+      const rootNode = provider.getComparisonNode(comparison.id);
+      assert.ok(rootNode);
+      assert.equal(provider.getParent(rootNode), undefined);
+
+      const children = await provider.getChildren(rootNode);
+      const aheadSection = children.find(
+        (child) => child.kind === "section" && child.section === "ahead",
+      );
+      assert.ok(aheadSection);
+      assert.strictEqual(provider.getParent(aheadSection), rootNode);
+
+      const [commitNode] = await provider.getChildren(aheadSection);
+      assert.ok(commitNode?.kind === "commit");
+      const commitParent = provider.getParent(commitNode);
+      assert.ok(commitParent?.kind === "section");
+      assert.equal(commitParent.section, "ahead");
+    } finally {
+      provider.dispose();
+    }
+  });
+
   test("prepares the comparison before the tree expands it", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();
@@ -137,7 +173,10 @@ function createComparison(): SavedComparisonV1 {
   };
 }
 
-function createResult(comparison: SavedComparisonV1): ComparisonResult {
+function createResult(
+  comparison: SavedComparisonV1,
+  overrides: Partial<ComparisonResult> = {},
+): ComparisonResult {
   const baseSha = "1".repeat(40);
   const targetSha = "2".repeat(40);
   return {
@@ -153,5 +192,6 @@ function createResult(comparison: SavedComparisonV1): ComparisonResult {
     mergeBaseSha: baseSha,
     targetSha,
     toSha: targetSha,
+    ...overrides,
   };
 }

@@ -37,6 +37,9 @@ real Working Tree comparison, local commit search, and full commit-detail
 loading in the Extension Host.
 Repository-navigation coverage includes strict NUL-delimited worktree parser
 fixtures and real worktree enumeration in the Extension Host.
+Annotation coverage includes repeated line-porcelain parsing, duplicate-line
+rejection, heatmap age buckets, zero-context diff hunks, unsaved-buffer blame,
+and real changed-line range calculation.
 
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |

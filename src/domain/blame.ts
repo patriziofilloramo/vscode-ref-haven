@@ -11,3 +11,9 @@ export interface LineBlame {
   /** Commit summary; empty for uncommitted lines. */
   readonly summary: string;
 }
+
+export interface FileBlameLine {
+  /** One-based final line number in the current file. */
+  readonly lineNumber: number;
+  readonly blame: LineBlame;
+}

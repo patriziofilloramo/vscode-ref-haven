@@ -217,6 +217,32 @@ export class ComparisonTreeProvider
     }
   }
 
+  /**
+   * VS Code rejects every TreeView.reveal call unless the provider implements
+   * getParent, so without it new comparisons are never selected or expanded.
+   * Reveal only targets comparison nodes (tree roots); deeper kinds resolve
+   * as far as their data allows.
+   */
+  public getParent(element: ComparisonTreeNode): ComparisonTreeNode | undefined {
+    switch (element.kind) {
+      case "comparison":
+        return undefined;
+      case "section":
+        return this.getComparisonNode(element.result.comparison.id);
+      case "commit": {
+        const result = this.results.get(element.comparisonId);
+        if (!result) return undefined;
+        const inAhead = result.aheadCommits.some(({ sha }) => sha === element.commit.sha);
+        if (!inAhead && !result.behindCommits.some(({ sha }) => sha === element.commit.sha)) {
+          return undefined;
+        }
+        return { kind: "section", result, section: inAhead ? "ahead" : "behind" };
+      }
+      default:
+        return undefined;
+    }
+  }
+
   private async getComparisonChildren(
     comparison: SavedComparisonV1,
   ): Promise<ComparisonTreeNode[]> {

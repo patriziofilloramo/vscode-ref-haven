@@ -70,6 +70,7 @@ suite("extension manifest", () => {
 
     assert.deepEqual(commands, [
       "refhaven.changeComparisonMode",
+      "refhaven.changeFileAnnotations",
       "refhaven.closeComparison",
       "refhaven.compareBranchWithCurrent",
       "refhaven.compareCurrentBranch",
@@ -109,7 +110,7 @@ suite("extension manifest", () => {
   test("packages only compiled runtime files", () => {
     const manifest = loadManifest();
 
-    assert.deepEqual(manifest.files, ["dist/**", "SECURITY.md"]);
+    assert.deepEqual(manifest.files, ["dist/**/*.js", "SECURITY.md"]);
   });
 
   test("has no runtime dependencies and exact-pins the minimal development toolchain", () => {
@@ -128,6 +129,11 @@ suite("extension manifest", () => {
     assert.equal(setting.default, 30);
     assert.equal(setting.minimum, 1);
     assert.equal(setting.maximum, 300);
+  });
+
+  test("keeps whole-file annotations opt-in", () => {
+    const setting = manifestSetting(loadManifest(), "refhaven.fileAnnotations.mode");
+    assert.equal(setting.default, "off");
   });
 });
 

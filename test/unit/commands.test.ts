@@ -6,6 +6,7 @@ suite("command identifiers", () => {
   test("exposes the complete command set", () => {
     assert.deepEqual(COMMAND_IDS, {
       changeComparisonMode: "refhaven.changeComparisonMode",
+      changeFileAnnotations: "refhaven.changeFileAnnotations",
       closeComparison: "refhaven.closeComparison",
       compareBranchWithCurrent: "refhaven.compareBranchWithCurrent",
       compareCurrentBranch: "refhaven.compareCurrentBranch",

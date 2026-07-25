@@ -79,6 +79,7 @@ The product has since grown toward a GitLens-style feature set while keeping the
 - **Read-only stash inspection:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees, native diffs, and copy-message. Mutation is excluded to prevent execution of repository-configured filters or merge drivers.
 - **File and commit context actions:** Open File, Copy Path, Copy Relative Path, Copy Commit SHA, and Copy Commit Message from any file or commit node.
 - **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `refhaven.inlineBlame.enabled` and `refhaven.statusBarBlame.enabled`.
+- **File annotations:** opt-in whole-file gutter blame, a five-bucket commit-age heatmap, and saved-working-tree change ranges relative to a locally resolved reference. Computation is cancellable, bounded to 5,000 editor lines, and never persisted.
 - **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
 - **Line history:** a selection-aware quickpick backed by `git log -L`, opening the selected historical revision locally.
 - **Flexible local references:** comparisons accept branches, tags, HEAD, typed locally resolvable revisions, and the live Working Tree; typed revisions are resolved and persisted as immutable SHAs.
