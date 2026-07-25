@@ -17,5 +17,7 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.compareCurrentBranch"));
     assert.ok(commands.includes("refhaven.openFileDiff"));
     assert.ok(commands.includes("refhaven.refreshAll"));
+    assert.ok(commands.includes("refhaven.comparisons.focus"));
+    await vscode.commands.executeCommand("refhaven.comparisons.focus");
   });
 });

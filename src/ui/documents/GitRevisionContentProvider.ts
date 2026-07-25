@@ -106,9 +106,14 @@ export class GitRevisionContentProvider implements vscode.TextDocumentContentPro
       throw new Error("Unknown RefHaven revision document.");
     }
     const payload = token.slice(0, separator);
-    const signature = Buffer.from(token.slice(separator + 1), "base64url");
+    const encodedSignature = token.slice(separator + 1);
+    const signature = Buffer.from(encodedSignature, "base64url");
     const expected = Buffer.from(this.sign(payload), "base64url");
-    if (signature.length !== expected.length || !timingSafeEqual(signature, expected)) {
+    if (
+      signature.toString("base64url") !== encodedSignature ||
+      signature.length !== expected.length ||
+      !timingSafeEqual(signature, expected)
+    ) {
       throw new Error("Unknown RefHaven revision document.");
     }
     return payload;

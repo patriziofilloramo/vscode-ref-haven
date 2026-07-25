@@ -40,6 +40,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     context,
     store,
     treeProvider,
+    treeView,
     logger,
     revisionProvider,
   );

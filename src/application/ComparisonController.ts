@@ -33,7 +33,12 @@ import {
   resolveRef,
 } from "../infrastructure/git/GitCli";
 import { pickBranch, pickRepository } from "../ui/pickers/comparisonPickers";
-import type { ComparisonTreeProvider, FilesLayout } from "../ui/tree/ComparisonTreeProvider";
+import {
+  COMPARISON_VIEW_FOCUS_COMMAND,
+  type ComparisonTreeNode,
+  type ComparisonTreeProvider,
+  type FilesLayout,
+} from "../ui/tree/ComparisonTreeProvider";
 import {
   BinaryRevisionError,
   type GitRevisionContentProvider,
@@ -47,6 +52,7 @@ export class ComparisonController {
     private readonly context: vscode.ExtensionContext,
     private readonly store: ComparisonStore,
     private readonly treeProvider: ComparisonTreeProvider,
+    private readonly treeView: vscode.TreeView<ComparisonTreeNode>,
     private readonly logger: Logger,
     private readonly revisionProvider: GitRevisionContentProvider,
   ) {}
@@ -394,6 +400,7 @@ export class ComparisonController {
     const existingComparison = this.store.findByIdentity({ baseRef, mode, repository, targetRef });
     if (existingComparison) {
       this.logger.info("Skipped duplicate comparison", { mode, operation: "newComparison" });
+      await this.revealComparison(existingComparison);
       void vscode.window.showInformationMessage(
         `Comparison already exists: ${targetRef.displayName} relative to ${baseRef.displayName}.`,
       );
@@ -417,5 +424,26 @@ export class ComparisonController {
     const comparisons = await this.store.add(comparison);
     this.treeProvider.setComparisons(comparisons);
     this.logger.info("Created comparison", { mode: comparison.mode, operation: "newComparison" });
+    await this.revealComparison(comparison);
+  }
+
+  private async revealComparison(comparison: SavedComparisonV1): Promise<void> {
+    let node = this.treeProvider.getComparisonNode(comparison.id);
+    if (!node) throw new Error("The comparison could not be revealed in the RefHaven view.");
+
+    this.treeProvider.requestComparisonExpansion(comparison.id);
+    try {
+      await vscode.commands.executeCommand(COMPARISON_VIEW_FOCUS_COMMAND);
+      await this.treeView.reveal(node, { focus: true, select: true });
+
+      // Keep the provider-level Expanded state active while Git loads and the
+      // tree refreshes. The final reveal then operates on a stable, cached node.
+      await this.treeProvider.prepareComparison(comparison.id);
+      node = this.treeProvider.getComparisonNode(comparison.id);
+      if (!node) throw new Error("The comparison could not be expanded in the RefHaven view.");
+      await this.treeView.reveal(node, { expand: 1, focus: true, select: true });
+    } finally {
+      this.treeProvider.clearComparisonExpansionRequest(comparison.id);
+    }
   }
 }

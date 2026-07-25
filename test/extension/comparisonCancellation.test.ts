@@ -1,10 +1,85 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
+import * as vscode from "vscode";
+
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
+import type { ComparisonResult } from "../../src/domain/comparisonResult";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
-suite("comparison lifecycle cancellation", () => {
+suite("comparison tree lifecycle", () => {
+  test("exposes the exact root node used by the tree for reveal", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    provider.setComparisons([comparison]);
+
+    try {
+      const [rootNode] = await provider.getChildren();
+      assert.ok(rootNode);
+      assert.strictEqual(provider.getComparisonNode(comparison.id), rootNode);
+    } finally {
+      provider.dispose();
+    }
+  });
+
+  test("prepares the comparison before the tree expands it", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    let loadCount = 0;
+    provider.setComparisons([comparison]);
+    provider.setComparisonLoader(() => {
+      loadCount += 1;
+      return Promise.resolve(createResult(comparison));
+    });
+
+    try {
+      await provider.prepareComparison(comparison.id);
+      const node = provider.getComparisonNode(comparison.id);
+      assert.ok(node);
+      const children = await provider.getChildren(node);
+
+      assert.equal(loadCount, 1);
+      assert.deepEqual(
+        children.map((child) => child.kind),
+        ["section", "section", "section"],
+      );
+    } finally {
+      provider.dispose();
+    }
+  });
+
+  test("renders a requested comparison as expanded across refreshes", () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    provider.setComparisons([comparison]);
+
+    try {
+      const node = provider.getComparisonNode(comparison.id);
+      assert.ok(node);
+      provider.requestComparisonExpansion(comparison.id);
+
+      assert.equal(
+        provider.getTreeItem(node).collapsibleState,
+        vscode.TreeItemCollapsibleState.Expanded,
+      );
+      provider.setComparisons([comparison]);
+      const refreshedNode = provider.getComparisonNode(comparison.id);
+      assert.ok(refreshedNode);
+      assert.equal(
+        provider.getTreeItem(refreshedNode).collapsibleState,
+        vscode.TreeItemCollapsibleState.Expanded,
+      );
+
+      provider.clearComparisonExpansionRequest(comparison.id);
+      assert.equal(
+        provider.getTreeItem(refreshedNode).collapsibleState,
+        vscode.TreeItemCollapsibleState.Collapsed,
+      );
+    } finally {
+      provider.dispose();
+    }
+  });
+
   test("aborts in-flight calculation when its comparison is removed", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();
@@ -59,5 +134,24 @@ function createComparison(): SavedComparisonV1 {
       kind: "localBranch",
     },
     updatedAt: 1,
+  };
+}
+
+function createResult(comparison: SavedComparisonV1): ComparisonResult {
+  const baseSha = "1".repeat(40);
+  const targetSha = "2".repeat(40);
+  return {
+    aheadCommits: [],
+    aheadCount: 0,
+    baseSha,
+    behindCommits: [],
+    behindCount: 0,
+    comparison,
+    computedAt: 1,
+    files: [],
+    fromSha: baseSha,
+    mergeBaseSha: baseSha,
+    targetSha,
+    toSha: targetSha,
   };
 }

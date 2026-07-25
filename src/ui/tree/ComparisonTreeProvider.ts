@@ -25,6 +25,7 @@ import {
 } from "./changeNodes";
 
 export const COMPARISON_VIEW_ID = "refhaven.comparisons";
+export const COMPARISON_VIEW_FOCUS_COMMAND = `${COMPARISON_VIEW_ID}.focus`;
 
 export type { FilesLayout } from "./changeNodes";
 
@@ -69,9 +70,11 @@ export class ComparisonTreeProvider
   private readonly commitFilesAbortControllers = new Map<string, AbortController>();
   private commitFilesLoader: CommitFilesLoader | undefined;
   private comparisons: readonly SavedComparisonV1[] = [];
+  private comparisonNodes: readonly ComparisonNode[] = [];
   private comparisonLoader: ComparisonLoader | undefined;
   private disposed = false;
   private readonly errors = new Map<string, string>();
+  private readonly expansionRequests = new Set<string>();
   private filesLayout: FilesLayout = "tree";
   private readonly generations = new Map<string, number>();
   private readonly pendingResults = new Map<string, Promise<ComparisonResult>>();
@@ -83,7 +86,10 @@ export class ComparisonTreeProvider
   public setComparisons(comparisons: readonly SavedComparisonV1[]): void {
     if (this.disposed) return;
     this.comparisons = comparisons;
+    this.comparisonNodes = comparisons.map((comparison) => ({ comparison, kind: "comparison" }));
     const validIds = new Set(comparisons.map(({ id }) => id));
+    for (const id of this.expansionRequests)
+      if (!validIds.has(id)) this.expansionRequests.delete(id);
     for (const id of this.results.keys()) if (!validIds.has(id)) this.removeComparisonState(id);
     for (const id of this.pendingResults.keys())
       if (!validIds.has(id)) this.removeComparisonState(id);
@@ -99,6 +105,27 @@ export class ComparisonTreeProvider
     this.commitFilesLoader = loader;
   }
 
+  public getComparisonNode(comparisonId: string): ComparisonNode | undefined {
+    return this.comparisonNodes.find(({ comparison }) => comparison.id === comparisonId);
+  }
+
+  public async prepareComparison(comparisonId: string): Promise<void> {
+    const comparison = this.currentComparison(comparisonId);
+    if (!comparison) throw new Error("The comparison is not available in the RefHaven view.");
+    await this.getComparisonResult(comparison);
+  }
+
+  public requestComparisonExpansion(comparisonId: string): void {
+    const node = this.getComparisonNode(comparisonId);
+    if (!node) throw new Error("The comparison is not available in the RefHaven view.");
+    this.expansionRequests.add(comparisonId);
+    this.onDidChangeTreeDataEmitter.fire(node);
+  }
+
+  public clearComparisonExpansionRequest(comparisonId: string): void {
+    this.expansionRequests.delete(comparisonId);
+  }
+
   public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -111,7 +138,9 @@ export class ComparisonTreeProvider
     this.commitFiles.clear();
     this.results.clear();
     this.errors.clear();
+    this.expansionRequests.clear();
     this.comparisons = [];
+    this.comparisonNodes = [];
     this.onDidChangeTreeDataEmitter.dispose();
   }
 
@@ -171,7 +200,7 @@ export class ComparisonTreeProvider
   public async getChildren(element?: ComparisonTreeNode): Promise<ComparisonTreeNode[]> {
     if (this.disposed) return [];
     if (!element) {
-      return this.comparisons.map((comparison) => ({ comparison, kind: "comparison" }));
+      return [...this.comparisonNodes];
     }
 
     switch (element.kind) {
@@ -261,7 +290,9 @@ export class ComparisonTreeProvider
   private createComparisonItem(comparison: SavedComparisonV1): vscode.TreeItem {
     const item = new vscode.TreeItem(
       comparisonLabel(comparison),
-      vscode.TreeItemCollapsibleState.Collapsed,
+      this.expansionRequests.has(comparison.id)
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed,
     );
     const result = this.results.get(comparison.id);
     const error = this.errors.get(comparison.id);
@@ -281,6 +312,7 @@ export class ComparisonTreeProvider
     if (!this.currentComparison(comparison.id)) return null;
     const cached = this.results.get(comparison.id);
     if (cached) return cached;
+    if (this.errors.has(comparison.id)) return null;
     if (!this.comparisonLoader) throw new Error("Comparison loader is unavailable.");
 
     const generation = this.generations.get(comparison.id) ?? 0;
