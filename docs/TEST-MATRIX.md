@@ -117,7 +117,7 @@ verify that both file marks survive.
   `WebSocket`, `XMLHttpRequest`, `sendBeacon`, `eval`, dynamic `import`) or a
   telemetry API;
 - process execution appears only in `GitProcess.ts` and the browser handoff
-  only in `GitLabController.ts`; a match elsewhere fails the build;
+  only in `BrowserLinkController.ts`; a match elsewhere fails the build;
 - the manifest declares zero runtime and extension dependencies.
 
 ### Persistence and state

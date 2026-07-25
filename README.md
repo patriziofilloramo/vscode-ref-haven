@@ -23,7 +23,7 @@ dependencies** · **No background network activity**
 | 📚 **Time travel**  | Inspect a file at an older revision      | Readonly historical documents and native revision comparisons       |
 | 📦 **Protect work** | Stash one file without touching the rest | A path-limited stash that preserves every unrelated local change    |
 | 🌿 **Navigate**     | Inspect branches and worktrees           | Local metadata, divergence, recent commits, state, quick actions    |
-| 🔗 **Open safely**  | Continue on your GitLab repository       | Explicit links to validated repository origins—never a RefHaven API |
+| 🔗 **Open safely**  | Continue on your repository host         | Explicit links to validated repository origins—never a RefHaven API |
 
 All of this uses VS Code's native trees, editors, hovers, menus, quick picks,
 and Source Control sidebar.
@@ -41,6 +41,26 @@ expands it, and loads its differences locally.
 
 No account, token, server, repository configuration, or onboarding wizard is
 required.
+
+## Using RefHaven with another blame extension
+
+RefHaven shows three things on the current line: inline blame at the end of the
+line, a hover, and a status bar entry. VS Code does not arbitrate between
+extensions here — it draws every extension's decorations and merges every
+extension's hovers. If another extension already shows blame, both appear and
+the line reads twice.
+
+Run **RefHaven: Line Intelligence** from `Ctrl+Shift+P` and choose:
+
+| Mode           | What stays                                     |
+| -------------- | ---------------------------------------------- |
+| **Full**       | Inline blame, hover, status bar (default)      |
+| **Hover only** | Just the hover — recommended when running both |
+| **Off**        | No per-line surfaces                           |
+
+Everything else — comparisons, review tracking, history, stashes, patch export,
+merge forecast — never overlaps, so keeping both extensions installed is a
+perfectly reasonable setup.
 
 ## A typical review
 
@@ -212,7 +232,7 @@ behavior. The JSON setting remains available for advanced multi-origin
 policies:
 
 ```json
-"refhaven.gitLab.approvedOrigins": [
+"refhaven.browserLinks.approvedOrigins": [
   "https://gitlab.company.example:8443"
 ]
 ```
@@ -293,14 +313,14 @@ entry also expose context-sensitive RefHaven actions.
 
 RefHaven works immediately with its defaults.
 
-| Setting                           | Default | Purpose                                      |
-| --------------------------------- | ------- | -------------------------------------------- |
-| `refhaven.inlineBlame.enabled`    | `true`  | Current-line inline blame                    |
-| `refhaven.statusBarBlame.enabled` | `true`  | Current-line blame in the status bar         |
-| `refhaven.lineHover.enabled`      | `true`  | Rich local hover on tracked lines            |
-| `refhaven.fileAnnotations.mode`   | `off`   | Default whole-file annotation mode           |
-| `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout, from 1 to 300 s     |
-| `refhaven.gitLab.approvedOrigins` | `[]`    | Optional strict GitLab browser-origin policy |
+| Setting                                 | Default | Purpose                                  |
+| --------------------------------------- | ------- | ---------------------------------------- |
+| `refhaven.inlineBlame.enabled`          | `true`  | Current-line inline blame                |
+| `refhaven.statusBarBlame.enabled`       | `true`  | Current-line blame in the status bar     |
+| `refhaven.lineHover.enabled`            | `true`  | Rich local hover on tracked lines        |
+| `refhaven.fileAnnotations.mode`         | `off`   | Default whole-file annotation mode       |
+| `refhaven.git.timeoutSeconds`           | `30`    | Per-command Git timeout, from 1 to 300 s |
+| `refhaven.browserLinks.approvedOrigins` | `[]`    | Optional strict browser-origin allowlist |
 
 ## Installation
 

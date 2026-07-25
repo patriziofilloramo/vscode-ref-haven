@@ -34,6 +34,8 @@ interface CurrentLineBlame {
 /** Shows blame for the cursor's line as inline text and a status bar entry. */
 export class BlameController implements vscode.Disposable {
   private current: CurrentLineBlame | undefined;
+  private inlineRenderReported = false;
+  private onFirstInlineRender: (() => void) | undefined;
   private activeUpdate: AbortController | undefined;
   private decoratedEditor: vscode.TextEditor | undefined;
   private readonly decorationType = vscode.window.createTextEditorDecorationType({
@@ -80,6 +82,18 @@ export class BlameController implements vscode.Disposable {
     for (const disposable of this.disposables) disposable.dispose();
     this.decorationType.dispose();
     this.statusBarItem.dispose();
+  }
+
+  /**
+   * Runs the listener once, the first time inline blame is actually drawn.
+   *
+   * An overlap with another extension is only worth raising at the moment the
+   * user can see it. At activation there may be no editor open, no repository,
+   * or inline blame may be switched off, and the message would describe
+   * something abstract instead of what is on screen.
+   */
+  public setFirstInlineRenderListener(listener: () => void): void {
+    this.onFirstInlineRender = listener;
   }
 
   /** Re-blames the current line, e.g. after the repository state changed. */
@@ -274,6 +288,10 @@ export class BlameController implements vscode.Disposable {
         },
       ]);
       this.decoratedEditor = editor;
+      if (!this.inlineRenderReported) {
+        this.inlineRenderReported = true;
+        this.onFirstInlineRender?.();
+      }
     } else {
       editor.setDecorations(this.decorationType, []);
       this.decoratedEditor = undefined;

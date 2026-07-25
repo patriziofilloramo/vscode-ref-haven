@@ -27,12 +27,12 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.compareFileWithRevision"));
     assert.ok(commands.includes("refhaven.stashFile"));
     assert.ok(commands.includes("refhaven.compareStashFileWithHead"));
-    assert.ok(commands.includes("refhaven.openGitLabProject"));
-    assert.ok(commands.includes("refhaven.openGitLabFile"));
-    assert.ok(commands.includes("refhaven.openGitLabComparison"));
-    assert.ok(commands.includes("refhaven.openGitLabLocalReference"));
-    assert.ok(commands.includes("refhaven.configureGitLabOrigin"));
-    assert.ok(commands.includes("refhaven.copyGitLabFileUrl"));
+    assert.ok(commands.includes("refhaven.openBrowserProject"));
+    assert.ok(commands.includes("refhaven.openBrowserFile"));
+    assert.ok(commands.includes("refhaven.openBrowserComparison"));
+    assert.ok(commands.includes("refhaven.openBrowserLocalReference"));
+    assert.ok(commands.includes("refhaven.configureBrowserOrigin"));
+    assert.ok(commands.includes("refhaven.copyBrowserFileUrl"));
     assert.ok(commands.includes("refhaven.inspectCurrentLine"));
     assert.ok(commands.includes("refhaven.revealFileInComparison"));
     assert.ok(commands.includes("refhaven.quickOpenComparisonFile"));

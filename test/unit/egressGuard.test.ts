@@ -49,9 +49,18 @@ const CAPABILITY_ALLOWLIST: readonly {
     what: "process execution",
   },
   {
-    file: "application/GitLabController.ts",
+    // Every browser handoff routes through one function, so the whole
+    // outbound surface stays a single auditable call site.
+    file: "ui/externalLink.ts",
     pattern: /\bopenExternal\b/u,
     what: "browser handoff",
+  },
+  {
+    // Reads already-loaded local manifests to detect an overlapping blame
+    // extension. No activation, no process, no network.
+    file: "application/LineIntelligenceController.ts",
+    pattern: /\bextensions\.all\b/u,
+    what: "installed-extension inspection",
   },
 ];
 

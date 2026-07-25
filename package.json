@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "patriziofilloramo",
   "license": "MIT",
   "private": true,
@@ -28,8 +28,9 @@
     "history",
     "stash",
     "privacy",
+    "github",
     "gitlab",
-    "github"
+    "bitbucket"
   ],
   "extensionKind": [
     "workspace"
@@ -253,7 +254,7 @@
         "category": "RefHaven"
       },
       {
-        "command": "refhaven.copyGitLabComparisonUrl",
+        "command": "refhaven.copyBrowserComparisonUrl",
         "title": "Copy Comparison URL",
         "category": "RefHaven"
       },
@@ -307,7 +308,7 @@
         "category": "RefHaven"
       },
       {
-        "command": "refhaven.copyGitLabCommitUrl",
+        "command": "refhaven.copyBrowserCommitUrl",
         "title": "Copy Commit URL",
         "category": "RefHaven"
       },
@@ -431,64 +432,64 @@
         "icon": "$(compare-changes)"
       },
       {
-        "command": "refhaven.openGitLabProject",
+        "command": "refhaven.openBrowserProject",
         "title": "Open Project in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
-        "command": "refhaven.copyGitLabProjectUrl",
+        "command": "refhaven.copyBrowserProjectUrl",
         "title": "Copy Project URL",
         "category": "RefHaven"
       },
       {
-        "command": "refhaven.openGitLabCommit",
+        "command": "refhaven.openBrowserCommit",
         "title": "Open Commit in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
-        "command": "refhaven.openGitLabBranch",
+        "command": "refhaven.openBrowserBranch",
         "title": "Open Branch Revision in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
-        "command": "refhaven.copyGitLabBranchUrl",
+        "command": "refhaven.copyBrowserBranchUrl",
         "title": "Copy Branch URL",
         "category": "RefHaven"
       },
       {
-        "command": "refhaven.openGitLabComparison",
+        "command": "refhaven.openBrowserComparison",
         "title": "Open Comparison in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
-        "command": "refhaven.openGitLabFile",
+        "command": "refhaven.openBrowserFile",
         "title": "Open File in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
-        "command": "refhaven.copyGitLabFileUrl",
+        "command": "refhaven.copyBrowserFileUrl",
         "title": "Copy File URL",
         "category": "RefHaven"
       },
       {
-        "command": "refhaven.configureGitLabOrigin",
+        "command": "refhaven.configureBrowserOrigin",
         "title": "Configure Restricted Remote Origin...",
         "category": "RefHaven",
         "icon": "$(shield)"
       },
       {
-        "command": "refhaven.openGitLabLocalReference",
+        "command": "refhaven.openBrowserLocalReference",
         "title": "Open Local Reference in Browser...",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
-        "command": "refhaven.openGitLabReference",
+        "command": "refhaven.openBrowserReference",
         "title": "Open Issue or Merge Request in Browser...",
         "category": "RefHaven",
         "icon": "$(link-external)"
@@ -539,6 +540,12 @@
         "command": "refhaven.copyWorktreePath",
         "title": "Copy Worktree Path",
         "category": "RefHaven"
+      },
+      {
+        "command": "refhaven.changeLineIntelligence",
+        "title": "Line Intelligence...",
+        "category": "RefHaven",
+        "icon": "$(symbol-color)"
       }
     ],
     "configuration": {
@@ -559,7 +566,7 @@
           "default": true,
           "description": "Show rich local commit and diff details when hovering a file line."
         },
-        "refhaven.gitLab.approvedOrigins": {
+        "refhaven.browserLinks.approvedOrigins": {
           "type": "array",
           "items": {
             "type": "string",
@@ -688,7 +695,7 @@
           "when": "false"
         },
         {
-          "command": "refhaven.copyGitLabComparisonUrl",
+          "command": "refhaven.copyBrowserComparisonUrl",
           "when": "false"
         },
         {
@@ -716,7 +723,7 @@
           "when": "false"
         },
         {
-          "command": "refhaven.copyGitLabCommitUrl",
+          "command": "refhaven.copyBrowserCommitUrl",
           "when": "false"
         },
         {
@@ -784,7 +791,7 @@
           "when": "false"
         },
         {
-          "command": "refhaven.copyGitLabBranchUrl",
+          "command": "refhaven.copyBrowserBranchUrl",
           "when": "false"
         },
         {
@@ -824,15 +831,15 @@
           "when": "false"
         },
         {
-          "command": "refhaven.openGitLabCommit",
+          "command": "refhaven.openBrowserCommit",
           "when": "false"
         },
         {
-          "command": "refhaven.openGitLabBranch",
+          "command": "refhaven.openBrowserBranch",
           "when": "false"
         },
         {
-          "command": "refhaven.openGitLabComparison",
+          "command": "refhaven.openBrowserComparison",
           "when": "false"
         },
         {
@@ -1016,12 +1023,12 @@
           "group": "3_close@1"
         },
         {
-          "command": "refhaven.openGitLabComparison",
+          "command": "refhaven.openBrowserComparison",
           "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "2_gitlab@1"
         },
         {
-          "command": "refhaven.copyGitLabComparisonUrl",
+          "command": "refhaven.copyBrowserComparisonUrl",
           "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "2_gitlab@2"
         },
@@ -1041,12 +1048,12 @@
           "group": "1_actions@1"
         },
         {
-          "command": "refhaven.openGitLabCommit",
+          "command": "refhaven.openBrowserCommit",
           "when": "view == refhaven.comparisons && viewItem == refhaven.commit",
           "group": "1_actions@2"
         },
         {
-          "command": "refhaven.copyGitLabCommitUrl",
+          "command": "refhaven.copyBrowserCommitUrl",
           "when": "view == refhaven.comparisons && viewItem == refhaven.commit",
           "group": "2_copy@3"
         },
@@ -1116,7 +1123,7 @@
           "group": "2_copy@3"
         },
         {
-          "command": "refhaven.copyGitLabFileUrl",
+          "command": "refhaven.copyBrowserFileUrl",
           "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.inspector) && viewItem =~ /^refhaven\\.file/",
           "group": "2_copy@4"
         },
@@ -1186,12 +1193,12 @@
           "group": "1_open@5"
         },
         {
-          "command": "refhaven.openGitLabCommit",
+          "command": "refhaven.openBrowserCommit",
           "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
           "group": "1_open@6"
         },
         {
-          "command": "refhaven.copyGitLabCommitUrl",
+          "command": "refhaven.copyBrowserCommitUrl",
           "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
           "group": "2_copy@3"
         },
@@ -1231,12 +1238,12 @@
           "group": "2_copy@1"
         },
         {
-          "command": "refhaven.openGitLabBranch",
+          "command": "refhaven.openBrowserBranch",
           "when": "view == refhaven.repository && viewItem =~ /^refhaven\\.branch/",
           "group": "1_actions@3"
         },
         {
-          "command": "refhaven.copyGitLabBranchUrl",
+          "command": "refhaven.copyBrowserBranchUrl",
           "when": "view == refhaven.repository && viewItem =~ /^refhaven\\.branch/",
           "group": "2_copy@2"
         },
@@ -1246,12 +1253,12 @@
           "group": "1_actions@1"
         },
         {
-          "command": "refhaven.openGitLabCommit",
+          "command": "refhaven.openBrowserCommit",
           "when": "view == refhaven.repository && viewItem == refhaven.branchCommit",
           "group": "1_actions@2"
         },
         {
-          "command": "refhaven.copyGitLabCommitUrl",
+          "command": "refhaven.copyBrowserCommitUrl",
           "when": "view == refhaven.repository && viewItem == refhaven.branchCommit",
           "group": "2_copy@3"
         },
@@ -1356,17 +1363,17 @@
           "group": "4_stash@1"
         },
         {
-          "command": "refhaven.openGitLabFile",
+          "command": "refhaven.openBrowserFile",
           "when": "resourceScheme == file || scmProvider == git",
           "group": "5_gitlab@1"
         },
         {
-          "command": "refhaven.copyGitLabFileUrl",
+          "command": "refhaven.copyBrowserFileUrl",
           "when": "resourceScheme == file || scmProvider == git",
           "group": "5_gitlab@2"
         },
         {
-          "command": "refhaven.openGitLabReference",
+          "command": "refhaven.openBrowserReference",
           "when": "resourceScheme == file || scmProvider == git",
           "group": "5_gitlab@3"
         }

@@ -12,7 +12,7 @@ import type { FileHistoryEntry } from "../../domain/history";
 import { MAX_INTERACTIVE_INPUT_LENGTH, MAX_STASH_MESSAGE_LENGTH } from "../../domain/inputLimits";
 import type { ChangedLineRange } from "../../domain/fileAnnotations";
 import { isGitObjectId, requireGitObjectId } from "../../domain/gitObjectId";
-import type { GitRemoteUrl } from "../../domain/gitLab";
+import type { GitRemoteUrl } from "../../domain/browserLinks";
 import type { BranchDetails, WorktreeState } from "../../domain/repositoryNavigation";
 import {
   assertRepositoryRelativeGitPath,

@@ -37,6 +37,17 @@ is no earlier published version to compare against.
 - Opt-in whole-file annotations: blame, an age heatmap, and changes relative to
   a chosen local reference.
 
+### Coexistence with other extensions
+
+- **Line Intelligence**, one command that sets the three per-line surfaces
+  together: full, hover only, or off. VS Code draws every extension's
+  decorations and merges every extension's hovers, so a second blame extension
+  doubles them rather than replacing them; "hover only" removes the overlap in
+  one gesture and keeps the hover.
+- A single dismissible notice, shown at most once, when another installed
+  extension contributes a blame surface. Detection reads what extensions
+  declare, never who publishes them, and nothing is changed without asking.
+
 ### Stashes
 
 - **Stash This File...**, which stashes the staged and unstaged state of one
@@ -56,7 +67,7 @@ is no earlier published version to compare against.
   be built — any Azure DevOps target, a Bitbucket comparison — no link is
   offered rather than one that opens an empty page.
 - Origins are derived from validated local remotes by default;
-  `refhaven.gitLab.approvedOrigins` switches to a strict allowlist, and
+  `refhaven.browserLinks.approvedOrigins` switches to a strict allowlist, and
   `refhaven.browserLinks.hostGrammar` states the URL shape outright when
   hostname detection cannot infer it.
 

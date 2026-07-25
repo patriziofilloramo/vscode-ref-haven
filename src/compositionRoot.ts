@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 import { BlameController } from "./application/BlameController";
+import { LineIntelligenceController } from "./application/LineIntelligenceController";
 import { CommitDetailsController } from "./application/CommitDetailsController";
 import { ComparisonController } from "./application/ComparisonController";
 import { ComparisonReviewStore } from "./application/ComparisonReviewStore";
@@ -9,7 +10,7 @@ import { runInBackground } from "./application/errorHandling";
 import { FileHistoryController } from "./application/FileHistoryController";
 import { FileAnnotationsController } from "./application/FileAnnotationsController";
 import { FileActionsController } from "./application/FileActionsController";
-import { GitLabController } from "./application/GitLabController";
+import { BrowserLinkController } from "./application/BrowserLinkController";
 import { LineHoverController } from "./application/LineHoverController";
 import { RepositoryWatcher } from "./application/RepositoryWatcher";
 import { RepositoryNavigationController } from "./application/RepositoryNavigationController";
@@ -105,10 +106,11 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     logger,
   );
   const blameController = new BlameController(logger);
+  const lineIntelligenceController = new LineIntelligenceController(context, logger);
   const lineHoverController = new LineHoverController(revisionProvider, logger);
   const lineHoverProvider = new LineHoverProvider(lineHoverController, logger);
   const fileAnnotationsController = new FileAnnotationsController(logger);
-  const gitLabController = new GitLabController(logger);
+  const gitLabController = new BrowserLinkController(logger);
   const fileActionsController = new FileActionsController(
     controller,
     fileAnnotationsController,
@@ -272,6 +274,18 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     stashController,
     blameController,
     gitLabController,
+    lineIntelligenceController,
   );
+  // Raised when the user can actually see the overlap — the first time inline
+  // blame is drawn on a line — rather than at activation, where it would
+  // describe something not yet on screen.
+  blameController.setFirstInlineRenderListener(() => {
+    runInBackground(
+      lineIntelligenceController.noticeOverlapOnce(),
+      logger,
+      "Line intelligence overlap notice failed",
+      "lineIntelligence",
+    );
+  });
   logger.info("Extension services registered", { operation: "activate" });
 }

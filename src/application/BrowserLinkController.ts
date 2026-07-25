@@ -11,14 +11,14 @@ import type { BranchRef, SavedComparisonV1 } from "../domain/comparison";
 import type { CommitInfo } from "../domain/comparisonResult";
 import {
   applyHostGrammarOverride,
-  buildGitLabUrl,
+  buildBrowserUrl,
   describeHostKind,
-  parseApprovedGitLabOrigins,
-  resolveGitLabProjects,
+  parseApprovedBrowserOrigins,
+  resolveBrowserProjects,
   supportsBrowserTarget,
-  type GitLabProject,
-  type GitLabTarget,
-} from "../domain/gitLab";
+  type BrowserProject,
+  type BrowserTarget,
+} from "../domain/browserLinks";
 import { pathIdentityKey } from "../domain/pathValidation";
 import {
   discoverRepositories,
@@ -28,16 +28,17 @@ import {
   resolveRef,
 } from "../infrastructure/git/GitCli";
 import { resolveFileContextTarget, resolveKnownFileTarget } from "../ui/commands/fileContext";
+import { openExternalUrl } from "../ui/externalLink";
 import { showTransientSuccess } from "../ui/feedback";
 import type { Logger } from "./Logger";
 
-export class GitLabController {
+export class BrowserLinkController {
   public constructor(private readonly logger: Logger) {}
 
   public async configureApprovedOrigin(): Promise<void> {
     const configured = readExtensionSetting<unknown>(
-      EXTENSION_SETTINGS.approvedGitLabOrigins,
-      EXTENSION_SETTING_DEFAULTS.approvedGitLabOrigins,
+      EXTENSION_SETTINGS.approvedBrowserOrigins,
+      EXTENSION_SETTING_DEFAULTS.approvedBrowserOrigins,
     );
     if (!Array.isArray(configured)) {
       throw new Error("RefHaven approved browser origins must be an array.");
@@ -53,7 +54,7 @@ export class GitLabController {
       validateInput: (input) => {
         if (input.trim().length === 0) return undefined;
         try {
-          parseApprovedGitLabOrigins([input]);
+          parseApprovedBrowserOrigins([input]);
           return undefined;
         } catch (error) {
           return error instanceof Error ? error.message : "Enter an exact HTTP(S) origin.";
@@ -64,14 +65,16 @@ export class GitLabController {
     if (value === undefined) return;
 
     const origin =
-      value.trim().length === 0 ? undefined : parseApprovedGitLabOrigins([value.trim()])[0]?.origin;
+      value.trim().length === 0
+        ? undefined
+        : parseApprovedBrowserOrigins([value.trim()])[0]?.origin;
     const origins = origin ? [origin] : [];
     const target =
       vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
         ? vscode.ConfigurationTarget.Workspace
         : vscode.ConfigurationTarget.Global;
     await getExtensionConfiguration().update(
-      EXTENSION_SETTINGS.approvedGitLabOrigins,
+      EXTENSION_SETTINGS.approvedBrowserOrigins,
       origins,
       target,
     );
@@ -80,7 +83,7 @@ export class GitLabController {
     );
     this.logger.info("Updated restricted browser origin", {
       enabled: origins.length > 0,
-      operation: "configureGitLabOrigin",
+      operation: "configureBrowserOrigin",
       scope: target === vscode.ConfigurationTarget.Workspace ? "workspace" : "global",
     });
   }
@@ -88,31 +91,31 @@ export class GitLabController {
   public async openProject(candidate?: unknown): Promise<void> {
     const repositoryRoot = await this.resolveRepositoryRoot(candidate);
     if (!repositoryRoot) return;
-    await this.open(repositoryRoot, { kind: "project" }, "openGitLabProject");
+    await this.open(repositoryRoot, { kind: "project" }, "openBrowserProject");
   }
 
   public async openCommit(repositoryRoot: unknown, commit: CommitInfo): Promise<void> {
     const root = await this.requireKnownRepository(repositoryRoot);
     const sha = await resolveRef(root, commit.sha);
-    await this.open(root, { kind: "commit", sha }, "openGitLabCommit");
+    await this.open(root, { kind: "commit", sha }, "openBrowserCommit");
   }
 
   public async copyProjectUrl(candidate?: unknown): Promise<void> {
     const repositoryRoot = await this.resolveRepositoryRoot(candidate);
     if (!repositoryRoot) return;
-    await this.copy(repositoryRoot, { kind: "project" }, "copyGitLabProjectUrl");
+    await this.copy(repositoryRoot, { kind: "project" }, "copyBrowserProjectUrl");
   }
 
   public async copyCommitUrl(repositoryRoot: unknown, commit: CommitInfo): Promise<void> {
     const root = await this.requireKnownRepository(repositoryRoot);
     const sha = await resolveRef(root, commit.sha);
-    await this.copy(root, { kind: "commit", sha }, "copyGitLabCommitUrl");
+    await this.copy(root, { kind: "commit", sha }, "copyBrowserCommitUrl");
   }
 
   public async copyBranchUrl(repositoryRoot: unknown, branch: BranchRef): Promise<void> {
     const root = await this.requireKnownRepository(repositoryRoot);
     const sha = await resolveRef(root, branch.fullName);
-    await this.copy(root, { kind: "tree", sha }, "copyGitLabBranchUrl");
+    await this.copy(root, { kind: "tree", sha }, "copyBrowserBranchUrl");
   }
 
   public async copyComparisonUrl(comparison: SavedComparisonV1): Promise<void> {
@@ -130,7 +133,7 @@ export class GitLabController {
     await this.copy(
       repositoryRoot,
       { baseSha, kind: "compare", targetSha },
-      "copyGitLabComparisonUrl",
+      "copyBrowserComparisonUrl",
     );
   }
 
@@ -152,14 +155,14 @@ export class GitLabController {
         sha,
         ...(selectedEditorLines(target.uri) ?? {}),
       },
-      "copyGitLabFileUrl",
+      "copyBrowserFileUrl",
     );
   }
 
   public async openBranch(repositoryRoot: unknown, branch: BranchRef): Promise<void> {
     const root = await this.requireKnownRepository(repositoryRoot);
     const sha = await resolveRef(root, branch.fullName);
-    await this.open(root, { kind: "tree", sha }, "openGitLabBranch");
+    await this.open(root, { kind: "tree", sha }, "openBrowserBranch");
   }
 
   public async openComparison(comparison: SavedComparisonV1): Promise<void> {
@@ -177,7 +180,7 @@ export class GitLabController {
     await this.open(
       repositoryRoot,
       { baseSha, kind: "compare", targetSha },
-      "openGitLabComparison",
+      "openBrowserComparison",
     );
   }
 
@@ -199,7 +202,7 @@ export class GitLabController {
     );
     if (!selected) return;
     const sha = await resolveRef(repositoryRoot, selected.ref.fullName);
-    await this.open(repositoryRoot, { kind: "tree", sha }, "openGitLabLocalReference");
+    await this.open(repositoryRoot, { kind: "tree", sha }, "openBrowserLocalReference");
   }
 
   public async openFile(candidate?: unknown): Promise<void> {
@@ -221,7 +224,7 @@ export class GitLabController {
         sha,
         ...(lines ?? {}),
       },
-      "openGitLabFile",
+      "openBrowserFile",
     );
   }
 
@@ -250,7 +253,7 @@ export class GitLabController {
         sha: canonicalSha,
         ...validatedLines(startLine, endLine),
       },
-      "openGitLabFile",
+      "openBrowserFile",
     );
   }
 
@@ -276,7 +279,7 @@ export class GitLabController {
     await this.open(
       repositoryRoot,
       reference[1] === "#" ? { kind: "issue", number } : { kind: "mergeRequest", number },
-      "openGitLabReference",
+      "openBrowserReference",
     );
   }
 
@@ -292,18 +295,18 @@ export class GitLabController {
     await this.open(
       root,
       parsed[1] === "#" ? { kind: "issue", number } : { kind: "mergeRequest", number },
-      "openGitLabReference",
+      "openBrowserReference",
     );
   }
 
   private async open(
     repositoryRoot: string,
-    target: GitLabTarget,
+    target: BrowserTarget,
     operation: string,
   ): Promise<void> {
     const url = await this.resolveUrl(repositoryRoot, target);
     if (!url) return;
-    const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
+    const opened = await openExternalUrl(url);
     if (!opened) throw new Error("VS Code could not open the validated browser URL.");
     // Non-blocking transparency: always show which origin was opened, which
     // matters most when the origin was inferred from the repository remote.
@@ -313,7 +316,7 @@ export class GitLabController {
 
   private async copy(
     repositoryRoot: string,
-    target: GitLabTarget,
+    target: BrowserTarget,
     operation: string,
   ): Promise<void> {
     const url = await this.resolveUrl(repositoryRoot, target);
@@ -323,7 +326,7 @@ export class GitLabController {
     this.logger.info("Copied validated browser URL", { operation });
   }
 
-  private async resolveUrl(repositoryRoot: string, target: GitLabTarget): Promise<string | null> {
+  private async resolveUrl(repositoryRoot: string, target: BrowserTarget): Promise<string | null> {
     const project = await this.selectProject(repositoryRoot);
     if (!project) return null;
     const { hostKind } = project.browserOrigin;
@@ -335,22 +338,22 @@ export class GitLabController {
       );
       return null;
     }
-    return buildGitLabUrl(project, target);
+    return buildBrowserUrl(project, target);
   }
 
-  private async selectProject(repositoryRoot: string): Promise<GitLabProject | null> {
+  private async selectProject(repositoryRoot: string): Promise<BrowserProject | null> {
     const configured = readExtensionSetting<unknown>(
-      EXTENSION_SETTINGS.approvedGitLabOrigins,
-      EXTENSION_SETTING_DEFAULTS.approvedGitLabOrigins,
+      EXTENSION_SETTINGS.approvedBrowserOrigins,
+      EXTENSION_SETTING_DEFAULTS.approvedBrowserOrigins,
     );
     if (!Array.isArray(configured)) {
       throw new Error("RefHaven approved browser origins must be an array.");
     }
-    const approvedOrigins = parseApprovedGitLabOrigins(configured);
+    const approvedOrigins = parseApprovedBrowserOrigins(configured);
     const remotes = await listGitRemoteUrls(repositoryRoot);
     const hasExplicitAllowlist = approvedOrigins.length > 0;
     const projects = applyHostGrammarOverride(
-      resolveGitLabProjects(remotes, approvedOrigins),
+      resolveBrowserProjects(remotes, approvedOrigins),
       readExtensionSetting<unknown>(
         EXTENSION_SETTINGS.browserHostGrammar,
         EXTENSION_SETTING_DEFAULTS.browserHostGrammar,
@@ -387,7 +390,7 @@ export class GitLabController {
   private async openApprovedOriginsSetting(): Promise<void> {
     await vscode.commands.executeCommand(
       "workbench.action.openSettings",
-      extensionSettingPath(EXTENSION_SETTINGS.approvedGitLabOrigins),
+      extensionSettingPath(EXTENSION_SETTINGS.approvedBrowserOrigins),
     );
   }
 

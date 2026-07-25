@@ -2,7 +2,7 @@ import { COMMAND_IDS } from "./commands/commandIds";
 import { encodeCommandArguments, escapeMarkdown } from "./markdown";
 
 /** Commands a MarkdownString must trust for autolinked references to work. */
-export const GITLAB_AUTOLINK_COMMANDS: readonly string[] = [COMMAND_IDS.openGitLabReference];
+export const BROWSER_AUTOLINK_COMMANDS: readonly string[] = [COMMAND_IDS.openBrowserReference];
 
 /**
  * Matches `#123` (issue) and `!123` (merge request) shorthand references.
@@ -20,7 +20,7 @@ const REFERENCE_PATTERN =
  * through the approved-origin allowlist, so rendering a link performs no
  * network activity and cannot leave the approved boundary when clicked.
  */
-export function escapeMarkdownWithGitLabAutolinks(text: string, repositoryRoot: string): string {
+export function escapeMarkdownWithAutolinks(text: string, repositoryRoot: string): string {
   let rendered = "";
   let consumed = 0;
   for (const match of text.matchAll(REFERENCE_PATTERN)) {
@@ -28,7 +28,7 @@ export function escapeMarkdownWithGitLabAutolinks(text: string, repositoryRoot: 
     if (sigil === undefined || digits === undefined) continue;
     const reference = `${sigil}${digits}`;
     rendered += escapeMarkdown(text.slice(consumed, match.index) + prefix);
-    rendered += `[${escapeMarkdown(reference)}](command:${COMMAND_IDS.openGitLabReference}?${encodeCommandArguments([repositoryRoot, reference])})`;
+    rendered += `[${escapeMarkdown(reference)}](command:${COMMAND_IDS.openBrowserReference}?${encodeCommandArguments([repositoryRoot, reference])})`;
     consumed = match.index + prefix.length + reference.length;
   }
   return rendered + escapeMarkdown(text.slice(consumed));

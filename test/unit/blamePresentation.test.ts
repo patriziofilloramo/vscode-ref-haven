@@ -63,7 +63,7 @@ suite("blame presentation", () => {
     assert.match(markdown, /command:refhaven\.copyCommitSha\?/);
     assert.match(markdown, /command:refhaven\.copyCommitMessage\?/);
     assert.match(markdown, /command:refhaven\.openFileAtRevision\?/);
-    assert.match(markdown, /command:refhaven\.openGitLabFile\?/);
+    assert.match(markdown, /command:refhaven\.openBrowserFile\?/);
 
     const revisionLink = /command:refhaven\.openFileAtRevision\?([^)]+)\)/.exec(markdown);
     assert.ok(revisionLink?.[1]);

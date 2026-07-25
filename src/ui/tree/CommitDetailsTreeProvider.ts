@@ -6,7 +6,7 @@ import type { FileDiffScope } from "../../domain/fileDiffScope";
 import type { CommitFileChanges } from "../../infrastructure/git/GitCli";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatDiffStats, formatRelativeTime } from "../format";
-import { GITLAB_AUTOLINK_COMMANDS, escapeMarkdownWithGitLabAutolinks } from "../gitLabAutolinks";
+import { BROWSER_AUTOLINK_COMMANDS, escapeMarkdownWithAutolinks } from "../browserAutolinks";
 import {
   buildChangeNodes,
   createFileItem,
@@ -101,9 +101,9 @@ export class CommitDetailsTreeProvider
         // Issue/MR shorthand in commit messages links to the approved GitLab
         // origin; trust is limited to that single command.
         const tooltip = new vscode.MarkdownString(
-          escapeMarkdownWithGitLabAutolinks(node.tooltip, node.repositoryRoot),
+          escapeMarkdownWithAutolinks(node.tooltip, node.repositoryRoot),
         );
-        tooltip.isTrusted = { enabledCommands: [...GITLAB_AUTOLINK_COMMANDS] };
+        tooltip.isTrusted = { enabledCommands: [...BROWSER_AUTOLINK_COMMANDS] };
         item.tooltip = tooltip;
       } else {
         item.tooltip = node.description;

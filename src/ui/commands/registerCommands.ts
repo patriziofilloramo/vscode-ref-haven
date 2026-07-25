@@ -1,12 +1,13 @@
 import * as vscode from "vscode";
 
 import type { BlameController } from "../../application/BlameController";
+import type { LineIntelligenceController } from "../../application/LineIntelligenceController";
 import type { CommitDetailsController } from "../../application/CommitDetailsController";
 import type { ComparisonController } from "../../application/ComparisonController";
 import { errorLogMetadata, userFacingErrorMessage } from "../../application/errorHandling";
 import type { FileHistoryController } from "../../application/FileHistoryController";
 import type { FileActionsController } from "../../application/FileActionsController";
-import type { GitLabController } from "../../application/GitLabController";
+import type { BrowserLinkController } from "../../application/BrowserLinkController";
 import type { Logger } from "../../application/Logger";
 import type { RepositoryNavigationController } from "../../application/RepositoryNavigationController";
 import type { StashController } from "../../application/StashController";
@@ -33,7 +34,8 @@ export function registerCommands(
   fileHistoryController: FileHistoryController,
   stashController: StashController,
   blameController: BlameController,
-  gitLabController: GitLabController,
+  gitLabController: BrowserLinkController,
+  lineIntelligenceController: LineIntelligenceController,
 ): void {
   const handlers: Readonly<Record<CommandId, CommandHandler>> = {
     [COMMAND_IDS.changeComparisonFileFilter]: () => controller.changeComparisonFileFilter(),
@@ -43,6 +45,7 @@ export function registerCommands(
     [COMMAND_IDS.changeFileAnnotations]: (resource) =>
       fileActionsController.changeAnnotations(resource),
     [COMMAND_IDS.changeFileHistoryFilter]: () => fileHistoryController.changeFilter(),
+    [COMMAND_IDS.changeLineIntelligence]: () => lineIntelligenceController.chooseMode(),
     [COMMAND_IDS.changeStashFilter]: () => stashController.changeFilter(),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
     [COMMAND_IDS.compareSelectedBranches]: () =>
@@ -58,7 +61,7 @@ export function registerCommands(
         ? fileActionsController.compareFileWithRevisionAt(resource, sha, filePath, label)
         : fileActionsController.compareFileWithRevision(resource),
     [COMMAND_IDS.compareCurrentBranch]: () => controller.compareCurrentBranch(),
-    [COMMAND_IDS.configureGitLabOrigin]: () => gitLabController.configureApprovedOrigin(),
+    [COMMAND_IDS.configureBrowserOrigin]: () => gitLabController.configureApprovedOrigin(),
     [COMMAND_IDS.compareBranchWithCurrent]: (node) =>
       repositoryNavigationController.compareBranchWithCurrent(requireBranch(node)),
     [COMMAND_IDS.copyBranchName]: (node) =>
@@ -71,18 +74,18 @@ export function registerCommands(
       controller.exportComparisonPatch(requireComparison(node), "clipboard"),
     [COMMAND_IDS.copyComparisonSummary]: (node) =>
       controller.copyComparisonSummary(requireComparison(node)),
-    [COMMAND_IDS.copyGitLabBranchUrl]: (node) => {
+    [COMMAND_IDS.copyBrowserBranchUrl]: (node) => {
       const branch = requireBranch(node);
       return gitLabController.copyBranchUrl(branch.repository.rootPath, branch.branch);
     },
-    [COMMAND_IDS.copyGitLabCommitUrl]: (node) => {
+    [COMMAND_IDS.copyBrowserCommitUrl]: (node) => {
       const selection = requireCommitSelection(node);
       return gitLabController.copyCommitUrl(selection.repositoryRoot, selection.commit);
     },
-    [COMMAND_IDS.copyGitLabComparisonUrl]: (node) =>
+    [COMMAND_IDS.copyBrowserComparisonUrl]: (node) =>
       gitLabController.copyComparisonUrl(requireComparison(node)),
-    [COMMAND_IDS.copyGitLabFileUrl]: (resource) => gitLabController.copyFileUrl(resource),
-    [COMMAND_IDS.copyGitLabProjectUrl]: (resource) => gitLabController.copyProjectUrl(resource),
+    [COMMAND_IDS.copyBrowserFileUrl]: (resource) => gitLabController.copyFileUrl(resource),
+    [COMMAND_IDS.copyBrowserProjectUrl]: (resource) => gitLabController.copyProjectUrl(resource),
     [COMMAND_IDS.copyFilePatch]: (node) => {
       const file = requireFile(node);
       return controller.copyFilePatch(file.scope, file.file);
@@ -135,24 +138,24 @@ export function registerCommands(
       fileHistoryController.openAdjacent(requireFileHistoryNode(node), "previous"),
     [COMMAND_IDS.openCommitParentDetails]: (node) =>
       commitDetailsController.openParent(requireCommitDetail(node)),
-    [COMMAND_IDS.openGitLabBranch]: (node) => {
+    [COMMAND_IDS.openBrowserBranch]: (node) => {
       const branch = requireBranch(node);
       return gitLabController.openBranch(branch.repository.rootPath, branch.branch);
     },
-    [COMMAND_IDS.openGitLabCommit]: (node) => {
+    [COMMAND_IDS.openBrowserCommit]: (node) => {
       const selection = requireCommitSelection(node);
       return gitLabController.openCommit(selection.repositoryRoot, selection.commit);
     },
-    [COMMAND_IDS.openGitLabComparison]: (node) =>
+    [COMMAND_IDS.openBrowserComparison]: (node) =>
       gitLabController.openComparison(requireComparison(node)),
-    [COMMAND_IDS.openGitLabFile]: (resource, sha, filePath, startLine, endLine) =>
+    [COMMAND_IDS.openBrowserFile]: (resource, sha, filePath, startLine, endLine) =>
       typeof resource === "string" && typeof sha === "string" && typeof filePath === "string"
         ? gitLabController.openFileAt(resource, sha, filePath, startLine, endLine)
         : gitLabController.openFile(resource),
-    [COMMAND_IDS.openGitLabLocalReference]: (resource) =>
+    [COMMAND_IDS.openBrowserLocalReference]: (resource) =>
       gitLabController.openLocalReference(resource),
-    [COMMAND_IDS.openGitLabProject]: (resource) => gitLabController.openProject(resource),
-    [COMMAND_IDS.openGitLabReference]: (resource, reference) =>
+    [COMMAND_IDS.openBrowserProject]: (resource) => gitLabController.openProject(resource),
+    [COMMAND_IDS.openBrowserReference]: (resource, reference) =>
       typeof resource === "string" && typeof reference === "string"
         ? gitLabController.openReferenceAt(resource, reference)
         : gitLabController.openReference(resource),

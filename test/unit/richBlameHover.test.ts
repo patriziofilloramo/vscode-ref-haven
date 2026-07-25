@@ -85,7 +85,7 @@ suite("rich blame hover", () => {
     assert.match(markdown, /command:refhaven\.compareFileWithRevision\?/u);
     assert.match(markdown, /command:refhaven\.showFileHistory\?/u);
     assert.match(markdown, /command:refhaven\.showLineHistory\?/u);
-    assert.match(markdown, /command:refhaven\.openGitLabFile\?/u);
+    assert.match(markdown, /command:refhaven\.openBrowserFile\?/u);
   });
 
   test("answers why before it shows metadata, and never spends a line on the full SHA", () => {
@@ -133,14 +133,14 @@ suite("rich blame hover", () => {
     assert.doesNotMatch(richBlameHoverMarkdown(withoutPrevious, NOW), /Before This Change/u);
   });
 
-  test("autolinks GitLab references in the commit summary", () => {
+  test("autolinks issue and request references in the commit summary", () => {
     const markdown = richBlameHoverMarkdown(
       data({ blame: { ...data().blame, summary: "fix login flow (#12, !34)" } }),
       NOW,
     );
 
     const references = [
-      ...markdown.matchAll(/\]\(command:refhaven\.openGitLabReference\?([^)\s]+)\)/gu),
+      ...markdown.matchAll(/\]\(command:refhaven\.openBrowserReference\?([^)\s]+)\)/gu),
     ];
     assert.equal(references.length, 2);
     assert.deepEqual(JSON.parse(decodeURIComponent(references[0]?.[1] ?? "")), ["C:\\repo", "#12"]);

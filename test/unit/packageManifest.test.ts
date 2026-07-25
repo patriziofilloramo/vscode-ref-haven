@@ -87,7 +87,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "patriziofilloramo");
-    assert.equal(manifest.version, "0.11.0");
+    assert.equal(manifest.version, "0.12.0");
     assert.match(manifest.description, /local processing/u);
   });
 
@@ -142,6 +142,7 @@ suite("extension manifest", () => {
       "refhaven.changeComparisonMode",
       "refhaven.changeFileAnnotations",
       "refhaven.changeFileHistoryFilter",
+      "refhaven.changeLineIntelligence",
       "refhaven.changeStashFilter",
       "refhaven.closeComparison",
       "refhaven.compareBranchWithCurrent",
@@ -151,8 +152,13 @@ suite("extension manifest", () => {
       "refhaven.compareSelectedBranches",
       "refhaven.compareStashFileWithHead",
       "refhaven.compareStashFileWithWorkingTree",
-      "refhaven.configureGitLabOrigin",
+      "refhaven.configureBrowserOrigin",
       "refhaven.copyBranchName",
+      "refhaven.copyBrowserBranchUrl",
+      "refhaven.copyBrowserCommitUrl",
+      "refhaven.copyBrowserComparisonUrl",
+      "refhaven.copyBrowserFileUrl",
+      "refhaven.copyBrowserProjectUrl",
       "refhaven.copyCommitDetail",
       "refhaven.copyCommitMessage",
       "refhaven.copyCommitSha",
@@ -160,11 +166,6 @@ suite("extension manifest", () => {
       "refhaven.copyComparisonSummary",
       "refhaven.copyFilePatch",
       "refhaven.copyFilePath",
-      "refhaven.copyGitLabBranchUrl",
-      "refhaven.copyGitLabCommitUrl",
-      "refhaven.copyGitLabComparisonUrl",
-      "refhaven.copyGitLabFileUrl",
-      "refhaven.copyGitLabProjectUrl",
       "refhaven.copyRelativeFilePath",
       "refhaven.copyStashMessage",
       "refhaven.copyStashSha",
@@ -177,19 +178,19 @@ suite("extension manifest", () => {
       "refhaven.newComparison",
       "refhaven.nextUnreviewedFile",
       "refhaven.openAllComparisonChanges",
+      "refhaven.openBrowserBranch",
+      "refhaven.openBrowserCommit",
+      "refhaven.openBrowserComparison",
+      "refhaven.openBrowserFile",
+      "refhaven.openBrowserLocalReference",
+      "refhaven.openBrowserProject",
+      "refhaven.openBrowserReference",
       "refhaven.openChangedFileAtRevision",
       "refhaven.openCommitParentDetails",
       "refhaven.openFile",
       "refhaven.openFileAtRevision",
       "refhaven.openFileHistoryAtRevision",
       "refhaven.openFileHistoryDiff",
-      "refhaven.openGitLabBranch",
-      "refhaven.openGitLabCommit",
-      "refhaven.openGitLabComparison",
-      "refhaven.openGitLabFile",
-      "refhaven.openGitLabLocalReference",
-      "refhaven.openGitLabProject",
-      "refhaven.openGitLabReference",
       "refhaven.openLineDiff",
       "refhaven.openNextFileHistoryRevision",
       "refhaven.openPreviousFileHistoryRevision",
@@ -260,9 +261,9 @@ suite("extension manifest", () => {
       "refhaven.revealFileInComparison",
       "refhaven.changeFileAnnotations",
       "refhaven.stashFile",
-      "refhaven.openGitLabFile",
-      "refhaven.copyGitLabFileUrl",
-      "refhaven.openGitLabReference",
+      "refhaven.openBrowserFile",
+      "refhaven.copyBrowserFileUrl",
+      "refhaven.openBrowserReference",
     ]);
   });
 
@@ -348,7 +349,10 @@ suite("extension manifest", () => {
   test("keeps every runtime setting default aligned with the manifest", () => {
     const manifest = loadManifest();
     const expectedDefaults: readonly (readonly [ExtensionSetting, unknown])[] = [
-      [EXTENSION_SETTINGS.approvedGitLabOrigins, EXTENSION_SETTING_DEFAULTS.approvedGitLabOrigins],
+      [
+        EXTENSION_SETTINGS.approvedBrowserOrigins,
+        EXTENSION_SETTING_DEFAULTS.approvedBrowserOrigins,
+      ],
       [EXTENSION_SETTINGS.fileAnnotationsMode, EXTENSION_SETTING_DEFAULTS.fileAnnotationsMode],
       [EXTENSION_SETTINGS.gitTimeoutSeconds, EXTENSION_SETTING_DEFAULTS.gitTimeoutSeconds],
       [EXTENSION_SETTINGS.inlineBlameEnabled, EXTENSION_SETTING_DEFAULTS.inlineBlameEnabled],
@@ -383,9 +387,9 @@ suite("extension manifest", () => {
   test("enables zero-config GitLab links with an optional strict allowlist", () => {
     const setting = manifestSetting(
       loadManifest(),
-      extensionSettingPath(EXTENSION_SETTINGS.approvedGitLabOrigins),
+      extensionSettingPath(EXTENSION_SETTINGS.approvedBrowserOrigins),
     );
-    assert.deepEqual(setting.default, EXTENSION_SETTING_DEFAULTS.approvedGitLabOrigins);
+    assert.deepEqual(setting.default, EXTENSION_SETTING_DEFAULTS.approvedBrowserOrigins);
     assert.match(setting.description ?? "", /leave empty.*local repository remotes/iu);
     assert.match(setting.description ?? "", /strict allowlist/iu);
   });

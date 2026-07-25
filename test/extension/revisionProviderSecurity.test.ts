@@ -2,6 +2,24 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
 import { GitRevisionContentProvider } from "../../src/ui/documents/GitRevisionContentProvider";
+import { openExternalUrl } from "../../src/ui/externalLink";
+
+suite("external link boundary", () => {
+  test("refuses to hand the operating system anything that is not a web address", async () => {
+    // Every one of these parses as a valid URI, and each would ask the host to
+    // do something other than open a page.
+    for (const url of [
+      "file:///etc/passwd",
+      "command:workbench.action.terminal.new",
+      "vscode://extension/evil",
+      "javascript:alert(1)",
+      "mailto:someone@example.invalid",
+    ]) {
+      await assert.rejects(openExternalUrl(url), /not a web address/iu, url);
+    }
+    await assert.rejects(openExternalUrl("not a url"), /.*/u);
+  });
+});
 
 suite("revision document security", () => {
   test("accepts signed URIs and rejects tampering and traversal", async () => {

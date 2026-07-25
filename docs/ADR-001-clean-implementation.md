@@ -69,4 +69,4 @@ Rejected because the product benefits from native tree accessibility, keyboard b
 
 ## Validation
 
-The decision is validated incrementally by the milestone acceptance gates: a small strict extension skeleton, independently tested Git semantics and parsers, persistence tests, native Tree View Extension Host tests, immutable revision-provider tests, and the cross-platform matrix in [TEST-MATRIX.md](TEST-MATRIX.md). If implementation demonstrates that a clean component requires importing a significant external framework, work stops and this decision is revisited through a superseding ADR.
+The decision is validated incrementally by the milestone acceptance gates: a small strict extension skeleton, independently tested Git semantics and parsers, persistence tests, native Tree View Extension Host tests, immutable revision-provider tests, and the cross-platform matrix in [TEST-MATRIX.md](TEST-MATRIX.md). If implementation demonstrates that a clean component requires i dddd mporting a significant external framework, work stops and this decision is revisited through a superseding ADR.

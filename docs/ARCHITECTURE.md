@@ -49,7 +49,7 @@ src/
     ComparisonStore.ts
     FileAnnotationsController.ts
     FileHistoryController.ts
-    GitLabController.ts
+    BrowserLinkController.ts
     Logger.ts
     RepositoryNavigationController.ts
     RepositoryWatcher.ts
@@ -319,9 +319,9 @@ when expanded. Actions copy identifiers, create a saved comparison, or ask VS
 Code to open an already enumerated worktree. Command inputs are re-enumerated
 before use. Branch and worktree mutation is intentionally absent.
 
-### GitLabController and browser-link domain
+### Browser-link controller and domain
 
-`domain/gitLab.ts` is a VS Code-free trust boundary for exact origin parsing,
+`domain/browserLinks.ts` is a VS Code-free trust boundary for exact origin parsing,
 HTTP/SSH remote matching, project-path normalization, immutable target
 validation, and final URL construction. With an empty setting, validated
 HTTP(S) remotes retain their exact origin and SSH/scp-style remotes infer HTTPS
@@ -330,7 +330,7 @@ scheme, hostname, and effective port exactly; SSH remotes can map only to
 configured origins with the same hostname. Ambiguous mappings remain a user
 choice.
 
-`GitLabController` revalidates the workspace repository, reads at most 32
+`BrowserLinkController` revalidates the workspace repository, reads at most 32
 remote names and eight URLs per remote through local transport-blocked Git,
 resolves every ref target to a local SHA, and uses one URL-resolution path for
 both `vscode.env.openExternal` and explicit clipboard-copy commands. The
@@ -340,7 +340,7 @@ inference. The controller has no HTTP client, redirect handler, token storage,
 background refresh, or cache. Quick picks display browser origin, project
 path, and remote name, never the configured remote URL or credentials.
 
-`ui/gitLabAutolinks.ts` renders commit-controlled text for trusted Markdown:
+`ui/browserAutolinks.ts` renders commit-controlled text for trusted Markdown:
 it escapes everything and turns boundary-checked `#123`/`!123` shorthand into
 command links carrying only the repository root and reference text. The trust
 list for autolinked surfaces contains the single reference-opening command,

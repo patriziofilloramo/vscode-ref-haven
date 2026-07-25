@@ -110,19 +110,19 @@ export class FileActionsController {
           detail: "Open this file at the local HEAD revision on an approved origin",
           label: "$(git-pull-request) Open File in Browser",
           run: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.openGitLabFile, target.uri),
+            vscode.commands.executeCommand(COMMAND_IDS.openBrowserFile, target.uri),
         },
         {
           detail: "Copy a locally validated URL without opening a browser",
           label: "$(copy) Copy File URL",
           run: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.copyGitLabFileUrl, target.uri),
+            vscode.commands.executeCommand(COMMAND_IDS.copyBrowserFileUrl, target.uri),
         },
         {
           detail: "Open #issue or !merge-request on the approved project",
           label: "$(link-external) Open Issue or Merge Request in Browser...",
           run: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.openGitLabReference, target.uri),
+            vscode.commands.executeCommand(COMMAND_IDS.openBrowserReference, target.uri),
         },
       ],
       {

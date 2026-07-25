@@ -3,7 +3,7 @@ import { shortSha } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatDiffStats, formatRelativeTime, pluralize } from "../format";
-import { GITLAB_AUTOLINK_COMMANDS, escapeMarkdownWithGitLabAutolinks } from "../gitLabAutolinks";
+import { BROWSER_AUTOLINK_COMMANDS, escapeMarkdownWithAutolinks } from "../browserAutolinks";
 import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 import { blameAuthorLabel, blameCommitInfo } from "./blamePresentation";
 import { selectDiffPreviewSection, windowAroundTarget } from "./diffPreview";
@@ -16,12 +16,12 @@ export const RICH_BLAME_HOVER_COMMANDS: readonly string[] = [
   COMMAND_IDS.copyCommitMessage,
   COMMAND_IDS.copyCommitSha,
   COMMAND_IDS.openFileAtRevision,
-  COMMAND_IDS.openGitLabFile,
+  COMMAND_IDS.openBrowserFile,
   COMMAND_IDS.openLineDiff,
   COMMAND_IDS.showCommitDetails,
   COMMAND_IDS.showFileHistory,
   COMMAND_IDS.showLineHistory,
-  ...GITLAB_AUTOLINK_COMMANDS,
+  ...BROWSER_AUTOLINK_COMMANDS,
 ];
 
 export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()): string {
@@ -41,7 +41,7 @@ export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()):
     `**${author}** · ${formatRelativeTime(blame.authorDate, nowMs)} · \`${shortSha(blame.sha)}\``,
     `**${
       blame.summary.length > 0
-        ? escapeMarkdownWithGitLabAutolinks(blame.summary, data.repositoryRoot)
+        ? escapeMarkdownWithAutolinks(blame.summary, data.repositoryRoot)
         : escapeMarkdown("(no commit message)")
     }**`,
     ...diffPreviewMarkdown(data),
@@ -141,7 +141,7 @@ function secondaryActions(data: RichLineHover, commitNode: object): string {
     ]),
     link("Copy SHA", COMMAND_IDS.copyCommitSha, [commitNode]),
     link("Copy Message", COMMAND_IDS.copyCommitMessage, [commitNode]),
-    link("Open in Browser", COMMAND_IDS.openGitLabFile, [
+    link("Open in Browser", COMMAND_IDS.openBrowserFile, [
       data.repositoryRoot,
       data.blame.sha,
       data.blame.path,

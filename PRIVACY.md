@@ -37,7 +37,7 @@ RefHaven transfers data outside its process only after a direct user action:
 
 GitLab support uses no API, token, authentication flow, redirect handling, or
 background discovery. By default, the browser origin is inferred from a
-validated local Git remote. If `refhaven.gitLab.approvedOrigins` is configured,
+validated local Git remote. If `refhaven.browserLinks.approvedOrigins` is configured,
 its exact origins become a strict allowlist.
 
 ## Verify it yourself

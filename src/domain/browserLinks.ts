@@ -11,7 +11,7 @@ const SCP_REMOTE_PATTERN = /^(?:[^@/\s]+@)?(\[[^\]]+\]|[^:/\s]+):(.+)$/u;
  */
 export type RemoteHostKind = "azure" | "bitbucket" | "gitea" | "github" | "gitlab";
 
-export interface GitLabBrowserOrigin {
+export interface BrowserOrigin {
   readonly hostKind: RemoteHostKind;
   readonly hostname: string;
   readonly origin: string;
@@ -68,9 +68,9 @@ export function detectRemoteHostKind(hostname: string): RemoteHostKind {
  * detected grammar; an unrecognised value is ignored rather than trusted.
  */
 export function applyHostGrammarOverride(
-  projects: readonly GitLabProject[],
+  projects: readonly BrowserProject[],
   override: unknown,
-): GitLabProject[] {
+): BrowserProject[] {
   const kinds: readonly RemoteHostKind[] = ["azure", "bitbucket", "gitea", "github", "gitlab"];
   const hostKind = kinds.find((kind) => kind === override);
   if (!hostKind) return [...projects];
@@ -86,7 +86,7 @@ export function applyHostGrammarOverride(
  */
 export function supportsBrowserTarget(
   hostKind: RemoteHostKind,
-  kind: GitLabTarget["kind"],
+  kind: BrowserTarget["kind"],
 ): boolean {
   if (hostKind === "azure") return false;
   // Bitbucket compares refs through a query-driven branch view with no stable
@@ -99,13 +99,13 @@ export interface GitRemoteUrl {
   readonly url: string;
 }
 
-export interface GitLabProject {
-  readonly browserOrigin: GitLabBrowserOrigin;
+export interface BrowserProject {
+  readonly browserOrigin: BrowserOrigin;
   readonly projectPath: string;
   readonly remoteName: string;
 }
 
-export type GitLabTarget =
+export type BrowserTarget =
   | { readonly kind: "commit"; readonly sha: string }
   | {
       readonly endLine?: number;
@@ -120,9 +120,9 @@ export type GitLabTarget =
   | { readonly kind: "project" }
   | { readonly kind: "tree"; readonly sha: string };
 
-export function parseApprovedGitLabOrigins(values: readonly unknown[]): GitLabBrowserOrigin[] {
+export function parseApprovedBrowserOrigins(values: readonly unknown[]): BrowserOrigin[] {
   if (values.length > 20) throw new Error("At most 20 browser origins may be approved.");
-  const origins = new Map<string, GitLabBrowserOrigin>();
+  const origins = new Map<string, BrowserOrigin>();
   for (const [index, value] of values.entries()) {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error(
@@ -156,11 +156,11 @@ export function parseApprovedGitLabOrigins(values: readonly unknown[]): GitLabBr
   return [...origins.values()];
 }
 
-export function matchApprovedGitLabProjects(
+export function matchApprovedBrowserProjects(
   remotes: readonly GitRemoteUrl[],
-  approvedOrigins: readonly GitLabBrowserOrigin[],
-): GitLabProject[] {
-  const projects = new Map<string, GitLabProject>();
+  approvedOrigins: readonly BrowserOrigin[],
+): BrowserProject[] {
+  const projects = new Map<string, BrowserProject>();
   for (const remote of remotes) {
     const parsed = parseRemote(remote.url);
     if (!parsed) continue;
@@ -180,8 +180,8 @@ export function matchApprovedGitLabProjects(
  * allowlist is configured. HTTP(S) keeps its exact origin; SSH defaults to
  * HTTPS on the same hostname. Invalid and local-path remotes are ignored.
  */
-export function inferGitLabProjects(remotes: readonly GitRemoteUrl[]): GitLabProject[] {
-  const projects = new Map<string, GitLabProject>();
+export function inferBrowserProjects(remotes: readonly GitRemoteUrl[]): BrowserProject[] {
+  const projects = new Map<string, BrowserProject>();
   for (const remote of remotes) {
     const parsed = parseRemote(remote.url);
     if (!parsed) continue;
@@ -196,16 +196,16 @@ export function inferGitLabProjects(remotes: readonly GitRemoteUrl[]): GitLabPro
 }
 
 /** Applies zero-config inference or strict allowlist matching as one policy boundary. */
-export function resolveGitLabProjects(
+export function resolveBrowserProjects(
   remotes: readonly GitRemoteUrl[],
-  approvedOrigins: readonly GitLabBrowserOrigin[],
-): GitLabProject[] {
+  approvedOrigins: readonly BrowserOrigin[],
+): BrowserProject[] {
   return approvedOrigins.length > 0
-    ? matchApprovedGitLabProjects(remotes, approvedOrigins)
-    : inferGitLabProjects(remotes);
+    ? matchApprovedBrowserProjects(remotes, approvedOrigins)
+    : inferBrowserProjects(remotes);
 }
 
-function sortProjects(projects: ReadonlyMap<string, GitLabProject>): GitLabProject[] {
+function sortProjects(projects: ReadonlyMap<string, BrowserProject>): BrowserProject[] {
   return [...projects.values()].sort(
     (left, right) =>
       Number(right.remoteName === "origin") - Number(left.remoteName === "origin") ||
@@ -222,7 +222,7 @@ function sortProjects(projects: ReadonlyMap<string, GitLabProject>): GitLabProje
  * GitHub and GitLab differ in the `/-/` scope segment, in how a merge or
  * pull request is addressed, and in their line-range fragment.
  */
-export function buildGitLabUrl(project: GitLabProject, target: GitLabTarget): string {
+export function buildBrowserUrl(project: BrowserProject, target: BrowserTarget): string {
   const projectUrl = `${project.browserOrigin.origin}/${encodeProjectPath(project.projectPath)}`;
   const { hostKind } = project.browserOrigin;
   if (!supportsBrowserTarget(hostKind, target.kind)) {
@@ -302,17 +302,17 @@ function parseRemote(urlValue: string):
   }
 }
 
-function browserOriginFromUrl(value: string): GitLabBrowserOrigin | null {
+function browserOriginFromUrl(value: string): BrowserOrigin | null {
   try {
-    return parseApprovedGitLabOrigins([value])[0] ?? null;
+    return parseApprovedBrowserOrigins([value])[0] ?? null;
   } catch {
     return null;
   }
 }
 
 function addProject(
-  projects: Map<string, GitLabProject>,
-  browserOrigin: GitLabBrowserOrigin,
+  projects: Map<string, BrowserProject>,
+  browserOrigin: BrowserOrigin,
   projectPath: string,
   remoteName: string,
 ): void {
@@ -352,7 +352,7 @@ function normalizeProjectPath(value: string, encoded: boolean): string | null {
   return segments.join("/");
 }
 
-function encodeGitLabFilePath(filePath: string): string {
+function encodeBrowserFilePath(filePath: string): string {
   const segments = filePath.split("/");
   if (
     segments.some(
@@ -372,7 +372,7 @@ function encodeGitLabFilePath(filePath: string): string {
 function encodeProjectPath(projectPath: string): string {
   const segments = projectPath.split("/");
   if (segments.length < 2) throw new Error("The browser project path is invalid.");
-  return encodeGitLabFilePath(projectPath);
+  return encodeBrowserFilePath(projectPath);
 }
 
 /**
@@ -383,7 +383,7 @@ function encodeProjectPath(projectPath: string): string {
  * Bitbucket as `/src/` with a `#lines-` fragment, and each names a
  * pull or merge request differently.
  */
-function targetPath(hostKind: RemoteHostKind, target: GitLabTarget): string {
+function targetPath(hostKind: RemoteHostKind, target: BrowserTarget): string {
   const scope = hostKind === "gitlab" ? "/-" : "";
   switch (target.kind) {
     case "project":
@@ -424,7 +424,7 @@ function targetPath(hostKind: RemoteHostKind, target: GitLabTarget): string {
     }
     case "file": {
       const sha = requireObjectId(target.sha);
-      const path = encodeGitLabFilePath(target.filePath);
+      const path = encodeBrowserFilePath(target.filePath);
       const fragment = lineFragment(target.startLine, target.endLine, hostKind);
       switch (hostKind) {
         case "bitbucket":

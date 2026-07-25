@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 
 import {
   applyHostGrammarOverride,
-  buildGitLabUrl,
-  inferGitLabProjects,
-  matchApprovedGitLabProjects,
-  parseApprovedGitLabOrigins,
-  resolveGitLabProjects,
+  buildBrowserUrl,
+  inferBrowserProjects,
+  matchApprovedBrowserProjects,
+  parseApprovedBrowserOrigins,
+  resolveBrowserProjects,
   supportsBrowserTarget,
-} from "../../src/domain/gitLab";
+} from "../../src/domain/browserLinks";
 
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
 
-suite("GitLab browser links", () => {
+suite("browser links", () => {
   test("accepts exact HTTP(S) origins and rejects paths, credentials, and other protocols", () => {
     assert.deepEqual(
-      parseApprovedGitLabOrigins([
+      parseApprovedBrowserOrigins([
         "https://gitlab.example.test",
         "https://gitlab.example.test/",
         "http://gitlab.example.test:8080",
@@ -41,28 +41,28 @@ suite("GitLab browser links", () => {
       "https://gitlab.example.test?query=1",
       "not a URL",
     ]) {
-      assert.throws(() => parseApprovedGitLabOrigins([value]), /origin|invalid/iu);
+      assert.throws(() => parseApprovedBrowserOrigins([value]), /origin|invalid/iu);
     }
   });
 
   test("bounds approved-origin configuration independently of the manifest", () => {
     assert.throws(
-      () => parseApprovedGitLabOrigins(Array.from({ length: 21 }, () => "https://gitlab.test")),
+      () => parseApprovedBrowserOrigins(Array.from({ length: 21 }, () => "https://gitlab.test")),
       /at most 20/iu,
     );
     assert.throws(
-      () => parseApprovedGitLabOrigins([`https://${"a".repeat(2_048)}.test`]),
+      () => parseApprovedBrowserOrigins([`https://${"a".repeat(2_048)}.test`]),
       /at most 2048/iu,
     );
-    assert.throws(() => parseApprovedGitLabOrigins([42]), /must be a string/iu);
+    assert.throws(() => parseApprovedBrowserOrigins([42]), /must be a string/iu);
   });
 
   test("matches HTTP remotes by exact origin and SSH remotes by approved hostname", () => {
-    const origins = parseApprovedGitLabOrigins([
+    const origins = parseApprovedBrowserOrigins([
       "https://gitlab.example.test",
       "https://gitlab.example.test:8443",
     ]);
-    const projects = matchApprovedGitLabProjects(
+    const projects = matchApprovedBrowserProjects(
       [
         { name: "backup", url: "https://user:token@gitlab.example.test/group/project.git" },
         { name: "origin", url: "git@gitlab.example.test:group/project.git" },
@@ -105,7 +105,7 @@ suite("GitLab browser links", () => {
   });
 
   test("infers zero-config browser origins from validated local remotes", () => {
-    const projects = inferGitLabProjects([
+    const projects = inferBrowserProjects([
       { name: "backup", url: "https://user:token@gitlab.example.test/group/project.git" },
       { name: "origin", url: "git@gitlab.example.test:group/project.git" },
       { name: "authenticated", url: "https://user:token@auth.example.test/group/auth.git" },
@@ -150,24 +150,26 @@ suite("GitLab browser links", () => {
   test("activates strict allowlist matching as soon as an origin is configured", () => {
     const remotes = [{ name: "origin", url: "git@gitlab.example.test:group/project.git" }] as const;
 
-    assert.equal(resolveGitLabProjects(remotes, []).length, 1);
+    assert.equal(resolveBrowserProjects(remotes, []).length, 1);
     assert.deepEqual(
-      resolveGitLabProjects(
+      resolveBrowserProjects(
         remotes,
-        parseApprovedGitLabOrigins(["https://different.example.test"]),
+        parseApprovedBrowserOrigins(["https://different.example.test"]),
       ),
       [],
     );
     assert.equal(
-      resolveGitLabProjects(remotes, parseApprovedGitLabOrigins(["https://gitlab.example.test"]))[0]
-        ?.browserOrigin.origin,
+      resolveBrowserProjects(
+        remotes,
+        parseApprovedBrowserOrigins(["https://gitlab.example.test"]),
+      )[0]?.browserOrigin.origin,
       "https://gitlab.example.test",
     );
   });
 
   test("rejects unsafe or malformed remote project paths", () => {
-    const origins = parseApprovedGitLabOrigins(["https://gitlab.example.test"]);
-    const projects = matchApprovedGitLabProjects(
+    const origins = parseApprovedBrowserOrigins(["https://gitlab.example.test"]);
+    const projects = matchApprovedBrowserProjects(
       [
         { name: "root", url: "git@gitlab.example.test:project.git" },
         { name: "encoded-slash", url: "https://gitlab.example.test/group%2Fescape/project.git" },
@@ -180,7 +182,7 @@ suite("GitLab browser links", () => {
   });
 
   test("builds immutable project, commit, tree, compare, file, issue, and MR URLs", () => {
-    const [browserOrigin] = parseApprovedGitLabOrigins(["https://gitlab.example.test:8443"]);
+    const [browserOrigin] = parseApprovedBrowserOrigins(["https://gitlab.example.test:8443"]);
     assert.ok(browserOrigin);
     const project = {
       browserOrigin,
@@ -188,23 +190,23 @@ suite("GitLab browser links", () => {
       remoteName: "origin",
     };
     assert.equal(
-      buildGitLabUrl(project, { kind: "project" }),
+      buildBrowserUrl(project, { kind: "project" }),
       "https://gitlab.example.test:8443/group/sub%20group/project",
     );
     assert.equal(
-      buildGitLabUrl(project, { kind: "commit", sha: SHA_A }),
+      buildBrowserUrl(project, { kind: "commit", sha: SHA_A }),
       `https://gitlab.example.test:8443/group/sub%20group/project/-/commit/${SHA_A}`,
     );
     assert.equal(
-      buildGitLabUrl(project, { kind: "tree", sha: SHA_A }),
+      buildBrowserUrl(project, { kind: "tree", sha: SHA_A }),
       `https://gitlab.example.test:8443/group/sub%20group/project/-/tree/${SHA_A}`,
     );
     assert.equal(
-      buildGitLabUrl(project, { baseSha: SHA_A, kind: "compare", targetSha: SHA_B }),
+      buildBrowserUrl(project, { baseSha: SHA_A, kind: "compare", targetSha: SHA_B }),
       `https://gitlab.example.test:8443/group/sub%20group/project/-/compare/${SHA_A}...${SHA_B}`,
     );
     assert.equal(
-      buildGitLabUrl(project, {
+      buildBrowserUrl(project, {
         endLine: 12,
         filePath: "src/space name.ts",
         kind: "file",
@@ -214,35 +216,35 @@ suite("GitLab browser links", () => {
       `https://gitlab.example.test:8443/group/sub%20group/project/-/blob/${SHA_A}/src/space%20name.ts#L10-12`,
     );
     assert.equal(
-      buildGitLabUrl(project, { kind: "issue", number: 42 }),
+      buildBrowserUrl(project, { kind: "issue", number: 42 }),
       "https://gitlab.example.test:8443/group/sub%20group/project/-/issues/42",
     );
     assert.equal(
-      buildGitLabUrl(project, { kind: "mergeRequest", number: 7 }),
+      buildBrowserUrl(project, { kind: "mergeRequest", number: 7 }),
       "https://gitlab.example.test:8443/group/sub%20group/project/-/merge_requests/7",
     );
   });
 
   test("builds GitHub URLs in GitHub's own path grammar", () => {
-    const [browserOrigin] = parseApprovedGitLabOrigins(["https://github.com"]);
+    const [browserOrigin] = parseApprovedBrowserOrigins(["https://github.com"]);
     assert.ok(browserOrigin);
     assert.equal(browserOrigin.hostKind, "github");
     const project = { browserOrigin, projectPath: "owner/repository", remoteName: "origin" };
     const base = "https://github.com/owner/repository";
 
-    assert.equal(buildGitLabUrl(project, { kind: "project" }), base);
+    assert.equal(buildBrowserUrl(project, { kind: "project" }), base);
     assert.equal(
-      buildGitLabUrl(project, { kind: "commit", sha: SHA_A }),
+      buildBrowserUrl(project, { kind: "commit", sha: SHA_A }),
       `${base}/commit/${SHA_A}`,
     );
-    assert.equal(buildGitLabUrl(project, { kind: "tree", sha: SHA_A }), `${base}/tree/${SHA_A}`);
+    assert.equal(buildBrowserUrl(project, { kind: "tree", sha: SHA_A }), `${base}/tree/${SHA_A}`);
     assert.equal(
-      buildGitLabUrl(project, { baseSha: SHA_A, kind: "compare", targetSha: SHA_B }),
+      buildBrowserUrl(project, { baseSha: SHA_A, kind: "compare", targetSha: SHA_B }),
       `${base}/compare/${SHA_A}...${SHA_B}`,
     );
     // GitHub ranges repeat the L; GitLab writes #L10-12.
     assert.equal(
-      buildGitLabUrl(project, {
+      buildBrowserUrl(project, {
         endLine: 12,
         filePath: "src/example.ts",
         kind: "file",
@@ -251,9 +253,9 @@ suite("GitLab browser links", () => {
       }),
       `${base}/blob/${SHA_A}/src/example.ts#L10-L12`,
     );
-    assert.equal(buildGitLabUrl(project, { kind: "issue", number: 42 }), `${base}/issues/42`);
+    assert.equal(buildBrowserUrl(project, { kind: "issue", number: 42 }), `${base}/issues/42`);
     // GitHub calls them pull requests and has no /-/ scope segment.
-    assert.equal(buildGitLabUrl(project, { kind: "mergeRequest", number: 7 }), `${base}/pull/7`);
+    assert.equal(buildBrowserUrl(project, { kind: "mergeRequest", number: 7 }), `${base}/pull/7`);
 
     for (const target of [
       { kind: "commit", sha: SHA_A },
@@ -262,19 +264,19 @@ suite("GitLab browser links", () => {
       { kind: "mergeRequest", number: 1 },
       { filePath: "a.ts", kind: "file", sha: SHA_A },
     ] as const) {
-      assert.doesNotMatch(buildGitLabUrl(project, target), /\/-\//u);
+      assert.doesNotMatch(buildBrowserUrl(project, target), /\/-\//u);
     }
   });
 
   test("detects the host grammar from the inferred remote, not from configuration", () => {
-    const [inferred] = resolveGitLabProjects(
+    const [inferred] = resolveBrowserProjects(
       [{ name: "origin", url: "git@github.com:owner/repository.git" }],
       [],
     );
     assert.ok(inferred);
     assert.equal(inferred.browserOrigin.hostKind, "github");
     assert.equal(
-      buildGitLabUrl(inferred, { filePath: "CHANGELOG.md", kind: "file", sha: SHA_A }),
+      buildBrowserUrl(inferred, { filePath: "CHANGELOG.md", kind: "file", sha: SHA_A }),
       `https://github.com/owner/repository/blob/${SHA_A}/CHANGELOG.md`,
     );
   });
@@ -312,17 +314,17 @@ suite("GitLab browser links", () => {
     ] as const;
 
     for (const { blob, commit, host, kind, request } of cases) {
-      const [browserOrigin] = parseApprovedGitLabOrigins([host]);
+      const [browserOrigin] = parseApprovedBrowserOrigins([host]);
       assert.ok(browserOrigin);
       assert.equal(browserOrigin.hostKind, kind, `${host} host kind`);
       const project = { browserOrigin, projectPath: "owner/repository", remoteName: "origin" };
       const base = `${host}/owner/repository`;
       const expand = (shape: string): string => `${base}${shape.replace("{sha}", SHA_A)}`;
 
-      assert.equal(buildGitLabUrl(project, { kind: "commit", sha: SHA_A }), expand(commit));
-      assert.equal(buildGitLabUrl(project, { kind: "mergeRequest", number: 7 }), expand(request));
+      assert.equal(buildBrowserUrl(project, { kind: "commit", sha: SHA_A }), expand(commit));
+      assert.equal(buildBrowserUrl(project, { kind: "mergeRequest", number: 7 }), expand(request));
       assert.equal(
-        buildGitLabUrl(project, {
+        buildBrowserUrl(project, {
           endLine: 12,
           filePath: "src/a.ts",
           kind: "file",
@@ -336,7 +338,7 @@ suite("GitLab browser links", () => {
 
   test("detects self-hosted instances by leading label and falls back to GitLab", () => {
     const detected = (hostname: string): string =>
-      parseApprovedGitLabOrigins([`https://${hostname}`])[0]?.hostKind ?? "";
+      parseApprovedBrowserOrigins([`https://${hostname}`])[0]?.hostKind ?? "";
 
     assert.equal(detected("github.company.example"), "github");
     assert.equal(detected("gitea.company.example"), "gitea");
@@ -357,11 +359,11 @@ suite("GitLab browser links", () => {
     assert.equal(supportsBrowserTarget("bitbucket", "compare"), false);
     assert.equal(supportsBrowserTarget("bitbucket", "file"), true);
 
-    const [browserOrigin] = parseApprovedGitLabOrigins(["https://dev.azure.com"]);
+    const [browserOrigin] = parseApprovedBrowserOrigins(["https://dev.azure.com"]);
     assert.ok(browserOrigin);
     assert.throws(
       () =>
-        buildGitLabUrl(
+        buildBrowserUrl(
           { browserOrigin, projectPath: "org/project", remoteName: "origin" },
           { kind: "commit", sha: SHA_A },
         ),
@@ -370,7 +372,7 @@ suite("GitLab browser links", () => {
   });
 
   test("lets an explicit host grammar override a wrong hostname guess", () => {
-    const projects = resolveGitLabProjects(
+    const projects = resolveBrowserProjects(
       [{ name: "origin", url: "git@code.company.example:team/service.git" }],
       [],
     );
@@ -380,7 +382,7 @@ suite("GitLab browser links", () => {
     assert.ok(corrected);
     assert.equal(corrected.browserOrigin.hostKind, "gitea");
     assert.match(
-      buildGitLabUrl(corrected, { filePath: "a.ts", kind: "file", sha: SHA_A }),
+      buildBrowserUrl(corrected, { filePath: "a.ts", kind: "file", sha: SHA_A }),
       /\/src\/commit\//u,
     );
 
@@ -391,23 +393,23 @@ suite("GitLab browser links", () => {
   });
 
   test("fails closed for invalid targets and origin changes", () => {
-    const [browserOrigin] = parseApprovedGitLabOrigins(["https://gitlab.example.test"]);
+    const [browserOrigin] = parseApprovedBrowserOrigins(["https://gitlab.example.test"]);
     assert.ok(browserOrigin);
     const project = { browserOrigin, projectPath: "group/project", remoteName: "origin" };
-    assert.throws(() => buildGitLabUrl(project, { kind: "commit", sha: "HEAD" }), /revision/iu);
+    assert.throws(() => buildBrowserUrl(project, { kind: "commit", sha: "HEAD" }), /revision/iu);
     assert.throws(
       () =>
-        buildGitLabUrl(project, {
+        buildBrowserUrl(project, {
           filePath: "../secret",
           kind: "file",
           sha: SHA_A,
         }),
       /path/iu,
     );
-    assert.throws(() => buildGitLabUrl(project, { kind: "issue", number: 0 }), /number/iu);
+    assert.throws(() => buildBrowserUrl(project, { kind: "issue", number: 0 }), /number/iu);
     assert.throws(
       () =>
-        buildGitLabUrl(
+        buildBrowserUrl(
           { ...project, projectPath: "group/project/../../outside" },
           { kind: "project" },
         ),

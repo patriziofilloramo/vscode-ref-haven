@@ -198,6 +198,36 @@
         </small>
       </a>
 
+      <h2 id="coexistence">Using RefHaven with another blame extension</h2>
+      <p>
+        RefHaven shows three things on the line your cursor is on: inline blame at the end of the
+        line, a hover, and a status bar entry. VS Code does not let extensions replace each other
+        here — it draws every extension's decorations and merges every extension's hovers. So if
+        another extension already shows blame, you see both, and the line reads twice.
+      </p>
+      <p>
+        Run <strong>RefHaven: Line Intelligence</strong> from the Command Palette and pick a mode:
+      </p>
+      <ul>
+        <li>
+          <strong>Full</strong> <small>— inline blame, hover, and status bar (the default)</small>
+        </li>
+        <li>
+          <strong>Hover only</strong>
+          <small>
+            — the recommended setting alongside another blame extension. Nothing is drawn on the
+            line, so nothing collides, and you keep the hover that shows the diff which produced the
+            line you are pointing at.
+          </small>
+        </li>
+        <li><strong>Off</strong> <small>— no per-line surfaces at all</small></li>
+      </ul>
+      <p>
+        Comparisons, review tracking, file and line history, stashes, patch export, and the merge
+        forecast are unaffected by this setting and never overlap with another extension. Keeping
+        both installed is a perfectly reasonable setup.
+      </p>
+
       <h2>Project</h2>
       <ul>
         <li>

@@ -8,7 +8,7 @@ import * as vscode from "vscode";
 
 import { calculateComparison } from "../../src/application/ComparisonEngine";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
-import { resolveGitLabProjects } from "../../src/domain/gitLab";
+import { resolveBrowserProjects } from "../../src/domain/browserLinks";
 import {
   blameFile,
   blameLine,
@@ -425,7 +425,7 @@ suite("native branch diff", () => {
         url: "git@gitlab.example.invalid:group/project.git",
       },
     ]);
-    assert.deepEqual(resolveGitLabProjects(remotes, []), [
+    assert.deepEqual(resolveBrowserProjects(remotes, []), [
       {
         browserOrigin: {
           hostKind: "gitlab",
