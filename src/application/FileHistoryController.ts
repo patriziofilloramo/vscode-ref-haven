@@ -40,7 +40,7 @@ export class FileHistoryController implements vscode.Disposable {
     this.treeProvider.setTarget({ filePath, repositoryRoot });
     if (force) this.treeProvider.refresh();
     this.treeView.description = basename(filePath);
-    this.treeView.message = "";
+    this.treeView.message = "Following renames locally with git log --follow.";
     this.logger.info("Refreshed file history target", { operation: "refreshFileHistory" });
   }
 
@@ -100,7 +100,7 @@ export class FileHistoryController implements vscode.Disposable {
     this.treeProvider.setTarget({ filePath, repositoryRoot });
     if (force) this.treeProvider.refresh();
     this.treeView.description = basename(filePath);
-    this.treeView.message = "";
+    this.treeView.message = "Following renames locally with git log --follow.";
     await vscode.commands.executeCommand(FILE_HISTORY_FOCUS_COMMAND);
     this.logger.info("Opened file history", { operation: "showFileHistory" });
   }
@@ -123,6 +123,32 @@ export class FileHistoryController implements vscode.Disposable {
       node.entry.commit.sha,
       node.entry.change.newPath,
     );
+  }
+
+  public async changeFilter(): Promise<void> {
+    const filter = await vscode.window.showInputBox({
+      ignoreFocusOut: true,
+      placeHolder: "Commit message, author, SHA, or path",
+      prompt: "Leave empty to show the complete file history",
+      title: "RefHaven: Filter File History",
+      value: this.treeProvider.getFilter(),
+      validateInput: (value) => (value.length > 256 ? "Filter is too long." : undefined),
+    });
+    if (filter === undefined) return;
+    this.treeProvider.setFilter(filter);
+  }
+
+  public async openAdjacent(node: FileHistoryNode, direction: "next" | "previous"): Promise<void> {
+    const adjacent = await this.treeProvider.getAdjacent(node, direction);
+    if (!adjacent) {
+      void vscode.window.showInformationMessage(
+        direction === "next"
+          ? "This is the oldest visible file revision."
+          : "This is the newest visible file revision.",
+      );
+      return;
+    }
+    await this.openFileDiff(adjacent);
   }
 
   public dispose(): void {

@@ -2,6 +2,12 @@ import * as vscode from "vscode";
 
 import { comparisonLabel, type SavedComparisonV1 } from "../../domain/comparison";
 import {
+  filterAndSortComparisonFiles,
+  type ComparisonFileFilter,
+  type ComparisonFileSort,
+  type ComparisonReviewSummary,
+} from "../../domain/comparisonReview";
+import {
   COMMIT_PAGE_SIZE,
   shortSha,
   sumDiffTotals,
@@ -59,6 +65,7 @@ type CommitFilesLoader = (
   sha: string,
   signal: AbortSignal,
 ) => Promise<CommitFileChanges>;
+type ReviewStateProvider = (result: ComparisonResult) => ComparisonReviewSummary;
 
 export class ComparisonTreeProvider
   implements vscode.TreeDataProvider<ComparisonTreeNode>, vscode.Disposable
@@ -75,11 +82,14 @@ export class ComparisonTreeProvider
   private disposed = false;
   private readonly errors = new Map<string, string>();
   private readonly expansionRequests = new Set<string>();
+  private fileFilter: ComparisonFileFilter = "all";
+  private fileSort: ComparisonFileSort = "path";
   private filesLayout: FilesLayout = "tree";
   private readonly generations = new Map<string, number>();
   private readonly pendingResults = new Map<string, Promise<ComparisonResult>>();
   private readonly pendingResultAbortControllers = new Map<string, AbortController>();
   private readonly results = new Map<string, ComparisonResult>();
+  private reviewStateProvider: ReviewStateProvider | undefined;
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -105,6 +115,10 @@ export class ComparisonTreeProvider
     this.commitFilesLoader = loader;
   }
 
+  public setReviewStateProvider(provider: ReviewStateProvider): void {
+    this.reviewStateProvider = provider;
+  }
+
   public getComparisonNode(comparisonId: string): ComparisonNode | undefined {
     return this.comparisonNodes.find(({ comparison }) => comparison.id === comparisonId);
   }
@@ -113,6 +127,14 @@ export class ComparisonTreeProvider
     const comparison = this.currentComparison(comparisonId);
     if (!comparison) throw new Error("The comparison is not available in the RefHaven view.");
     await this.getComparisonResult(comparison);
+  }
+
+  public async loadComparisonResult(comparisonId: string): Promise<ComparisonResult> {
+    const comparison = this.currentComparison(comparisonId);
+    if (!comparison) throw new Error("The comparison is not available in the RefHaven view.");
+    const result = await this.getComparisonResult(comparison);
+    if (!result) throw new Error(this.errors.get(comparisonId) ?? "Comparison failed.");
+    return result;
   }
 
   public requestComparisonExpansion(comparisonId: string): void {
@@ -154,6 +176,31 @@ export class ComparisonTreeProvider
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
+  public getFileFilter(): ComparisonFileFilter {
+    return this.fileFilter;
+  }
+
+  public setFileFilter(filter: ComparisonFileFilter): void {
+    if (this.fileFilter === filter) return;
+    this.fileFilter = filter;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
+  public getFileSort(): ComparisonFileSort {
+    return this.fileSort;
+  }
+
+  public setFileSort(sort: ComparisonFileSort): void {
+    if (this.fileSort === sort) return;
+    this.fileSort = sort;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
+  public refreshReviewState(comparisonId: string): void {
+    const node = this.getComparisonNode(comparisonId);
+    this.onDidChangeTreeDataEmitter.fire(node);
+  }
+
   public invalidateAllResults(): void {
     for (const comparison of this.comparisons) this.bumpGeneration(comparison.id);
     for (const controller of this.pendingResultAbortControllers.values()) controller.abort();
@@ -185,7 +232,7 @@ export class ComparisonTreeProvider
       case "comparison":
         return this.createComparisonItem(element.comparison);
       case "section":
-        return createSectionItem(element);
+        return createSectionItem(element, this.reviewSummary(element.result), this.fileFilter);
       case "commit":
         return createCommitItem(element);
       case "folder":
@@ -207,7 +254,7 @@ export class ComparisonTreeProvider
       case "comparison":
         return this.getComparisonChildren(element.comparison);
       case "section":
-        return getSectionChildren(element, this.filesLayout);
+        return this.getSectionChildren(element);
       case "commit":
         return this.getCommitChildren(element);
       case "folder":
@@ -322,14 +369,62 @@ export class ComparisonTreeProvider
     );
     const result = this.results.get(comparison.id);
     const error = this.errors.get(comparison.id);
+    const review = result ? this.reviewSummary(result) : undefined;
     item.contextValue = comparison.pinned ? "refhaven.comparisonPinned" : "refhaven.comparison";
-    item.description = comparisonDescription(comparison, result);
+    item.description = comparisonDescription(comparison, result, review);
     item.iconPath = comparison.pinned
       ? new vscode.ThemeIcon("pinned")
       : new vscode.ThemeIcon("git-compare");
     item.id = `comparison:${comparison.id}`;
-    item.tooltip = comparisonTooltip(comparison, result, error);
+    item.tooltip = comparisonTooltip(comparison, result, error, review);
     return item;
+  }
+
+  private getSectionChildren(element: SectionNode): ComparisonTreeNode[] {
+    const { result, section } = element;
+    if (section !== "files") return getCommitSectionChildren(element);
+
+    const review = this.reviewSummary(result);
+    const files = filterAndSortComparisonFiles(
+      result.files,
+      review.reviewedPaths,
+      this.fileFilter,
+      this.fileSort,
+    );
+    if (files.length === 0 && result.files.length > 0) {
+      return [
+        {
+          icon: "filter",
+          kind: "message",
+          label:
+            this.fileFilter === "reviewed"
+              ? "No reviewed files match the current filter."
+              : "No unreviewed files remain.",
+        },
+      ];
+    }
+    return buildChangeNodes(
+      files,
+      this.filesLayout,
+      comparisonDiffScope(result),
+      `${result.comparison.id}:files`,
+      {
+        comparisonId: result.comparison.id,
+        reviewedPaths: review.reviewedPaths,
+        revisionKey: review.revisionKey,
+      },
+    );
+  }
+
+  private reviewSummary(result: ComparisonResult): ComparisonReviewSummary {
+    return (
+      this.reviewStateProvider?.(result) ?? {
+        reviewedCount: 0,
+        reviewedPaths: new Set<string>(),
+        revisionKey: "",
+        totalCount: result.files.length,
+      }
+    );
   }
 
   private async getComparisonResult(
@@ -406,12 +501,16 @@ function comparisonDiffScope(result: ComparisonResult): FileDiffScope {
 function comparisonDescription(
   comparison: SavedComparisonV1,
   result: ComparisonResult | undefined,
+  review: ComparisonReviewSummary | undefined,
 ): string {
   if (!result) return comparison.repository.label;
   const totals = sumDiffTotals(result.files);
   return [
     `↑${formatCount(result.aheadCount)} ↓${formatCount(result.behindCount)}`,
     pluralize(result.files.length, "file"),
+    ...(review && review.totalCount > 0
+      ? [`${review.reviewedCount.toString()}/${review.totalCount.toString()} reviewed`]
+      : []),
     formatDiffStats(totals.additions, totals.deletions),
     ...(comparison.mode === "tipToTip"
       ? ["tip-to-tip"]
@@ -453,6 +552,7 @@ function comparisonTooltip(
   comparison: SavedComparisonV1,
   result: ComparisonResult | undefined,
   error: string | undefined,
+  review: ComparisonReviewSummary | undefined,
 ): vscode.MarkdownString {
   const modeLabel =
     comparison.mode === "branchChanges"
@@ -474,6 +574,11 @@ function comparisonTooltip(
         : []),
       `$(arrow-up) ${pluralize(result.aheadCount, "commit")} ahead · $(arrow-down) ${pluralize(result.behindCount, "commit")} behind`,
       `$(files) ${pluralize(result.files.length, "changed file")} · ${formatDiffStats(totals.additions, totals.deletions)}`,
+      ...(review && review.totalCount > 0
+        ? [
+            `$(checklist) ${review.reviewedCount.toString()} of ${review.totalCount.toString()} files reviewed`,
+          ]
+        : []),
       ...(totals.binaryFileCount > 0
         ? [`$(file-binary) ${pluralize(totals.binaryFileCount, "binary file")}`]
         : []),
@@ -488,7 +593,11 @@ function comparisonTooltip(
   return tooltip;
 }
 
-function createSectionItem(element: SectionNode): vscode.TreeItem {
+function createSectionItem(
+  element: SectionNode,
+  review: ComparisonReviewSummary,
+  filter: ComparisonFileFilter,
+): vscode.TreeItem {
   const { result, section } = element;
 
   if (section === "files") {
@@ -501,7 +610,11 @@ function createSectionItem(element: SectionNode): vscode.TreeItem {
     );
     item.description =
       result.files.length > 0
-        ? formatDiffStats(totals.additions, totals.deletions)
+        ? [
+            `${review.reviewedCount.toString()}/${review.totalCount.toString()} reviewed`,
+            formatDiffStats(totals.additions, totals.deletions),
+            ...(filter === "all" ? [] : [`filter: ${filter}`]),
+          ].join(" · ")
         : emptyFilesDescription(result);
     if (result.files.length === 0) item.tooltip = emptyFilesTooltip(result);
     item.iconPath = new vscode.ThemeIcon("request-changes");
@@ -524,17 +637,10 @@ function createSectionItem(element: SectionNode): vscode.TreeItem {
   return item;
 }
 
-function getSectionChildren(element: SectionNode, layout: FilesLayout): ComparisonTreeNode[] {
+function getCommitSectionChildren(element: SectionNode): ComparisonTreeNode[] {
   const { result, section } = element;
 
-  if (section === "files") {
-    return buildChangeNodes(
-      result.files,
-      layout,
-      comparisonDiffScope(result),
-      `${result.comparison.id}:files`,
-    );
-  }
+  if (section === "files") return [];
 
   const commits = section === "ahead" ? result.aheadCommits : result.behindCommits;
   const count = section === "ahead" ? result.aheadCount : result.behindCount;

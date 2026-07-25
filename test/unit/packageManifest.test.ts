@@ -52,8 +52,8 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "local-development");
-    assert.equal(manifest.version, "0.4.0");
-    assert.match(manifest.description, /entirely local/u);
+    assert.equal(manifest.version, "0.7.0");
+    assert.match(manifest.description, /local processing/u);
   });
 
   test("contributes the RefHaven views to Source Control", () => {
@@ -79,44 +79,69 @@ suite("extension manifest", () => {
     const commands = manifest.contributes.commands.map(({ command }) => command).sort();
 
     assert.deepEqual(commands, [
+      "refhaven.changeComparisonFileFilter",
+      "refhaven.changeComparisonFileSort",
       "refhaven.changeComparisonMode",
       "refhaven.changeFileAnnotations",
+      "refhaven.changeFileHistoryFilter",
+      "refhaven.changeStashFilter",
       "refhaven.closeComparison",
       "refhaven.compareBranchWithCurrent",
+      "refhaven.compareCommitWithParent",
       "refhaven.compareCurrentBranch",
       "refhaven.compareFileWithRevision",
       "refhaven.compareStashFileWithHead",
       "refhaven.compareStashFileWithWorkingTree",
       "refhaven.copyBranchName",
+      "refhaven.copyCommitDetail",
       "refhaven.copyCommitMessage",
       "refhaven.copyCommitSha",
       "refhaven.copyComparisonSummary",
       "refhaven.copyFilePath",
       "refhaven.copyRelativeFilePath",
       "refhaven.copyStashMessage",
+      "refhaven.copyStashSha",
       "refhaven.copyWorktreePath",
       "refhaven.findOtherStashesContainingFile",
+      "refhaven.markAllComparisonFilesReviewed",
+      "refhaven.markFileReviewed",
+      "refhaven.markFileUnreviewed",
       "refhaven.newComparison",
+      "refhaven.nextUnreviewedFile",
       "refhaven.openChangedFileAtRevision",
+      "refhaven.openCommitParentDetails",
       "refhaven.openFile",
       "refhaven.openFileAtRevision",
       "refhaven.openFileHistoryAtRevision",
       "refhaven.openFileHistoryDiff",
+      "refhaven.openGitLabBranch",
+      "refhaven.openGitLabCommit",
+      "refhaven.openGitLabComparison",
+      "refhaven.openGitLabFile",
+      "refhaven.openGitLabLocalReference",
+      "refhaven.openGitLabProject",
+      "refhaven.openGitLabReference",
       "refhaven.openLineDiff",
+      "refhaven.openNextFileHistoryRevision",
+      "refhaven.openPreviousFileHistoryRevision",
       "refhaven.openStashFileAtRevision",
       "refhaven.openWorktree",
       "refhaven.pinComparison",
+      "refhaven.previousUnreviewedFile",
+      "refhaven.quickOpenComparisonFile",
       "refhaven.refreshAll",
       "refhaven.refreshComparison",
       "refhaven.refreshFileHistory",
       "refhaven.refreshRepositoryNavigation",
       "refhaven.refreshStashes",
+      "refhaven.resetComparisonReview",
       "refhaven.searchCommits",
       "refhaven.showCommitDetails",
       "refhaven.showFileHistory",
       "refhaven.showLineBlameActions",
       "refhaven.showLineHistory",
       "refhaven.showRefHavenMenu",
+      "refhaven.showStashCommitDetails",
       "refhaven.stashFile",
       "refhaven.swapComparison",
       "refhaven.toggleInlineBlame",
@@ -162,7 +187,37 @@ suite("extension manifest", () => {
       "refhaven.compareFileWithRevision",
       "refhaven.changeFileAnnotations",
       "refhaven.stashFile",
+      "refhaven.openGitLabFile",
+      "refhaven.openGitLabReference",
     ]);
+  });
+
+  test("exposes native comparison review controls only on review-capable nodes", () => {
+    const manifest = loadManifest();
+    const titleCommands =
+      manifest.contributes.menus["view/title"]?.map(({ command }) => command) ?? [];
+    for (const command of [
+      "refhaven.quickOpenComparisonFile",
+      "refhaven.nextUnreviewedFile",
+      "refhaven.changeComparisonFileFilter",
+      "refhaven.changeComparisonFileSort",
+    ]) {
+      assert.ok(titleCommands.includes(command));
+    }
+
+    const itemMenus = manifest.contributes.menus["view/item/context"] ?? [];
+    assert.ok(
+      itemMenus.some(
+        ({ command, when }) =>
+          command === "refhaven.markFileReviewed" && when?.includes("\\.unreviewed$"),
+      ),
+    );
+    assert.ok(
+      itemMenus.some(
+        ({ command, when }) =>
+          command === "refhaven.markFileUnreviewed" && when?.includes("\\.reviewed$"),
+      ),
+    );
   });
 
   test("packages only compiled runtime files", () => {
@@ -197,6 +252,11 @@ suite("extension manifest", () => {
   test("enables rich local line hover by default", () => {
     const setting = manifestSetting(loadManifest(), "refhaven.lineHover.enabled");
     assert.equal(setting.default, true);
+  });
+
+  test("requires explicit GitLab origin approval", () => {
+    const setting = manifestSetting(loadManifest(), "refhaven.gitLab.approvedOrigins");
+    assert.deepEqual(setting.default, []);
   });
 });
 

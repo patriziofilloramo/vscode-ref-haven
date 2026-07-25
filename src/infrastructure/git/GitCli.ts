@@ -12,6 +12,8 @@ import type { CommitDetails, CommitSearchKind } from "../../domain/commitDetails
 import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
 import type { FileHistoryEntry } from "../../domain/history";
 import type { ChangedLineRange } from "../../domain/fileAnnotations";
+import type { GitRemoteUrl } from "../../domain/gitLab";
+import type { BranchDetails, WorktreeState } from "../../domain/repositoryNavigation";
 import {
   assertRepositoryRelativeGitPath,
   assertRepositoryWorktreeGitPath,
@@ -22,6 +24,7 @@ import type { StashEntry } from "../../domain/stash";
 import type { WorktreeInfo } from "../../domain/worktree";
 import { parseBlameFilePorcelain, parseBlamePorcelain } from "./blamePorcelain";
 import { parseBranchRefs, parseComparisonRefs } from "./branchRefs";
+import { BRANCH_DETAILS_FORMAT, parseBranchDetails } from "./branchDetails";
 import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
 import { COMMIT_DETAILS_FORMAT, parseCommitDetails } from "./commitDetails";
 import { parseChangedLineRanges } from "./diffHunks";
@@ -30,6 +33,7 @@ import { parseNameStatusZ } from "./nameStatus";
 import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
 import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
 import { parseWorktreeList } from "./worktreeList";
+import { parseWorktreeStatus } from "./worktreeStatus";
 import { GitScheduler } from "./GitScheduler";
 import { buildLocalOnlyGitArguments, buildLocalOnlyGitEnvironment } from "./gitProcessPolicy";
 import { buildRepositoryIdentities } from "./repositoryDiscovery";
@@ -105,6 +109,20 @@ export async function listBranchRefs(
   return parseBranchRefs(stdout);
 }
 
+export async function listBranchDetails(
+  repositoryRoot: string,
+  signal?: AbortSignal,
+): Promise<BranchDetails[]> {
+  const stdout = await runGit(
+    repositoryRoot,
+    ["for-each-ref", `--format=${BRANCH_DETAILS_FORMAT}`, "refs/heads", "refs/remotes"],
+    signal,
+  ).catch((error: unknown) =>
+    failGitOperation(error, "Git could not load branch details for this repository."),
+  );
+  return parseBranchDetails(stdout);
+}
+
 export async function listComparisonRefs(
   repositoryRoot: string,
   signal?: AbortSignal,
@@ -125,6 +143,32 @@ export async function listComparisonRefs(
   return [{ displayName: "HEAD", fullName: "HEAD", kind: "head" }, ...parseComparisonRefs(stdout)];
 }
 
+export async function listGitRemoteUrls(
+  repositoryRoot: string,
+  signal?: AbortSignal,
+): Promise<GitRemoteUrl[]> {
+  const namesOutput = await runGit(repositoryRoot, ["remote"], signal).catch((error: unknown) =>
+    failGitOperation(error, "Git could not list repository remotes."),
+  );
+  const names = namesOutput
+    .split(/\r?\n/u)
+    .filter((name) => isSafeRemoteName(name))
+    .slice(0, 32);
+  const remotes = await Promise.all(
+    names.map(async (name) => {
+      const urlsOutput = await runGit(repositoryRoot, ["remote", "get-url", "--all", name], signal);
+      return urlsOutput
+        .split(/\r?\n/u)
+        .filter((url) => url.length > 0 && url.length <= 4_096)
+        .slice(0, 8)
+        .map((url) => ({ name, url }));
+    }),
+  ).catch((error: unknown) =>
+    failGitOperation(error, "Git could not read repository remote URLs."),
+  );
+  return remotes.flat();
+}
+
 export async function listWorktrees(
   repositoryRoot: string,
   signal?: AbortSignal,
@@ -137,6 +181,18 @@ export async function listWorktrees(
     failGitOperation(error, "Git could not list the repository worktrees."),
   );
   return parseWorktreeList(stdout);
+}
+
+export async function readWorktreeState(
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<WorktreeState> {
+  const stdout = await runGit(
+    worktreePath,
+    ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal"],
+    signal,
+  ).catch((error: unknown) => failGitOperation(error, "Git could not read the worktree state."));
+  return parseWorktreeStatus(stdout);
 }
 
 export async function readCurrentBranch(
@@ -328,6 +384,29 @@ export async function listCommitRange(
     signal,
   ).catch((error: unknown) =>
     failGitOperation(error, "Git could not list the commits between these branches."),
+  );
+  return parseCommitLog(stdout);
+}
+
+export async function listRecentCommits(
+  repositoryRoot: string,
+  revision: string,
+  limit = 20,
+  signal?: AbortSignal,
+): Promise<CommitInfo[]> {
+  const sha = await resolveRef(repositoryRoot, revision, signal);
+  const stdout = await runGit(
+    repositoryRoot,
+    [
+      "log",
+      `--max-count=${Math.max(1, Math.min(limit, COMMIT_PAGE_SIZE)).toString()}`,
+      `--format=${COMMIT_LOG_FORMAT}`,
+      sha,
+      "--",
+    ],
+    signal,
+  ).catch((error: unknown) =>
+    failGitOperation(error, "Git could not load recent commits for this branch."),
   );
   return parseCommitLog(stdout);
 }
@@ -703,6 +782,26 @@ export async function readFileAtRevision(
   }
 }
 
+export async function fileExistsAtRevision(
+  repositoryRoot: string,
+  sha: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  assertRepositoryRelativeGitPath(filePath);
+  if (!/^[0-9a-f]{40,64}$/u.test(sha)) throw new Error("The file revision SHA is invalid.");
+  const output = await runGit(
+    repositoryRoot,
+    ["ls-tree", "-z", "--full-tree", sha, "--", filePath],
+    signal,
+  ).catch((error: unknown) => failGitOperation(error, "Git could not verify this file revision."));
+  const separator = output.indexOf("\t");
+  if (separator < 0 || !/^\d{6} blob [0-9a-f]{40,64}$/u.test(output.slice(0, separator))) {
+    return false;
+  }
+  return output.slice(separator + 1).replace(/\0$/u, "") === filePath;
+}
+
 export async function readCommitDiffPreview(
   repositoryRoot: string,
   fromSha: string | null,
@@ -1046,6 +1145,14 @@ async function restorePathsFromHead(
 
 function withoutGitHooks(hooksPath: string, args: readonly string[]): string[] {
   return ["-c", `core.hooksPath=${hooksPath}`, ...args];
+}
+
+function isSafeRemoteName(value: string): boolean {
+  if (value.length === 0 || value.length > 256 || value.startsWith("-")) return false;
+  for (const character of value) {
+    if (character.charCodeAt(0) <= 0x20 || character.charCodeAt(0) === 0x7f) return false;
+  }
+  return true;
 }
 
 function parseObjectId(stdout: string, errorMessage: string): string {

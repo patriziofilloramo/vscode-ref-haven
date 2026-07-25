@@ -160,6 +160,26 @@ recoverable stash in place. Mutating commands override `core.hooksPath` with a
 private empty path, and the operation refuses content filters before any
 worktree/index mutation. Once started, it is intentionally not cancellable.
 
+## Approved GitLab URL semantics
+
+GitLab actions enumerate only locally configured remotes and require an
+empty-by-default allowlist of exact HTTP(S) origins. HTTP remotes match the
+complete origin, including the effective port. SSH and scp-style remotes match
+only the hostname and require an explicit choice when several approved browser
+origins share it.
+
+Every symbolic reference is resolved locally to a full commit object ID before
+URL construction. Comparison URLs therefore use `<baseSha>...<targetSha>`,
+branch and tag actions use immutable tree URLs, and file URLs are emitted only
+after `git ls-tree` confirms that the exact literal path is a blob at the
+selected SHA. Project and file path segments are decoded once, validated, and
+encoded again. The completed URL must still have the approved origin before it
+is passed to `vscode.env.openExternal`.
+
+RefHaven does not perform an HTTP request, follow redirects, read browser
+credentials, or persist/log the resulting URL. Browser and server behavior
+after the explicit handoff is outside the extension boundary.
+
 ## Required semantic fixtures
 
 Integration tests create real temporary repositories for linear-ahead, linear-behind, divergent, rename, add/delete, binary, deleted ref, remote-tracking ref, unrelated roots, shallow clone, detached HEAD, worktree, and multi-root scenarios. Unit tests cover both count direction and all NUL parser edge cases, including path spaces, tabs, newlines, Unicode, malformed/truncated output, and unknown statuses.

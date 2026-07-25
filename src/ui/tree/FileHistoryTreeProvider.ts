@@ -30,6 +30,7 @@ export class FileHistoryTreeProvider
   private abortController: AbortController | undefined;
   private disposed = false;
   private entries: Promise<FileHistoryEntry[]> | undefined;
+  private filter = "";
   private loader: FileHistoryLoader | undefined;
   private target: FileHistoryTarget | undefined;
 
@@ -37,6 +38,17 @@ export class FileHistoryTreeProvider
 
   public setLoader(loader: FileHistoryLoader): void {
     this.loader = loader;
+  }
+
+  public getFilter(): string {
+    return this.filter;
+  }
+
+  public setFilter(filter: string): void {
+    const normalized = filter.trim().toLocaleLowerCase();
+    if (normalized === this.filter) return;
+    this.filter = normalized;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
   public setTarget(target: FileHistoryTarget | undefined): void {
@@ -76,14 +88,22 @@ export class FileHistoryTreeProvider
     item.description = `${commit.authorName} · ${formatRelativeTime(commit.authorDate)}`;
     item.iconPath = new vscode.ThemeIcon("git-commit");
     item.id = `fileHistory:${node.target.repositoryRoot}:${commit.sha}:${node.entry.change.newPath}`;
+    const pathLine =
+      node.entry.change.oldPath && node.entry.change.oldPath !== node.entry.change.newPath
+        ? `$(file-symlink-file) ${escapeMarkdown(node.entry.change.oldPath)} → ${escapeMarkdown(node.entry.change.newPath)}`
+        : `$(file) ${escapeMarkdown(node.entry.change.newPath)}`;
     const tooltip = new vscode.MarkdownString(
       [
         `**${escapeMarkdown(commit.subject || "(no commit message)")}**`,
         "",
         `$(git-commit) \`${shortSha(commit.sha)}\``,
+        node.entry.parentSha
+          ? `$(git-merge) parent \`${shortSha(node.entry.parentSha)}\``
+          : "$(git-merge) root commit",
         `$(account) ${escapeMarkdown(commit.authorName)}`,
         `$(history) ${new Date(commit.authorDate).toLocaleString()}`,
-        `$(file) ${escapeMarkdown(node.entry.change.newPath)}`,
+        pathLine,
+        "$(history) Rename tracking is enabled with local `git log --follow`.",
       ].join("\n\n"),
     );
     tooltip.supportThemeIcons = true;
@@ -92,6 +112,30 @@ export class FileHistoryTreeProvider
   }
 
   public async getChildren(): Promise<FileHistoryNode[]> {
+    const entries = await this.loadEntries();
+    const target = this.target;
+    if (!target) return [];
+    return entries
+      .filter((entry) => fileHistoryMatchesFilter(entry, this.filter))
+      .map((entry) => ({ entry, kind: "fileHistoryCommit", target }));
+  }
+
+  public async getAdjacent(
+    node: FileHistoryNode,
+    direction: "next" | "previous",
+  ): Promise<FileHistoryNode | undefined> {
+    const visible = (await this.getChildren()).filter(
+      ({ target }) =>
+        target.repositoryRoot === node.target.repositoryRoot &&
+        target.filePath === node.target.filePath,
+    );
+    const index = visible.findIndex(({ entry }) => entry.commit.sha === node.entry.commit.sha);
+    if (index < 0) return undefined;
+    const adjacent = visible[index + (direction === "next" ? 1 : -1)];
+    return adjacent;
+  }
+
+  private async loadEntries(): Promise<FileHistoryEntry[]> {
     if (this.disposed || !this.target || !this.loader) return [];
     const target = this.target;
     if (!this.entries) {
@@ -102,8 +146,7 @@ export class FileHistoryTreeProvider
         this.abortController.signal,
       );
     }
-    const entries = await this.entries;
-    return entries.map((entry) => ({ entry, kind: "fileHistoryCommit", target }));
+    return this.entries;
   }
 
   private reset(): void {
@@ -112,4 +155,15 @@ export class FileHistoryTreeProvider
     this.entries = undefined;
     if (!this.disposed) this.onDidChangeTreeDataEmitter.fire(undefined);
   }
+}
+
+function fileHistoryMatchesFilter(entry: FileHistoryEntry, filter: string): boolean {
+  if (filter.length === 0) return true;
+  return [
+    entry.commit.subject,
+    entry.commit.authorName,
+    entry.commit.sha,
+    entry.change.newPath,
+    entry.change.oldPath ?? "",
+  ].some((value) => value.toLocaleLowerCase().includes(filter));
 }

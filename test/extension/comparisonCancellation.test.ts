@@ -116,6 +116,55 @@ suite("comparison tree lifecycle", () => {
     }
   });
 
+  test("renders review progress and filters comparison files without affecting other nodes", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    provider.setComparisons([comparison]);
+    provider.setFilesLayout("list");
+    provider.setComparisonLoader(() =>
+      Promise.resolve(
+        createResult(comparison, {
+          files: [
+            { additions: 1, deletions: 0, newPath: "reviewed.ts", status: "modified" },
+            { additions: 2, deletions: 1, newPath: "unreviewed.ts", status: "added" },
+          ],
+        }),
+      ),
+    );
+    provider.setReviewStateProvider((result) => ({
+      reviewedCount: 1,
+      reviewedPaths: new Set(["reviewed.ts"]),
+      revisionKey: "a".repeat(64),
+      totalCount: result.files.length,
+    }));
+
+    try {
+      const root = provider.getComparisonNode(comparison.id);
+      assert.ok(root);
+      const sections = await provider.getChildren(root);
+      const filesSection = sections.find(
+        (node) => node.kind === "section" && node.section === "files",
+      );
+      assert.ok(filesSection);
+      assert.match(String(provider.getTreeItem(filesSection).description ?? ""), /1\/2 reviewed/u);
+
+      const files = await provider.getChildren(filesSection);
+      assert.deepEqual(
+        files.map((node) => provider.getTreeItem(node).contextValue),
+        ["refhaven.file.modified.reviewed", "refhaven.file.added.unreviewed"],
+      );
+
+      provider.setFileFilter("unreviewed");
+      const unreviewed = await provider.getChildren(filesSection);
+      assert.deepEqual(
+        unreviewed.map((node) => provider.getTreeItem(node).label),
+        ["unreviewed.ts"],
+      );
+    } finally {
+      provider.dispose();
+    }
+  });
+
   test("aborts in-flight calculation when its comparison is removed", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();

@@ -52,6 +52,23 @@ partially staged, deleted, renamed, Unicode, whitespace, bracket/pathspec,
 long-path, linked-worktree, clean, untracked, metadata, content-filter, and
 hook scenarios. Tests prove unrelated index/worktree preservation, standard
 stash-list parsing, and `git stash apply --index` compatibility.
+Approved-GitLab coverage includes exact-origin normalization, scheme/port/path
+rejection, credential stripping, HTTP-versus-SSH matching, unsafe encoded
+project paths, immutable commit/tree/compare/file URLs, line ranges,
+issue/MR validation, final-origin enforcement, bounded local remote reading,
+manifest allowlist defaults, command registration, and hover command
+allowlists. No test or activation path opens a browser or contacts a host.
+Comparison-review coverage includes order-independent revision fingerprints,
+endpoint/file-state invalidation, conservative Working Tree invalidation,
+strict bounded record validation, stale-path rejection, closed-comparison
+cleanup, per-record byte ceilings, filter/sort behavior, manifest/command
+registration, and native tree progress/review decorations. Review tests do not
+read file content or mutate a repository.
+Native-view-enrichment coverage includes delimiter-safe branch tracking
+metadata, gone-upstream handling, porcelain-v2 worktree state including rename
+continuations, real branch tip/history/status reads, exact command/manifest
+registration, and local-only lazy loading. Filters are in-memory presentation
+state and introduce no persistence or network path.
 
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -132,11 +149,15 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
   contributed with file-only context clauses;
 - Source Control resource objects resolve through the same canonical file
   boundary, and the RefHaven submenu contributes Stash This File;
+- GitLab commands register without enumerating remotes or opening a browser;
+  remote URLs are read only in an explicit command path;
 - `refhaven.comparisons` is contributed to Source Control;
 - New Comparison works by keyboard through repository/base/target/mode picks;
 - Compare Current Branch With uses current branch as target and defaults to branchChanges;
 - restored nodes appear immediately as not computed;
 - expanding/refreshing computes and updates the correct node;
+- reviewed progress and file decorations update without recalculating Git;
+- review filtering affects only saved-comparison file nodes;
 - file click invokes `vscode.diff` with immutable revision or empty URIs;
 - close, edit, swap, mode change, pin, reorder, refresh-all, and bulk-close commands update state/store;
 - missing refs remain visible with recovery actions;
@@ -161,6 +182,18 @@ Before delivering `refhaven-x.y.z.vsix`:
 11. From Source Control, stash a partially staged file while unrelated staged
     and unstaged files are present; verify only the selected path becomes
     clean, then inspect and apply the stash with `--index`.
-12. Capture the required screenshot with at least three persistent comparisons.
+12. With no approved GitLab origin, invoke an Open on GitLab action and verify
+    that RefHaven offers Settings without opening a browser. Add the exact
+    internal origin, verify project/commit/comparison/file-line/issue/MR links,
+    then configure a non-matching port and verify fail-closed behavior.
+13. Capture the required screenshot with at least three persistent comparisons.
+14. Mark several comparison files reviewed, reload VS Code, and verify progress
+    survives while the refs are unchanged. Move the target ref and verify the
+    old review is ignored; refresh a Working Tree comparison and verify its
+    review resets. Exercise Quick Open, filters, all three sorts, and
+    Next/Previous Unreviewed using only the keyboard.
+15. Filter Stashes and File History, expand a stash and local branch, navigate
+    commit parents and adjacent file revisions, and confirm Worktrees reports
+    clean/dirty state without changing repository state or contacting a remote.
 
 The release report records extension/version, commit SHA, VS Code and Git versions, operating systems, CI links, manual outcomes, known limitations, benchmark hardware/dataset, activation time, large-comparison responsiveness, and the final VSIX checksum.

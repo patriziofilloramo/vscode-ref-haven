@@ -31,8 +31,10 @@ src/
     blame.ts
     commitDetails.ts
     comparison.ts
+    comparisonReview.ts
     comparisonResult.ts
     fileDiffScope.ts
+    gitLab.ts
     stash.ts
     validation.ts
   application/             // orchestration; owns runtime state
@@ -40,9 +42,11 @@ src/
     CommitDetailsController.ts
     ComparisonController.ts
     ComparisonEngine.ts
+    ComparisonReviewStore.ts
     ComparisonStore.ts
     FileAnnotationsController.ts
     FileHistoryController.ts
+    GitLabController.ts
     Logger.ts
     RepositoryNavigationController.ts
     RepositoryWatcher.ts
@@ -145,6 +149,22 @@ If `vscode.git` is unavailable, discovery probes each workspace folder with `git
 
 Reads and atomically writes `refhaven.comparisons.v1` in `workspaceState`. It strictly validates the complete schema, rejects malformed repository paths and branch refs, removes duplicate logical identities and IDs, and implements create, update, delete, and pin operations. It sorts pinned comparisons first while preserving explicit order within pinned and unpinned groups.
 
+### ComparisonReviewStore
+
+Stores review markers separately under `refhaven.comparisonReviews.v1`; the
+saved comparison schema remains unchanged. Each version-one record contains
+one comparison ID, a SHA-256 revision key, sorted repository-relative reviewed
+paths, and an update timestamp. Records are strictly validated, deduplicated,
+limited to 64 comparisons, 10,000 paths and 256 KiB each, capped at 4 MiB
+overall, and pruned for comparisons that no longer exist.
+
+The revision key hashes immutable diff endpoints plus canonical changed-file
+identity, status, and statistics, so ref movement or a changed result starts a
+fresh review. A Working Tree result additionally includes its calculation
+timestamp and therefore resets on every recalculation; RefHaven never claims
+that mutable content remains reviewed without recomputing it. No content or
+patch data enters the store.
+
 ### ComparisonEngine
 
 Accepts a comparison specification and cancellation token, resolves both refs, computes counts and commit pages, selects the diff endpoints by mode, and combines name-status and numstat results. Working-tree comparisons keep the resolved base immutable while using the live file as the right diff side. It returns a typed result and does not call VS Code UI APIs.
@@ -154,13 +174,21 @@ Accepts a comparison specification and cancellation token, resolves both refs, c
 Commit search dispatches typed, bounded local Git queries by message, author,
 SHA, or changed content. Selecting a result loads full NUL-delimited metadata
 and changed files into a native tree; neither search results nor commit details
-are persisted.
+are persisted. Metadata rows carry only their explicit clipboard value and
+repository/SHA context. Parent rows can load the parent details or request a
+single parent-to-commit file diff through the shared native diff pipeline.
 
 ### ComparisonController
 
 Coordinates store, engine, commands, and view updates. Creating a comparison persists it before calculation. Swapping persists the new symbolic configuration, cancels prior work, increments its generation, and starts a new calculation when the node is expanded.
 
 Only a result whose captured generation equals the state's current generation may be applied. Closing a comparison cancels its work before removing it. Errors update runtime state but do not delete persisted configuration.
+
+Review commands re-resolve the current cached/computed result before changing
+state. The controller owns filter/sort preferences, quick open, review
+navigation anchors, and native diff opening. Status/change-size sorts
+automatically select the flat file layout; selecting tree layout restores path
+sorting so the requested order remains truthful.
 
 ### FileActionsController
 
@@ -187,6 +215,12 @@ Comparison results are cached by active comparison ID and protected by a generat
 
 The `TreeDataProvider` maps controller state to repository, comparison, commit-section, commit, file-section, file, error, and load-more nodes. It performs no Git operations. Repository grouping appears only for multiple repositories. Section labels preserve direction and always expose the file comparison mode.
 
+For saved comparison files it receives a synchronous review-summary callback,
+decorates reviewed files, adds progress to comparison/file-section
+descriptions and tooltips, and applies the selected review filter/sort before
+building shared change nodes. Commit, stash, and details file nodes remain
+review-neutral.
+
 The controller creates restored nodes synchronously in `notComputed`. Expansion or visibility requests schedule computation through the controller. `onDidChangeTreeData` updates only affected nodes where possible.
 
 The provider implements `getParent` for comparison roots, their sections, and
@@ -210,6 +244,9 @@ The stash view lists `git stash list` entries (parsed from a delimiter-safe
 `--format`) per repository and expands each stash into its tracked file
 changes (first parent → stash commit). File nodes expose native revision,
 HEAD/working-tree comparison, history, and recent-stash-search actions.
+The provider filters cached metadata in memory and records changed-file
+statistics only after explicit expansion; refresh aborts and clears both
+in-flight and resolved per-stash state.
 
 `StashController` owns the single allowed mutation, **Stash This File...**.
 The Git adapter validates the literal repository-relative path, detects a
@@ -223,11 +260,28 @@ non-cancellable once this bounded mutation begins.
 
 ### Repository navigation
 
-The Branches and Worktrees providers expose only local metadata from
-`for-each-ref` and NUL-delimited `git worktree list --porcelain -z`. Actions
-copy identifiers, create a saved comparison, or ask VS Code to open an already
-enumerated worktree. Command inputs are re-enumerated before use. Branch and
-worktree mutation is intentionally absent.
+The Branches and Worktrees providers expose only local metadata from one
+bounded `for-each-ref`, NUL-delimited `git worktree list --porcelain -z`, and
+porcelain-v2 status reads. Local branches lazily load at most 20 recent commits
+when expanded. Actions copy identifiers, create a saved comparison, or ask VS
+Code to open an already enumerated worktree. Command inputs are re-enumerated
+before use. Branch and worktree mutation is intentionally absent.
+
+### GitLabController and approved-link domain
+
+`domain/gitLab.ts` is a VS Code-free trust boundary for exact approved-origin
+parsing, HTTP/SSH remote matching, project-path normalization, immutable target
+validation, and final URL construction. HTTP remotes match scheme, hostname,
+and effective port exactly. SSH/scp-style remotes can map only to configured
+origins with the same normalized hostname; ambiguous mappings remain a user
+choice.
+
+`GitLabController` revalidates the workspace repository, reads at most 32
+remote names and eight URLs per remote through local transport-blocked Git,
+resolves every ref target to a local SHA, and calls `vscode.env.openExternal`
+only from an explicit command. It has no HTTP client, redirect handler, token
+storage, background refresh, or cache. Quick picks display approved origin,
+project path, and remote name, never the configured remote URL or credentials.
 
 ### BlameController
 
@@ -276,7 +330,10 @@ Disposables, cancellation sources, process handles, event subscriptions, and con
 - `git show` content is neither logged nor preloaded.
 - Git concurrency is bounded to four processes globally and two per repository; superseded work is cancelled.
 - Logs redact repository identity and exclude credentials, environment, tokens, remote URLs, and file data.
-- There is no telemetry, networking API, remote operation, or automatic fetch; Git transports and partial-clone lazy fetch are blocked at process level.
+- There is no telemetry, HTTP/API client, Git remote operation, or automatic
+  fetch; Git transports and partial-clone lazy fetch are blocked at process
+  level. Explicit GitLab commands may hand one fully validated approved-origin
+  URL to the external browser.
 
 ## Decisions requiring an ADR
 

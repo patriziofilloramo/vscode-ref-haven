@@ -6,6 +6,7 @@ import * as vscode from "vscode";
 import type { Logger } from "./Logger";
 import { calculateComparison } from "./ComparisonEngine";
 import type { ComparisonStore } from "./ComparisonStore";
+import type { ComparisonReviewStore } from "./ComparisonReviewStore";
 import {
   comparisonLabel,
   hasSameComparisonIdentity,
@@ -16,6 +17,13 @@ import {
   type RepositoryIdentity,
   type SavedComparisonV1,
 } from "../domain/comparison";
+import {
+  filterAndSortComparisonFiles,
+  isComparisonFileFilter,
+  isComparisonFileSort,
+  type ComparisonFileFilter,
+  type ComparisonFileSort,
+} from "../domain/comparisonReview";
 import {
   shortSha,
   sumDiffTotals,
@@ -41,6 +49,7 @@ import {
   type ComparisonTreeProvider,
   type FilesLayout,
 } from "../ui/tree/ComparisonTreeProvider";
+import type { FileNode } from "../ui/tree/changeNodes";
 import {
   BinaryRevisionError,
   type GitRevisionContentProvider,
@@ -48,8 +57,12 @@ import {
 
 const FILES_LAYOUT_STORAGE_KEY = "refhaven.view.filesLayout";
 const FILES_LAYOUT_CONTEXT_KEY = "refhaven.filesLayout";
+const FILE_FILTER_STORAGE_KEY = "refhaven.view.comparisonFileFilter";
+const FILE_SORT_STORAGE_KEY = "refhaven.view.comparisonFileSort";
 
 export class ComparisonController {
+  private readonly reviewNavigationAnchors = new Map<string, string>();
+
   public constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly store: ComparisonStore,
@@ -57,12 +70,27 @@ export class ComparisonController {
     private readonly treeView: vscode.TreeView<ComparisonTreeNode>,
     private readonly logger: Logger,
     private readonly revisionProvider: GitRevisionContentProvider,
+    private readonly reviewStore: ComparisonReviewStore,
   ) {}
 
   public initialize(): void {
     const layout = this.context.workspaceState.get<unknown>(FILES_LAYOUT_STORAGE_KEY, "tree");
+    const filter = this.context.workspaceState.get<unknown>(FILE_FILTER_STORAGE_KEY, "all");
+    const sort = this.context.workspaceState.get<unknown>(FILE_SORT_STORAGE_KEY, "path");
     this.applyFilesLayout(layout === "list" ? "list" : "tree");
-    this.treeProvider.setComparisons(this.store.getAll());
+    this.treeProvider.setFileFilter(isComparisonFileFilter(filter) ? filter : "all");
+    this.treeProvider.setFileSort(isComparisonFileSort(sort) ? sort : "path");
+    this.treeProvider.setReviewStateProvider((result) => this.reviewStore.getSummary(result));
+    const comparisons = this.store.getAll();
+    this.treeProvider.setComparisons(comparisons);
+    void this.reviewStore
+      .prune(new Set(comparisons.map(({ id }) => id)))
+      .catch((error: unknown) => {
+        this.logger.error("Comparison review cleanup failed", {
+          message: error instanceof Error ? error.message : String(error),
+          operation: "pruneComparisonReviews",
+        });
+      });
   }
 
   public async newComparison(): Promise<void> {
@@ -147,6 +175,8 @@ export class ComparisonController {
       return;
     }
     const comparisons = await this.store.replace(comparison.id, () => swapped);
+    await this.reviewStore.removeComparison(comparison.id);
+    this.reviewNavigationAnchors.delete(comparison.id);
     this.treeProvider.invalidateResult(comparison.id);
     this.treeProvider.setComparisons(comparisons);
     this.logger.info("Swapped comparison direction", { operation: "swapComparison" });
@@ -201,6 +231,8 @@ export class ComparisonController {
       return;
     }
     const comparisons = await this.store.replace(comparison.id, () => updated);
+    await this.reviewStore.removeComparison(comparison.id);
+    this.reviewNavigationAnchors.delete(comparison.id);
     this.treeProvider.invalidateResult(comparison.id);
     this.treeProvider.setComparisons(comparisons);
     this.logger.info("Changed comparison mode", {
@@ -221,6 +253,8 @@ export class ComparisonController {
 
   public async closeComparison(comparison: SavedComparisonV1): Promise<void> {
     const comparisons = await this.store.remove(comparison.id);
+    await this.reviewStore.removeComparison(comparison.id);
+    this.reviewNavigationAnchors.delete(comparison.id);
     this.treeProvider.setComparisons(comparisons);
     this.logger.info("Closed comparison", { operation: "closeComparison" });
   }
@@ -374,8 +408,178 @@ export class ComparisonController {
   }
 
   public async setFilesLayout(layout: FilesLayout): Promise<void> {
+    if (layout === "tree" && this.treeProvider.getFileSort() !== "path") {
+      this.treeProvider.setFileSort("path");
+      await this.context.workspaceState.update(FILE_SORT_STORAGE_KEY, "path");
+    }
     this.applyFilesLayout(layout);
     await this.context.workspaceState.update(FILES_LAYOUT_STORAGE_KEY, layout);
+  }
+
+  public async changeComparisonFileFilter(): Promise<void> {
+    const current = this.treeProvider.getFileFilter();
+    const options: readonly (vscode.QuickPickItem & {
+      readonly value: ComparisonFileFilter;
+    })[] = [
+      {
+        ...(current === "all" ? { description: "current" } : {}),
+        label: "$(list-unordered) All changed files",
+        value: "all",
+      },
+      {
+        ...(current === "unreviewed" ? { description: "current" } : {}),
+        label: "$(circle-large-outline) Unreviewed only",
+        value: "unreviewed",
+      },
+      {
+        ...(current === "reviewed" ? { description: "current" } : {}),
+        label: "$(pass-filled) Reviewed only",
+        value: "reviewed",
+      },
+    ];
+    const selected = await vscode.window.showQuickPick(options, {
+      placeHolder: "Choose which comparison files are visible",
+      title: "RefHaven: Comparison File Filter",
+    });
+    if (!selected || selected.value === current) return;
+    this.treeProvider.setFileFilter(selected.value);
+    await this.context.workspaceState.update(FILE_FILTER_STORAGE_KEY, selected.value);
+  }
+
+  public async changeComparisonFileSort(): Promise<void> {
+    const current = this.treeProvider.getFileSort();
+    const options: readonly (vscode.QuickPickItem & {
+      readonly value: ComparisonFileSort;
+    })[] = [
+      {
+        ...(current === "path" ? { description: "current" } : {}),
+        label: "$(symbol-file) Path",
+        value: "path",
+      },
+      {
+        ...(current === "status" ? { description: "current" } : {}),
+        label: "$(diff) Status, then path",
+        value: "status",
+      },
+      {
+        ...(current === "changes" ? { description: "current" } : {}),
+        label: "$(graph-line) Largest change first",
+        value: "changes",
+      },
+    ];
+    const selected = await vscode.window.showQuickPick(options, {
+      placeHolder: "Choose how comparison files are ordered",
+      title: "RefHaven: Comparison File Sort",
+    });
+    if (!selected || selected.value === current) return;
+    if (selected.value !== "path" && this.treeProvider.getFilesLayout() !== "list") {
+      this.applyFilesLayout("list");
+      await this.context.workspaceState.update(FILES_LAYOUT_STORAGE_KEY, "list");
+    }
+    this.treeProvider.setFileSort(selected.value);
+    await this.context.workspaceState.update(FILE_SORT_STORAGE_KEY, selected.value);
+  }
+
+  public async markFileReviewed(node: FileNode, reviewed: boolean): Promise<void> {
+    if (!node.review) throw new Error("Select a file from a saved comparison first.");
+    const result = await this.treeProvider.loadComparisonResult(node.review.comparisonId);
+    await this.reviewStore.setReviewed(result, node.file.newPath, reviewed);
+    this.reviewNavigationAnchors.set(result.comparison.id, node.file.newPath);
+    this.treeProvider.refreshReviewState(result.comparison.id);
+  }
+
+  public async setAllComparisonFilesReviewed(
+    comparison: SavedComparisonV1,
+    reviewed: boolean,
+  ): Promise<void> {
+    const result = await this.requireReviewResult(comparison);
+    await this.reviewStore.setAllReviewed(result, reviewed);
+    this.reviewNavigationAnchors.delete(comparison.id);
+    this.treeProvider.refreshReviewState(comparison.id);
+    void vscode.window.showInformationMessage(
+      reviewed ? "All comparison files marked reviewed." : "Comparison review reset.",
+    );
+  }
+
+  public async openAdjacentUnreviewedFile(
+    direction: "next" | "previous",
+    candidate?: FileNode | SavedComparisonV1,
+  ): Promise<void> {
+    const candidateComparison = candidate && "schemaVersion" in candidate ? candidate : undefined;
+    const candidateFile = candidate && "kind" in candidate ? candidate : undefined;
+    const comparison = candidateComparison
+      ? this.requireStoredComparison(candidateComparison)
+      : await this.pickReviewComparison(candidateFile?.review?.comparisonId);
+    if (!comparison) return;
+    const result = await this.treeProvider.loadComparisonResult(comparison.id);
+    const review = this.reviewStore.getSummary(result);
+    const files = filterAndSortComparisonFiles(
+      result.files,
+      review.reviewedPaths,
+      "all",
+      this.treeProvider.getFileSort(),
+    );
+    if (files.length === 0 || review.reviewedCount === review.totalCount) {
+      void vscode.window.showInformationMessage("All files in this comparison are reviewed.");
+      return;
+    }
+    const anchor = candidateFile?.file.newPath ?? this.reviewNavigationAnchors.get(comparison.id);
+    const anchorIndex = anchor ? files.findIndex(({ newPath }) => newPath === anchor) : -1;
+    const step = direction === "next" ? 1 : -1;
+    let index = anchorIndex < 0 ? (direction === "next" ? -1 : 0) : anchorIndex;
+    let selected: FileChange | undefined;
+    let checked = 0;
+    while (checked < files.length) {
+      index = (index + step + files.length) % files.length;
+      const file = files[index];
+      if (file && !review.reviewedPaths.has(file.newPath)) {
+        selected = file;
+        break;
+      }
+      checked += 1;
+    }
+    if (!selected) return;
+    this.reviewNavigationAnchors.set(comparison.id, selected.newPath);
+    await this.openFileDiff(comparisonScope(result), selected);
+  }
+
+  public async quickOpenComparisonFile(comparison?: SavedComparisonV1): Promise<void> {
+    const selectedComparison = comparison
+      ? this.requireStoredComparison(comparison)
+      : await this.pickReviewComparison();
+    if (!selectedComparison) return;
+    const result = await this.treeProvider.loadComparisonResult(selectedComparison.id);
+    const review = this.reviewStore.getSummary(result);
+    const files = filterAndSortComparisonFiles(
+      result.files,
+      review.reviewedPaths,
+      this.treeProvider.getFileFilter(),
+      this.treeProvider.getFileSort(),
+    );
+    if (files.length === 0) {
+      void vscode.window.showInformationMessage("No comparison files match the current filter.");
+      return;
+    }
+    const selected = await vscode.window.showQuickPick(
+      files.map((file) => ({
+        description: review.reviewedPaths.has(file.newPath) ? "reviewed" : "unreviewed",
+        detail:
+          file.additions === undefined && file.deletions === undefined
+            ? `${file.status} · binary`
+            : `${file.status} · ${formatDiffStats(file.additions ?? 0, file.deletions ?? 0)}`,
+        file,
+        label: file.newPath,
+      })),
+      {
+        matchOnDescription: true,
+        matchOnDetail: true,
+        placeHolder: "Type to find a changed file",
+        title: `RefHaven: ${comparisonLabel(selectedComparison)}`,
+      },
+    );
+    if (!selected) return;
+    this.reviewNavigationAnchors.set(selectedComparison.id, selected.file.newPath);
+    await this.openFileDiff(comparisonScope(result), selected.file);
   }
 
   public calculateComparison(
@@ -424,6 +628,43 @@ export class ComparisonController {
   private applyFilesLayout(layout: FilesLayout): void {
     this.treeProvider.setFilesLayout(layout);
     void vscode.commands.executeCommand("setContext", FILES_LAYOUT_CONTEXT_KEY, layout);
+  }
+
+  private async pickReviewComparison(preferredId?: string): Promise<SavedComparisonV1 | undefined> {
+    const comparisons = this.store.getAll();
+    const preferred = preferredId
+      ? comparisons.find((comparison) => comparison.id === preferredId)
+      : undefined;
+    if (preferred) return preferred;
+    if (comparisons.length === 0) {
+      void vscode.window.showInformationMessage("Create a branch comparison first.");
+      return undefined;
+    }
+    if (comparisons.length === 1) return comparisons[0];
+    const selected = await vscode.window.showQuickPick(
+      comparisons.map((comparison) => ({
+        comparison,
+        description: comparison.repository.label,
+        label: comparisonLabel(comparison),
+      })),
+      {
+        matchOnDescription: true,
+        placeHolder: "Select a saved comparison",
+        title: "RefHaven: Comparison Review",
+      },
+    );
+    return selected?.comparison;
+  }
+
+  private requireStoredComparison(comparison: SavedComparisonV1): SavedComparisonV1 {
+    const current = this.store.getAll().find(({ id }) => id === comparison.id);
+    if (!current) throw new Error("The selected comparison is no longer available.");
+    return current;
+  }
+
+  private async requireReviewResult(comparison: SavedComparisonV1): Promise<ComparisonResult> {
+    const current = this.requireStoredComparison(comparison);
+    return this.treeProvider.loadComparisonResult(current.id);
   }
 
   private async assertKnownRepositoryRoot(repositoryRootPath: string): Promise<void> {
@@ -544,4 +785,13 @@ export class ComparisonController {
       this.treeProvider.clearComparisonExpansionRequest(comparison.id);
     }
   }
+}
+
+function comparisonScope(result: ComparisonResult): FileDiffScope {
+  return {
+    fromSha: result.fromSha,
+    label: comparisonLabel(result.comparison),
+    repositoryRootPath: result.comparison.repository.rootPath,
+    toSha: result.toSha,
+  };
 }

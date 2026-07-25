@@ -96,6 +96,18 @@ export class FileActionsController {
           label: "$(search) Search Commits...",
           run: (): Thenable<unknown> => vscode.commands.executeCommand(COMMAND_IDS.searchCommits),
         },
+        {
+          detail: "Open this file at the local HEAD revision on an approved origin",
+          label: "$(git-pull-request) Open File on GitLab",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.openGitLabFile, target.uri),
+        },
+        {
+          detail: "Open #issue or !merge-request on the approved project",
+          label: "$(link-external) Open GitLab Reference...",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.openGitLabReference, target.uri),
+        },
       ],
       {
         matchOnDescription: true,

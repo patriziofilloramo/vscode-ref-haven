@@ -31,10 +31,10 @@ This clarification changes the planned product boundary:
 - no feature may require a RefHaven backend or intermediary service;
 - remote-aware features must fail closed when the remote host is not approved.
 
-The currently released implementation remains local-only and read-only until
-the relevant batches below are completed. `SECURITY.md`, `PRODUCT.md`, and
-`ARCHITECTURE.md` must be updated together with the first mutation or networked
-feature so that the documented guarantees always match the shipped code.
+The current implementation includes one hardened local mutation and explicit
+approved-GitLab browser links. `SECURITY.md`, `PRODUCT.md`, and
+`ARCHITECTURE.md` are updated with each boundary change so the documented
+guarantees match the shipped code.
 
 ## Delivered
 
@@ -174,31 +174,30 @@ never depends on network access.
 Apply, pop, drop, multi-file stash, include-untracked, and keep-index variants
 remain deliberately deferred.
 
-## Next priorities
+## Completed — Batch 9: Approved GitLab links
 
-### Batch 9 — Approved GitLab integration
+- Added an empty-by-default allowlist of exact HTTP(S) origins, including
+  effective port validation and rejection of paths, credentials, query, and
+  fragment components.
+- Reads bounded remote configuration through local transport-blocked Git.
+  HTTP remotes require an exact origin match; SSH/scp remotes map only by
+  hostname and prompt when more than one approved browser origin is possible.
+- Added explicit Open on GitLab actions for project, immutable commit,
+  branch/tag/HEAD revision, comparison, file/selected lines, issue, and merge
+  request. Rich and status-bar blame hovers expose the line action without
+  performing remote discovery until clicked.
+- Resolves every ref locally to an immutable SHA, normalizes and re-encodes
+  project/file paths, validates the final origin again, strips authenticated
+  remote user information by construction, and logs no URL or path.
+- Uses only `vscode.env.openExternal`; RefHaven has no HTTP client, API token,
+  redirect handler, automatic discovery, background request, proxy, backend,
+  analytics endpoint, or third-party provider.
 
-Integrate directly with repository infrastructure already authorised to hold
-the project data.
+Direct GitLab API support for merge-request/pipeline status remains deferred.
+It should be added only if the URL-only milestone proves insufficient and a
+specific approved use case justifies SecretStorage and response-data handling.
 
-- Introduce an explicit approved-host policy, scoped by exact hostname and
-  port. No host is contacted merely because a repository contains a remote.
-- Start with URL-only Open on GitLab actions for commit, branch, tag, file,
-  line, comparison, issue reference, and merge request where the URL can be
-  derived locally.
-- Reject non-HTTP(S) browser targets, unexpected host changes, unsafe URL
-  components, and redirects to unapproved hosts.
-- Add optional direct GitLab API support for merge request and pipeline status
-  only after the URL-only milestone is stable.
-- Store credentials only in VS Code `SecretStorage`; never persist or log
-  tokens, authenticated URLs, response bodies, repository paths, or file
-  content.
-- Make all network-backed UI additive and failure-tolerant: comparisons,
-  blame, history, and diffs must remain fully usable when GitLab is unavailable.
-- Add no RefHaven proxy, hosted backend, analytics endpoint, or third-party
-  enrichment provider.
-
-### Batch 10 — Comparison review experience
+## Completed — Batch 10: Comparison review experience
 
 - Track reviewed/unreviewed files per saved comparison without modifying the
   repository.
@@ -206,6 +205,17 @@ the project data.
 - Add file filtering, sorting, quick open, and keyboard-first navigation.
 - Keep review state workspace-local, versioned, bounded, and invalidated
   predictably when comparison endpoints change.
+
+Delivered in version 0.6.0 with a separate `comparisonReviews.v1` store,
+SHA-256 result fingerprints, 64-record/10,000-path/256-KiB per-record limits,
+a 4 MiB total ceiling, automatic orphan cleanup, and conservative Working Tree
+invalidation on every recalculation.
+The native tree shows reviewed progress and file state; context/title/palette
+commands provide mark/reset/all-reviewed, Quick Open, Next/Previous
+Unreviewed, filter, and sort. Status/change-size sorting switches to a flat
+list, while tree layout restores truthful path ordering.
+
+## Completed: Batch 11 native view enrichment
 
 ### Batch 11 — Native view enrichment
 
@@ -220,6 +230,18 @@ the project data.
 
 Prefer enriching the existing native views over adding more permanent Source
 Control sections.
+
+Delivered in version 0.7.0 without new dependencies or persistent state.
+Stash statistics and branch history load only when expanded; filters reuse
+already loaded data. All metadata comes from bounded transport-blocked local
+Git commands, and the Branches and Worktrees surfaces remain read-only.
+
+## Next priorities
+
+The planned low/medium-complexity native UI roadmap is complete. Select the
+next batch from measured user feedback rather than adding another permanent
+Source Control view. Prefer refinements to the six existing views and keep the
+items below deferred unless a specific workflow justifies their cost.
 
 ## Deliberately deferred
 

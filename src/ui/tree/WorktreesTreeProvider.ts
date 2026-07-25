@@ -6,6 +6,8 @@ import type { RepositoryIdentity } from "../../domain/comparison";
 import { pathIdentityKey } from "../../domain/pathValidation";
 import type { WorktreeInfo } from "../../domain/worktree";
 import { shortSha } from "../../domain/comparisonResult";
+import type { WorktreeState } from "../../domain/repositoryNavigation";
+import { pluralize } from "../format";
 
 export const WORKTREES_VIEW_ID = "refhaven.worktrees";
 
@@ -18,6 +20,7 @@ export interface WorktreeNode {
   readonly current: boolean;
   readonly kind: "worktree";
   readonly repository: RepositoryIdentity;
+  readonly state: WorktreeState | undefined;
   readonly worktree: WorktreeInfo;
 }
 
@@ -27,13 +30,18 @@ export interface WorktreeMessageNode {
 }
 
 export type WorktreesTreeNode = WorktreeMessageNode | WorktreeNode | WorktreeRepositoryNode;
-type WorktreeLoader = (repositoryRoot: string, signal: AbortSignal) => Promise<WorktreeInfo[]>;
+export interface WorktreeSnapshot {
+  readonly state: WorktreeState | undefined;
+  readonly worktree: WorktreeInfo;
+}
+
+type WorktreeLoader = (repositoryRoot: string, signal: AbortSignal) => Promise<WorktreeSnapshot[]>;
 
 export class WorktreesTreeProvider
   implements vscode.TreeDataProvider<WorktreesTreeNode>, vscode.Disposable
 {
   private readonly abortControllers = new Map<string, AbortController>();
-  private readonly cache = new Map<string, Promise<WorktreeInfo[]>>();
+  private readonly cache = new Map<string, Promise<WorktreeSnapshot[]>>();
   private disposed = false;
   private loader: WorktreeLoader | undefined;
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
@@ -98,6 +106,7 @@ export class WorktreesTreeProvider
         ? [`locked${worktree.lockedReason ? `: ${worktree.lockedReason}` : ""}`]
         : []),
       ...(worktree.prunableReason ? [`prunable: ${worktree.prunableReason}`] : []),
+      worktreeStateDescription(element.state),
     ].join("\n");
     item.command = {
       arguments: [element],
@@ -130,14 +139,15 @@ export class WorktreesTreeProvider
       this.abortControllers.set(key, controller);
     }
     try {
-      const worktrees = await pending;
-      if (worktrees.length === 0) {
+      const snapshots = await pending;
+      if (snapshots.length === 0) {
         return [{ kind: "worktreeMessage", label: "No worktrees in this repository." }];
       }
-      return worktrees.map((worktree) => ({
+      return snapshots.map(({ state, worktree }) => ({
         current: pathIdentityKey(worktree.path) === pathIdentityKey(repository.rootPath),
         kind: "worktree",
         repository,
+        state,
         worktree,
       }));
     } catch (error) {
@@ -160,5 +170,18 @@ function worktreeDescription(element: WorktreeNode): string {
     branch,
     ...(element.current ? ["current"] : []),
     ...(element.worktree.locked ? ["locked"] : []),
+    worktreeStateDescription(element.state),
   ].join(" · ");
+}
+
+function worktreeStateDescription(state: WorktreeState | undefined): string {
+  if (!state) return "state unavailable";
+  if (state.changedPaths === 0) return "clean";
+  return [
+    pluralize(state.changedPaths, "changed path"),
+    ...(state.staged > 0 ? [`${state.staged.toString()} staged`] : []),
+    ...(state.unstaged > 0 ? [`${state.unstaged.toString()} unstaged`] : []),
+    ...(state.untracked > 0 ? [`${state.untracked.toString()} untracked`] : []),
+    ...(state.conflicted > 0 ? [`${state.conflicted.toString()} conflicted`] : []),
+  ].join(", ");
 }

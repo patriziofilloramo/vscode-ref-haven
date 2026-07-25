@@ -4,9 +4,11 @@ import type { ComparisonController } from "./ComparisonController";
 import type { Logger } from "./Logger";
 import {
   discoverRepositories,
-  listBranchRefs,
+  listBranchDetails,
+  listRecentCommits,
   listWorktrees,
   readCurrentBranch,
+  readWorktreeState,
 } from "../infrastructure/git/GitCli";
 import type { BranchNode, BranchesTreeProvider } from "../ui/tree/BranchesTreeProvider";
 import type { WorktreeNode, WorktreesTreeProvider } from "../ui/tree/WorktreesTreeProvider";
@@ -58,14 +60,28 @@ export class RepositoryNavigationController {
   }
 
   public installLoaders(): void {
-    this.branchesProvider.setLoader(async (repositoryRoot, signal) => {
-      const [branches, currentBranchName] = await Promise.all([
-        listBranchRefs(repositoryRoot, signal),
-        readCurrentBranch(repositoryRoot, signal),
-      ]);
-      return { branches, currentBranchName };
+    this.branchesProvider.setLoaders(
+      async (repositoryRoot, signal) => {
+        const [branches, currentBranchName] = await Promise.all([
+          listBranchDetails(repositoryRoot, signal),
+          readCurrentBranch(repositoryRoot, signal),
+        ]);
+        return { branches, currentBranchName };
+      },
+      (repositoryRoot, revision, signal) => listRecentCommits(repositoryRoot, revision, 20, signal),
+    );
+    this.worktreesProvider.setLoader(async (repositoryRoot, signal) => {
+      const worktrees = await listWorktrees(repositoryRoot, signal);
+      return Promise.all(
+        worktrees.map(async (worktree) => ({
+          state: await readWorktreeState(worktree.path, signal).catch((error: unknown) => {
+            if (signal.aborted) throw error;
+            return undefined;
+          }),
+          worktree,
+        })),
+      );
     });
-    this.worktreesProvider.setLoader(listWorktrees);
   }
 
   private async verifyWorktree(node: WorktreeNode): Promise<WorktreeInfo> {

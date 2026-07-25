@@ -25,6 +25,16 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.compareFileWithRevision"));
     assert.ok(commands.includes("refhaven.stashFile"));
     assert.ok(commands.includes("refhaven.compareStashFileWithHead"));
+    assert.ok(commands.includes("refhaven.openGitLabProject"));
+    assert.ok(commands.includes("refhaven.openGitLabFile"));
+    assert.ok(commands.includes("refhaven.openGitLabComparison"));
+    assert.ok(commands.includes("refhaven.openGitLabLocalReference"));
+    assert.ok(commands.includes("refhaven.quickOpenComparisonFile"));
+    assert.ok(commands.includes("refhaven.markFileReviewed"));
+    assert.ok(commands.includes("refhaven.nextUnreviewedFile"));
+    assert.ok(commands.includes("refhaven.changeStashFilter"));
+    assert.ok(commands.includes("refhaven.changeFileHistoryFilter"));
+    assert.ok(commands.includes("refhaven.compareCommitWithParent"));
     assert.ok(commands.includes("refhaven.refreshAll"));
     assert.ok(commands.includes("refhaven.comparisons.focus"));
     await vscode.commands.executeCommand("refhaven.comparisons.focus");

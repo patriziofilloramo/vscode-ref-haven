@@ -3,10 +3,12 @@ import * as vscode from "vscode";
 import { BlameController } from "./application/BlameController";
 import { CommitDetailsController } from "./application/CommitDetailsController";
 import { ComparisonController } from "./application/ComparisonController";
+import { ComparisonReviewStore } from "./application/ComparisonReviewStore";
 import { ComparisonStore } from "./application/ComparisonStore";
 import { FileHistoryController } from "./application/FileHistoryController";
 import { FileAnnotationsController } from "./application/FileAnnotationsController";
 import { FileActionsController } from "./application/FileActionsController";
+import { GitLabController } from "./application/GitLabController";
 import { LineHoverController } from "./application/LineHoverController";
 import { RepositoryWatcher } from "./application/RepositoryWatcher";
 import { RepositoryNavigationController } from "./application/RepositoryNavigationController";
@@ -41,6 +43,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel("RefHaven");
   const logger = new OutputChannelLogger(outputChannel);
   const store = new ComparisonStore(context.workspaceState);
+  const reviewStore = new ComparisonReviewStore(context.workspaceState);
   const commitDetailsTreeProvider = new CommitDetailsTreeProvider();
   const branchesTreeProvider = new BranchesTreeProvider();
   const treeProvider = new ComparisonTreeProvider();
@@ -78,6 +81,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     treeView,
     logger,
     revisionProvider,
+    reviewStore,
   );
   const stashController = new StashController(stashTreeProvider, logger);
   const repositoryNavigationController = new RepositoryNavigationController(
@@ -90,6 +94,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const commitDetailsController = new CommitDetailsController(
     commitDetailsTreeProvider,
     commitDetailsTreeView,
+    controller,
     logger,
   );
   const fileHistoryController = new FileHistoryController(
@@ -102,6 +107,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const lineHoverController = new LineHoverController(logger);
   const lineHoverProvider = new LineHoverProvider(lineHoverController, logger);
   const fileAnnotationsController = new FileAnnotationsController(logger);
+  const gitLabController = new GitLabController(logger);
   const fileActionsController = new FileActionsController(
     controller,
     fileAnnotationsController,
@@ -264,6 +270,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     fileHistoryController,
     stashController,
     blameController,
+    gitLabController,
   );
   logger.info("Extension services registered", { operation: "activate" });
 }

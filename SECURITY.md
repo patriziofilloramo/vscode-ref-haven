@@ -1,8 +1,20 @@
-# Security and local-only operation
+# Security and controlled remote handoff
 
 ## Security objective
 
-RefHaven is designed for repositories whose paths, refs, history, metadata, and file contents must remain on the workstation. The installed extension has no telemetry, analytics, authentication, remote-service integration, networking API, runtime dependency, or automatic fetch. It never sends repository data to a vendor or hosted service.
+RefHaven is designed for repositories whose data may be processed only on the
+workstation or by repository services explicitly approved by the organisation.
+The installed extension has no telemetry, analytics, hosted backend, HTTP
+client, API authentication, runtime dependency, or automatic fetch.
+
+The sole remote-aware feature builds GitLab browser URLs after an explicit user
+command. The allowlist defaults to empty and accepts only exact HTTP(S) origins
+without paths or credentials. RefHaven reads remote URLs locally, strips any
+remote user information by construction, resolves refs to local immutable
+SHAs, validates the final URL origin again, and then passes it to
+`vscode.env.openExternal`. It never contacts a host merely because a remote
+exists, never makes an HTTP/API request, never follows a redirect, and never
+stores or logs remote URLs, project paths, file paths, or response data.
 
 ## Enforced runtime controls
 
@@ -42,15 +54,42 @@ already enumerated local worktree, but they never checkout/create/delete a
 branch or add/remove a worktree. Command arguments are checked against fresh
 local Git enumeration before use.
 
+Native-view enrichment remains inside the same boundary. Stash and File
+History filters operate only on already loaded in-memory metadata. Branch
+tips, upstream divergence, recent branch commits, worktree status, commit
+parents, and diff statistics come from bounded transport-blocked local Git
+commands. Expanding a branch or stash is the only trigger for its additional
+history/statistics query; none of these views contacts a remote or persists
+the displayed repository metadata.
+
 ## Stored and displayed data
 
-Only comparison specifications are persisted, in VS Code `workspaceState`. Computed history, diffs, blame and annotation results, selected changes-annotation references, and file contents are not persisted. The non-sensitive whole-file annotation mode (`off`, `blame`, or `heatmap`) may be saved as a VS Code user setting. Revision content is loaded on demand into a bounded in-memory cache and revision URIs are authenticated with a session-only HMAC.
+Comparison specifications and comparison-review markers are persisted only in
+VS Code `workspaceState`. Review records contain a comparison ID, a SHA-256
+revision fingerprint, and bounded repository-relative paths; they contain no
+file contents, diff hunks, commit messages, or remote data. Records are limited
+to 64 comparisons, 10,000 reviewed paths and 256 KiB per comparison, with a
+4 MiB total store ceiling. They are pruned when a comparison closes and
+ignored when the immutable endpoints or changed-file state no longer match.
+Working Tree review state is invalidated on every recalculation because that
+endpoint is mutable.
+
+Computed history, diffs, blame and annotation results, selected
+changes-annotation references, and file contents are not persisted. The
+non-sensitive whole-file annotation mode (`off`, `blame`, or `heatmap`) may be
+saved as a VS Code user setting; comparison layout, filter, and sort choices
+may be saved as workspace-local view preferences. Revision content is loaded
+on demand into a bounded in-memory cache and revision URIs are authenticated
+with a session-only HMAC.
 
 Rich line hovers load commit metadata and a path-limited patch only after the
 user hovers a line. Successful hover results use a 64-entry in-memory cache
 keyed by document version and line and are cleared on repository refresh. Git
 patch output is capped at 64 KiB and the displayed preview is capped again;
 neither hover metadata nor patch content is persisted or logged.
+
+GitLab links in line hovers are inert command URIs until clicked. Hover loading
+does not enumerate remotes, open a browser, or perform network activity.
 
 Logs exclude file contents and redact credential-, secret-, environment-, token-, and remote-related metadata. Copy commands write only the explicitly selected value to the operating-system clipboard.
 
@@ -61,6 +100,8 @@ The guarantee above covers RefHaven and the Git processes it creates. The follow
 - the installed VS Code and Git binaries;
 - other extensions, including VS Code's built-in Git autofetch setting;
 - operating-system clipboard history or cloud clipboard synchronization;
+- the browser opened by `vscode.env.openExternal`, including its
+  authentication, extensions, proxy, DNS, redirect, and history policies;
 - repositories or object stores located on network-mounted filesystems;
 - development-time package installation and Extension Host test downloads.
 
@@ -72,6 +113,11 @@ sequence; it cannot prevent another extension, terminal, or concurrent local
 process from running a different Git command.
 
 For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; RefHaven itself neither enables nor calls remote Git operations.
+
+For GitLab links, approve only organisation-controlled origins. RefHaven
+validates the URL handed to the operating system but cannot constrain what an
+external browser does after navigation, including server-directed redirects.
+No GitLab API token or browser credential is read by the extension.
 
 ## Supply-chain policy
 

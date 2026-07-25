@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 
 import type { RepositoryIdentity } from "../../domain/comparison";
-import { shortSha, type FileChange } from "../../domain/comparisonResult";
+import { shortSha, sumDiffTotals, type FileChange } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { pathIdentityKey } from "../../domain/pathValidation";
 import type { StashEntry } from "../../domain/stash";
-import { formatRelativeTime } from "../format";
+import { formatDiffStats, formatRelativeTime, pluralize } from "../format";
 import { escapeMarkdown } from "../markdown";
 import {
   buildChangeNodes,
@@ -49,7 +49,9 @@ export class StashTreeProvider
   >();
   private repositories: readonly RepositoryIdentity[] = [];
   private disposed = false;
+  private filter = "";
   private readonly stashFiles = new Map<string, Promise<FileChange[]>>();
+  private readonly stashFileResults = new Map<string, readonly FileChange[]>();
   private readonly stashFileAbortControllers = new Map<string, AbortController>();
   private stashFilesLoader: StashFilesLoader | undefined;
   private readonly stashes = new Map<string, Promise<StashEntry[]>>();
@@ -63,15 +65,21 @@ export class StashTreeProvider
     this.stashLoader = stashLoader;
   }
 
+  public getFilter(): string {
+    return this.filter;
+  }
+
+  public setFilter(filter: string): void {
+    const normalized = filter.trim().toLocaleLowerCase();
+    if (normalized === this.filter) return;
+    this.filter = normalized;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
   public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    for (const controller of this.stashFileAbortControllers.values()) controller.abort();
-    for (const controller of this.stashAbortControllers.values()) controller.abort();
-    this.stashFileAbortControllers.clear();
-    this.stashAbortControllers.clear();
-    this.stashFiles.clear();
-    this.stashes.clear();
+    this.clearCache();
     this.repositories = [];
     this.onDidChangeTreeDataEmitter.dispose();
   }
@@ -83,12 +91,7 @@ export class StashTreeProvider
   }
 
   public refresh(): void {
-    for (const controller of this.stashFileAbortControllers.values()) controller.abort();
-    for (const controller of this.stashAbortControllers.values()) controller.abort();
-    this.stashFileAbortControllers.clear();
-    this.stashAbortControllers.clear();
-    this.stashFiles.clear();
-    this.stashes.clear();
+    this.clearCache();
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -97,7 +100,7 @@ export class StashTreeProvider
       case "repository":
         return createRepositoryItem(element.repository);
       case "stash":
-        return createStashItem(element);
+        return this.createStashItem(element);
       case "folder":
         return createFolderItem(element);
       case "file":
@@ -116,17 +119,10 @@ export class StashTreeProvider
       }
       return this.repositories.map((repository) => ({ kind: "repository", repository }));
     }
-
-    switch (element.kind) {
-      case "repository":
-        return this.getStashNodes(element.repository, true);
-      case "stash":
-        return this.getStashChildren(element);
-      case "folder":
-        return getFolderChildren(element);
-      default:
-        return [];
-    }
+    if (element.kind === "repository") return this.getStashNodes(element.repository, true);
+    if (element.kind === "stash") return this.getStashChildren(element);
+    if (element.kind === "folder") return getFolderChildren(element);
+    return [];
   }
 
   private async getStashNodes(
@@ -134,7 +130,6 @@ export class StashTreeProvider
     showEmptyMessage: boolean,
   ): Promise<StashTreeNode[]> {
     if (!this.stashLoader) return [];
-
     const repositoryKey = pathIdentityKey(repository.rootPath);
     let pending = this.stashes.get(repositoryKey);
     if (!pending) {
@@ -143,13 +138,16 @@ export class StashTreeProvider
       this.stashes.set(repositoryKey, pending);
       this.stashAbortControllers.set(repositoryKey, controller);
     }
-
     try {
       const stashes = await pending;
       if (stashes.length === 0 && showEmptyMessage) {
         return [{ icon: "info", kind: "message", label: "No stashes in this repository." }];
       }
-      return stashes.map((stash) => ({ kind: "stash", repository, stash }));
+      const matches = stashes.filter((stash) => stashMatchesFilter(stash, this.filter));
+      if (matches.length === 0 && this.filter.length > 0) {
+        return [{ icon: "search", kind: "message", label: "No stashes match the current filter." }];
+      }
+      return matches.map((stash) => ({ kind: "stash", repository, stash }));
     } catch (error) {
       if (this.stashes.get(repositoryKey) === pending) {
         this.stashes.delete(repositoryKey);
@@ -171,10 +169,10 @@ export class StashTreeProvider
 
   private async getStashChildren(element: StashNode): Promise<StashTreeNode[]> {
     if (!this.stashFilesLoader) return [];
-
     const { repository, stash } = element;
-    const key = `${pathIdentityKey(repository.rootPath)}:${stash.sha}`;
+    const key = stashKey(repository.rootPath, stash.sha);
     let pending = this.stashFiles.get(key);
+    const newlyRequested = pending === undefined;
     if (!pending) {
       const controller = new AbortController();
       pending = this.stashFilesLoader(
@@ -186,9 +184,10 @@ export class StashTreeProvider
       this.stashFiles.set(key, pending);
       this.stashFileAbortControllers.set(key, controller);
     }
-
     try {
       const files = await pending;
+      this.stashFileResults.set(key, files);
+      if (newlyRequested) this.onDidChangeTreeDataEmitter.fire(element);
       if (files.length === 0) {
         return [{ icon: "info", kind: "message", label: "No tracked file changes in this stash." }];
       }
@@ -212,10 +211,56 @@ export class StashTreeProvider
         },
       ];
     } finally {
-      if (this.stashFiles.get(key) === pending) {
-        this.stashFileAbortControllers.delete(key);
-      }
+      if (this.stashFiles.get(key) === pending) this.stashFileAbortControllers.delete(key);
     }
+  }
+
+  private createStashItem(element: StashNode): vscode.TreeItem {
+    const { repository, stash } = element;
+    const files = this.stashFileResults.get(stashKey(repository.rootPath, stash.sha));
+    const stats = files ? sumDiffTotals(files) : undefined;
+    const item = new vscode.TreeItem(stash.message, vscode.TreeItemCollapsibleState.Collapsed);
+    item.contextValue = "refhaven.stash";
+    item.description = [
+      stash.selector,
+      ...(stash.branchName ? [`on ${stash.branchName}`] : []),
+      ...(files ? [pluralize(files.length, "file")] : []),
+      ...(stats ? [formatDiffStats(stats.additions, stats.deletions)] : []),
+      formatRelativeTime(stash.authorDate),
+    ].join(" · ");
+    item.iconPath = new vscode.ThemeIcon("git-stash");
+    item.id = `${repository.rootPath}:stash:${stash.sha}`;
+    const tooltip = new vscode.MarkdownString(
+      [
+        `**${escapeMarkdown(stash.message)}**`,
+        "",
+        `$(git-stash) \`${stash.selector}\` · \`${shortSha(stash.sha)}\``,
+        `$(git-commit) parent \`${shortSha(stash.parentSha)}\``,
+        ...(stash.branchName
+          ? [`$(git-branch) stashed on ${escapeMarkdown(stash.branchName)}`]
+          : []),
+        ...(files && stats
+          ? [
+              `$(files) ${pluralize(files.length, "changed file")} · ${formatDiffStats(stats.additions, stats.deletions)}`,
+            ]
+          : ["$(files) Expand to load changed-file statistics"]),
+        `$(history) ${formatRelativeTime(stash.authorDate)} (${new Date(stash.authorDate).toLocaleString()})`,
+        `$(repo) ${escapeMarkdown(repository.rootPath)}`,
+      ].join("\n\n"),
+    );
+    tooltip.supportThemeIcons = true;
+    item.tooltip = tooltip;
+    return item;
+  }
+
+  private clearCache(): void {
+    for (const controller of this.stashFileAbortControllers.values()) controller.abort();
+    for (const controller of this.stashAbortControllers.values()) controller.abort();
+    this.stashFileAbortControllers.clear();
+    this.stashAbortControllers.clear();
+    this.stashFiles.clear();
+    this.stashFileResults.clear();
+    this.stashes.clear();
   }
 }
 
@@ -227,28 +272,13 @@ function createRepositoryItem(repository: RepositoryIdentity): vscode.TreeItem {
   return item;
 }
 
-function createStashItem(element: StashNode): vscode.TreeItem {
-  const { repository, stash } = element;
-  const item = new vscode.TreeItem(stash.message, vscode.TreeItemCollapsibleState.Collapsed);
-  item.contextValue = "refhaven.stash";
-  item.description = [
-    stash.selector,
-    ...(stash.branchName ? [`on ${stash.branchName}`] : []),
-    formatRelativeTime(stash.authorDate),
-  ].join(" · ");
-  item.iconPath = new vscode.ThemeIcon("git-stash");
-  item.id = `${repository.rootPath}:stash:${stash.sha}`;
+function stashKey(repositoryRoot: string, sha: string): string {
+  return `${pathIdentityKey(repositoryRoot)}:${sha}`;
+}
 
-  const tooltip = new vscode.MarkdownString(
-    [
-      `**${escapeMarkdown(stash.message)}**`,
-      "",
-      `$(git-stash) \`${stash.selector}\` · \`${shortSha(stash.sha)}\``,
-      ...(stash.branchName ? [`$(git-branch) stashed on ${escapeMarkdown(stash.branchName)}`] : []),
-      `$(history) ${formatRelativeTime(stash.authorDate)} (${new Date(stash.authorDate).toLocaleString()})`,
-    ].join("\n\n"),
+function stashMatchesFilter(stash: StashEntry, filter: string): boolean {
+  if (filter.length === 0) return true;
+  return [stash.message, stash.branchName ?? "", stash.selector, stash.sha].some((value) =>
+    value.toLocaleLowerCase().includes(filter),
   );
-  tooltip.supportThemeIcons = true;
-  item.tooltip = tooltip;
-  return item;
 }

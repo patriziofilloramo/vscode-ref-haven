@@ -18,7 +18,12 @@ A comparison has a baseline (`baseRef`) and the branch being analysed (`targetRe
 
 Every created comparison is saved automatically in the current workspace and remains until explicitly closed. Pinning affects priority and ordering, not persistence.
 
-The extension stores configuration only in `ExtensionContext.workspaceState`, under `refhaven.comparisons.v1`. It does not write comparison configuration to the repository, `.git`, workspace settings, or another committable file. Computed Git results are never persisted.
+The extension stores comparison configuration in
+`ExtensionContext.workspaceState`, under `refhaven.comparisons.v1`. Bounded
+per-comparison reviewed-file markers use the separate versioned key
+`refhaven.comparisonReviews.v1`. Neither is written to the repository, `.git`,
+workspace settings, or another committable file. Computed Git results are
+never persisted.
 
 ```ts
 interface SavedComparisonV1 {
@@ -76,12 +81,24 @@ The product has since grown toward a GitLens-style feature set while keeping the
 
 - **Commit drill-down:** commits in the Ahead/Behind sections expand to the files they changed and open per-commit diffs (first parent; root commits diff against the empty tree).
 - **Comparison mode switching:** each saved comparison can switch between `branchChanges` (three-dot) and `tipToTip` (two-dot) diffs via _Change Comparison Mode..._; tip-to-tip comparisons are labelled in the tree. When a three-dot comparison legitimately has no files — the target has no commits of its own, or both refs point at the same commit — the Files section states the reason and its tooltip suggests swapping the direction or switching mode.
+- **Comparison review:** changed files can be marked reviewed/unreviewed with
+  progress on the comparison and Files section. Next/Previous Unreviewed,
+  Quick Open, all/reviewed/unreviewed filtering, and path/status/change-size
+  sorting provide a keyboard-first review loop without changing Git state.
+  Review markers are workspace-local, bounded, and tied to a fingerprint of
+  the current result; Working Tree markers reset on recalculation.
 - **Safe single-file stash:** a dedicated Stashes view lists stashes per
   repository with expandable file trees, native diffs, copy-message, revision
   actions, and recent-stash search. **Stash This File...** preserves selected
   staged/unstaged state (including partial staging, deletion, and rename) while
   excluding unrelated and untracked changes. Hooks and content filters are
   prevented rather than trusted.
+- **Native view enrichment:** Stashes and File History have in-memory filters;
+  expanded stashes show local change statistics; file history exposes parent,
+  rename-follow, and adjacent-revision navigation; Commit Details supports
+  metadata copy and parent drill-down/diff; Branches show upstream divergence,
+  tip metadata, and bounded expandable history; Worktrees show a local
+  staged/unstaged/untracked/conflicted summary.
 - **Native file-action surfaces:** the Explorer and editor share a RefHaven submenu for file/line history, annotations, open-at-revision, and compare-with-revision. The editor title and status-bar blame provide compact quick picks, while changed-file nodes expose revision, history, open, and copy actions consistently.
 - **Line blame and hover:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, full commit identity, local commit statistics, a bounded previous-revision patch, and native actions for details, diffs, history, revision opening, and copy.
 - **File annotations:** opt-in whole-file gutter blame, a five-bucket commit-age heatmap, and saved-working-tree change ranges relative to a locally resolved reference. Computation is cancellable, bounded to 5,000 editor lines, and never persisted.
@@ -91,6 +108,10 @@ The product has since grown toward a GitLens-style feature set while keeping the
 - **Commit search and details:** local history can be searched by message, author, SHA, or changed content, with full metadata and changed files shown in a native tree view.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
 - **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
+- **Approved GitLab links:** exact configured origins enable explicit browser
+  actions for project, commit, local branch/tag/HEAD revision, comparison,
+  file/line, issue, and merge request. All ref links use locally resolved SHAs;
+  no HTTP request, API token, background discovery, or RefHaven service exists.
 
 All file diffs — comparison, commit, and stash — open through one shared `FileDiffScope` describing the two revisions, so every surface reuses the same native readonly diff pipeline.
 
@@ -99,6 +120,12 @@ All file diffs — comparison, commit, and stash — open through one shared `Fi
 The extension contributes the native `refhaven.comparisons` Tree View to the Source Control container. It uses native commands, context menus, theme icons, keyboard navigation, and accessibility support; it does not use a Webview.
 
 Comparisons are grouped by repository only when more than one repository is present. A comparison node displays its directional label and a compact summary such as `↑8 ↓2 · 14 files`. Its tooltip includes repository, full refs, mode, resolved SHAs, merge base, and update time, without credentials or file contents.
+
+When files exist, the comparison summary also shows reviewed/total progress.
+Reviewed files use a native pass icon and retain the same
+diff/open/history/copy actions. Review-only context actions are contributed
+only to saved-comparison file nodes, not to stash, commit-details, or history
+nodes.
 
 The main flows are:
 
@@ -132,7 +159,22 @@ Refresh is generation-based and cancellable. At most two Git processes run concu
 
 ## Privacy, safety, and limits
 
-The extension has no telemetry, runtime dependency, networking API, remote operation, or automatic fetch. Git is launched without a shell and with argument arrays. Every invocation blocks protocols and partial-clone lazy fetch, disables prompts and tracing, removes inherited Git redirection, and prevents configured fsmonitor/diff/textconv helpers. Paths are literal, not Git patterns. The stash mutation additionally disables Git hooks and rejects active content filters before changing the real index or worktree. Missing local objects fail closed. Typed revisions pass strict syntax validation and must resolve through the transport-blocked local Git boundary before use. The complete threat model is in [SECURITY.md](../SECURITY.md).
+The extension has no telemetry, runtime dependency, HTTP/API client, Git remote
+operation, or automatic fetch. Git is launched without a shell and with
+argument arrays. Every invocation blocks protocols and partial-clone lazy
+fetch, disables prompts and tracing, removes inherited Git redirection, and
+prevents configured fsmonitor/diff/textconv helpers. Paths are literal, not
+Git patterns. The stash mutation additionally disables Git hooks and rejects
+active content filters before changing the real index or worktree. Missing
+local objects fail closed. Typed revisions pass strict syntax validation and
+must resolve through the transport-blocked local Git boundary before use.
+
+GitLab browser actions are disabled until at least one exact HTTP(S) origin is
+approved. Remote discovery is local; authenticated remote user information is
+never included in the generated URL. RefHaven validates the final origin and
+hands the URL to the external browser only after a user command. Browser
+networking and redirects are outside the extension trust boundary. The
+complete threat model is in [SECURITY.md](../SECURITY.md).
 
 Logs contain command category and non-sensitive operational metadata. Metadata keys associated with credentials, environment, remote URLs, secrets, tokens, and file content are redacted; Git file content is never logged.
 

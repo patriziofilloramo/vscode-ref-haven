@@ -10,11 +10,24 @@ import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "./fileTre
 
 export type FilesLayout = "list" | "tree";
 
+export interface ComparisonFileReview {
+  readonly comparisonId: string;
+  readonly revisionKey: string;
+  readonly state: "reviewed" | "unreviewed";
+}
+
+export interface ChangeNodeReviewContext {
+  readonly comparisonId: string;
+  readonly reviewedPaths: ReadonlySet<string>;
+  readonly revisionKey: string;
+}
+
 export interface FileNode {
   readonly file: FileChange;
   /** Prefix keeping tree item ids unique across sections and views. */
   readonly idPrefix: string;
   readonly kind: "file";
+  readonly review?: ComparisonFileReview;
   readonly scope: FileDiffScope;
   /** Show the parent directory next to the file name (list layout). */
   readonly showDirectory: boolean;
@@ -24,6 +37,7 @@ export interface FolderNode {
   readonly folder: FileTreeFolder;
   readonly idPrefix: string;
   readonly kind: "folder";
+  readonly reviewContext?: ChangeNodeReviewContext;
   readonly scope: FileDiffScope;
 }
 
@@ -41,13 +55,23 @@ export function buildChangeNodes(
   layout: FilesLayout,
   scope: FileDiffScope,
   idPrefix: string,
+  reviewContext?: ChangeNodeReviewContext,
 ): ChangeNode[] {
-  if (layout === "tree") return toChangeNodes(buildFileTree(files), scope, idPrefix);
-  return files.map((file) => ({ file, idPrefix, kind: "file", scope, showDirectory: true }));
+  if (layout === "tree") {
+    return toChangeNodes(buildFileTree(files), scope, idPrefix, reviewContext);
+  }
+  return files.map((file) => ({
+    file,
+    idPrefix,
+    kind: "file",
+    ...(reviewContext ? { review: fileReview(file, reviewContext) } : {}),
+    scope,
+    showDirectory: true,
+  }));
 }
 
 export function getFolderChildren(node: FolderNode): ChangeNode[] {
-  return toChangeNodes(node.folder.children, node.scope, node.idPrefix);
+  return toChangeNodes(node.folder.children, node.scope, node.idPrefix, node.reviewContext);
 }
 
 export function createFolderItem(node: FolderNode): vscode.TreeItem {
@@ -72,12 +96,15 @@ export function createFileItem(node: FileNode): vscode.TreeItem {
     command: COMMAND_IDS.openFileDiff,
     title: "Open File Comparison",
   };
-  item.contextValue = `refhaven.file.${file.status}`;
+  item.contextValue = `refhaven.file.${file.status}${node.review ? `.${node.review.state}` : ""}`;
   item.description = fileDescription(node, directory);
-  item.iconPath = vscode.ThemeIcon.File;
+  item.iconPath =
+    node.review?.state === "reviewed"
+      ? new vscode.ThemeIcon("pass-filled", new vscode.ThemeColor("testing.iconPassed"))
+      : vscode.ThemeIcon.File;
   item.id = `${node.idPrefix}:file:${file.newPath}`;
   item.resourceUri = createChangeUri(file.status, file.newPath);
-  item.tooltip = fileTooltip(file);
+  item.tooltip = fileTooltip(file, node.review?.state);
   return item;
 }
 
@@ -91,17 +118,32 @@ function toChangeNodes(
   nodes: readonly FileTreeNode[],
   scope: FileDiffScope,
   idPrefix: string,
+  reviewContext?: ChangeNodeReviewContext,
 ): ChangeNode[] {
   return nodes.map((node) =>
     node.kind === "folder"
-      ? { folder: node, idPrefix, kind: "folder", scope }
-      : { file: node.file, idPrefix, kind: "file", scope, showDirectory: false },
+      ? {
+          folder: node,
+          idPrefix,
+          kind: "folder",
+          ...(reviewContext ? { reviewContext } : {}),
+          scope,
+        }
+      : {
+          file: node.file,
+          idPrefix,
+          kind: "file",
+          ...(reviewContext ? { review: fileReview(node.file, reviewContext) } : {}),
+          scope,
+          showDirectory: false,
+        },
   );
 }
 
 function fileDescription(node: FileNode, directory: string): string {
   const { file, showDirectory } = node;
   const parts: string[] = [];
+  if (node.review?.state === "reviewed") parts.push("reviewed");
   if (showDirectory && directory.length > 0) parts.push(directory);
   if (file.status === "renamed" || file.status === "copied") {
     const from = file.oldPath ?? "";
@@ -115,10 +157,20 @@ function fileDescription(node: FileNode, directory: string): string {
   return parts.join(" · ");
 }
 
-function fileTooltip(file: FileChange): vscode.MarkdownString {
+function fileTooltip(
+  file: FileChange,
+  reviewState: ComparisonFileReview["state"] | undefined,
+): vscode.MarkdownString {
   const lines = [
     `**${escapeMarkdown(file.newPath)}**`,
     "",
+    ...(reviewState
+      ? [
+          reviewState === "reviewed"
+            ? "$(pass-filled) Reviewed in this comparison"
+            : "$(circle-large-outline) Not reviewed",
+        ]
+      : []),
     `$(diff) ${statusLabel(file.status)}${file.similarity === undefined ? "" : ` (${file.similarity.toString()}% similar)`}`,
     ...(file.oldPath ? [`$(arrow-right) from \`${escapeMarkdown(file.oldPath)}\``] : []),
     file.additions !== undefined || file.deletions !== undefined
@@ -128,4 +180,12 @@ function fileTooltip(file: FileChange): vscode.MarkdownString {
   const tooltip = new vscode.MarkdownString(lines.join("\n\n"));
   tooltip.supportThemeIcons = true;
   return tooltip;
+}
+
+function fileReview(file: FileChange, context: ChangeNodeReviewContext): ComparisonFileReview {
+  return {
+    comparisonId: context.comparisonId,
+    revisionKey: context.revisionKey,
+    state: context.reviewedPaths.has(file.newPath) ? "reviewed" : "unreviewed",
+  };
 }

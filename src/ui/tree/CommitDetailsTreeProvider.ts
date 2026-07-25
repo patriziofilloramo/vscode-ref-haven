@@ -1,10 +1,11 @@
 import * as vscode from "vscode";
 
 import type { CommitDetails } from "../../domain/commitDetails";
-import type { CommitInfo, FileChange } from "../../domain/comparisonResult";
+import { sumDiffTotals, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import type { CommitFileChanges } from "../../infrastructure/git/GitCli";
-import { formatRelativeTime } from "../format";
+import { COMMAND_IDS } from "../commands/commandIds";
+import { formatDiffStats, formatRelativeTime } from "../format";
 import { escapeMarkdown } from "../markdown";
 import {
   buildChangeNodes,
@@ -20,11 +21,15 @@ import {
 export const COMMIT_DETAILS_VIEW_ID = "refhaven.commitDetails";
 export const COMMIT_DETAILS_FOCUS_COMMAND = `${COMMIT_DETAILS_VIEW_ID}.focus`;
 
-interface DetailNode {
+export interface DetailNode {
+  readonly commitSha: string;
+  readonly copyValue: string;
   readonly description: string;
   readonly icon: string;
   readonly kind: "detail";
   readonly label: string;
+  readonly parentSha?: string;
+  readonly repositoryRoot: string;
   readonly tooltip?: string;
 }
 
@@ -87,8 +92,20 @@ export class CommitDetailsTreeProvider
     if (node.kind === "detail") {
       const item = new vscode.TreeItem(node.label);
       item.description = node.description;
+      item.contextValue = node.parentSha ? "refhaven.commitParent" : "refhaven.commitDetail";
       item.iconPath = new vscode.ThemeIcon(node.icon);
-      item.tooltip = node.tooltip ?? node.description;
+      if (node.tooltip) {
+        item.tooltip = new vscode.MarkdownString(escapeMarkdown(node.tooltip));
+      } else {
+        item.tooltip = node.description;
+      }
+      if (node.parentSha) {
+        item.command = {
+          arguments: [node],
+          command: COMMAND_IDS.openCommitParentDetails,
+          title: "Open Parent Commit Details",
+        };
+      }
       return item;
     }
     if (node.kind === "commitFiles") {
@@ -96,6 +113,8 @@ export class CommitDetailsTreeProvider
         `Changed Files (${node.files.length.toString()})`,
         vscode.TreeItemCollapsibleState.Expanded,
       );
+      const totals = sumDiffTotals(node.files);
+      item.description = formatDiffStats(totals.additions, totals.deletions);
       item.iconPath = new vscode.ThemeIcon("files");
       return item;
     }
@@ -131,27 +150,46 @@ export class CommitDetailsTreeProvider
       repositoryRootPath: this.repositoryRoot,
       toSha: this.commit.sha,
     };
+    const context = { commitSha: this.commit.sha, repositoryRoot: this.repositoryRoot };
     return [
-      detail("Commit", this.commit.sha, "git-commit"),
+      detail(context, "Commit", this.commit.sha, "git-commit", this.commit.sha),
+      detail(context, "Author", details.commit.authorName, "account", details.commit.authorName),
+      detail(context, "Author Email", details.authorEmail, "mail", details.authorEmail),
       detail(
-        "Author",
-        `${details.commit.authorName} <${details.authorEmail}> · ${formatRelativeTime(details.commit.authorDate)}`,
-        "account",
+        context,
+        "Author Date",
+        `${formatRelativeTime(details.commit.authorDate)} · ${new Date(details.commit.authorDate).toLocaleString()}`,
+        "calendar",
+        new Date(details.commit.authorDate).toISOString(),
       ),
+      detail(context, "Committer", details.committerName, "account", details.committerName),
+      detail(context, "Committer Email", details.committerEmail, "mail", details.committerEmail),
       detail(
-        "Committer",
-        `${details.committerName} <${details.committerEmail}> · ${formatRelativeTime(details.committerDate)}`,
-        "account",
+        context,
+        "Committer Date",
+        `${formatRelativeTime(details.committerDate)} · ${new Date(details.committerDate).toLocaleString()}`,
+        "calendar",
+        new Date(details.committerDate).toISOString(),
       ),
+      ...(details.parentShas.length === 0
+        ? [detail(context, "Parents", "root commit", "git-merge", "root commit")]
+        : details.parentShas.map((parentSha, index) =>
+            detail(
+              context,
+              `Parent ${(index + 1).toString()}`,
+              parentSha,
+              "git-merge",
+              parentSha,
+              parentSha,
+            ),
+          )),
       detail(
-        "Parents",
-        details.parentShas.length === 0 ? "root commit" : details.parentShas.join(", "),
-        "git-merge",
-      ),
-      detail(
+        context,
         "Message",
         details.fullMessage.split(/\r?\n/u)[0] ?? "(no commit message)",
         "comment-discussion",
+        details.fullMessage,
+        undefined,
         details.fullMessage,
       ),
       { files: changed.files, kind: "commitFiles", scope },
@@ -159,12 +197,23 @@ export class CommitDetailsTreeProvider
   }
 }
 
-function detail(label: string, description: string, icon: string, tooltip?: string): DetailNode {
+function detail(
+  context: { readonly commitSha: string; readonly repositoryRoot: string },
+  label: string,
+  description: string,
+  icon: string,
+  copyValue: string,
+  parentSha?: string,
+  tooltip?: string,
+): DetailNode {
   return {
+    ...context,
+    copyValue,
     description,
     icon,
     kind: "detail",
     label,
-    ...(tooltip ? { tooltip: escapeMarkdown(tooltip) } : {}),
+    ...(parentSha ? { parentSha } : {}),
+    ...(tooltip ? { tooltip } : {}),
   };
 }

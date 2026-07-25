@@ -70,6 +70,7 @@ suite("rich blame hover", () => {
     assert.match(markdown, /command:refhaven\.compareFileWithRevision\?/u);
     assert.match(markdown, /command:refhaven\.showFileHistory\?/u);
     assert.match(markdown, /command:refhaven\.showLineHistory\?/u);
+    assert.match(markdown, /command:refhaven\.openGitLabFile\?/u);
   });
 
   test("escapes Git metadata and contains backticks safely inside the diff fence", () => {

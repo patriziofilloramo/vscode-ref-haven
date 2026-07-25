@@ -4,7 +4,9 @@
 
 A private Visual Studio Code extension for persistent branch comparisons,
 history, blame, and stash inspection. It uses an entirely native UI (no
-webviews), has no telemetry, and enforces local-only Git execution.
+webviews), has no telemetry, and keeps Git processing local. The only
+remote-aware behavior is an explicit browser handoff to an exact,
+organisation-approved GitLab origin.
 
 ## Features
 
@@ -22,11 +24,18 @@ webviews), has no telemetry, and enforces local-only Git execution.
   A fully merged target legitimately shows `0 files changed` in branch-changes
   mode — the view now explains why and suggests swapping or switching mode.
 - Every file opens in VS Code's native readonly diff editor.
+- Mark files reviewed/unreviewed, see progress on the comparison and Files
+  section, and jump to the next or previous unreviewed file.
+- Filter to all/reviewed/unreviewed files, sort by path/status/change size, or
+  use Quick Open for keyboard-first review. Non-path sorting uses the flat list
+  so hierarchy cannot silently override the requested order.
 
 ### Stashes view
 
-- Lists all stashes per repository with message, `stash@{n}`, branch, and age.
+- Lists and locally filters stashes by message, branch, selector, or SHA.
 - Expand a stash to browse and diff its files.
+- Expanded stashes show changed-file counts and diff statistics; context
+  actions copy the message/SHA or open the stash commit in Commit Details.
 - **Stash This File...** is available from editor, Explorer, Source Control,
   and the file-actions quick menu. It stashes tracked staged and unstaged state
   for only that file, including partial staging, deletes, and renames, while
@@ -62,7 +71,10 @@ fix: prevent duplicates` — including in unsaved buffers.
 
 - The **File History** Source Control view follows the active file across
   renames and opens each historical change in VS Code's native diff editor.
-- History commits support copy SHA/message and open-at-revision actions.
+- Filter visible revisions by commit/path metadata and navigate directly to
+  the newer or older visible revision.
+- History commits show parent and rename information and support copy
+  SHA/message, commit details, and open-at-revision actions.
 - **Show Line History** traces the current selection locally with `git log -L`.
 
 ### References and commit search
@@ -71,14 +83,30 @@ fix: prevent duplicates` — including in unsaved buffers.
   resolve locally, and the live Working Tree.
 - **Search Commits** finds local history by message, author, SHA, or changed
   content and opens a native **Commit Details** view with metadata and files.
+- Commit Details supports copying individual metadata values, opening a parent
+  commit, and comparing any changed file with that parent.
 
 ### Branches and worktrees
 
-- Read-only **Branches** view for local and remote-tracking refs, with copy and
-  compare-with-current actions.
-- Read-only **Worktrees** view with branch/detached/lock state, path copy, and
-  open-in-new-window. RefHaven deliberately provides no repository-mutating
-  branch or worktree commands.
+- Read-only **Branches** view with upstream, ahead/behind, tip metadata, copy
+  and compare actions; local branches expand to a bounded recent history.
+- Read-only **Worktrees** view with branch/detached/HEAD/lock details and a
+  staged, unstaged, untracked, or conflicted working-state summary.
+  RefHaven deliberately provides no repository-mutating branch or worktree
+  commands.
+
+### Approved GitLab links
+
+- Configure exact origins such as `https://gitlab.company.example` or
+  `https://gitlab.company.example:8443`; the default allowlist is empty.
+- Explicit actions open the approved project, immutable commit, branch/tag/HEAD
+  revision, comparison, file/selected lines, `#issue`, or `!merge-request`.
+- HTTP remotes must match the approved origin exactly. SSH remotes match only
+  by hostname and require a choice when more than one approved browser origin
+  is possible.
+- RefHaven reads remote configuration locally and resolves refs to local SHAs.
+  It performs no HTTP request, API call, authentication, automatic discovery,
+  redirect following, or background network activity.
 
 ### Everywhere
 
@@ -106,10 +134,16 @@ most common entry points:
 | `New Comparison`                 | Pick a repository, target, and base branch       |
 | `Compare Current Branch With...` | Compare the checked-out branch against a base    |
 | `Change Comparison Mode...`      | Switch between three-dot and two-dot diffs       |
+| `Quick Open Comparison File...`  | Find and open a file in a saved comparison       |
+| `Open Next Unreviewed File`      | Continue the current comparison review           |
+| `Change Comparison File Filter`  | Show all, reviewed, or unreviewed files          |
 | `Search Commits...`              | Search commits already available locally         |
 | `Open File at Revision...`       | Open the active file at a chosen branch revision |
 | `Compare File with Revision...`  | Diff the active file against a local reference   |
 | `Stash This File...`             | Stash only the selected tracked file             |
+| `Open Project on GitLab`         | Open the matching explicitly approved project    |
+| `Open Local Reference on GitLab` | Pick HEAD, a branch, or a tag and open its SHA   |
+| `Open GitLab Issue or MR...`     | Open an approved `#issue` or `!merge-request`    |
 | `Show File Actions`              | Open the context-sensitive native file menu      |
 | `Toggle Inline Blame`            | Show or hide current-line blame                  |
 | `Change File Annotations...`     | Blame, heatmap, changes, or off                  |
@@ -123,6 +157,7 @@ most common entry points:
 | `refhaven.lineHover.enabled`      | `true`  | Rich local hover for any file line    |
 | `refhaven.fileAnnotations.mode`   | `off`   | Whole-file blame or heatmap mode      |
 | `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
+| `refhaven.gitLab.approvedOrigins` | `[]`    | Exact GitLab browser origins allowed  |
 
 ## Development
 
@@ -143,12 +178,13 @@ extension into your running VS Code via the `code` CLI.
 
 ## Security
 
-The installed extension has no runtime dependencies or networking code. Every
-Git process blocks transports and lazy-fetch, disables prompts, tracing,
-fsmonitor, external diff, and text conversion helpers, and runs without a
-shell. Missing partial-clone objects fail locally instead of being fetched.
-See `SECURITY.md` in the extension package for the complete guarantee and trust
-boundaries.
+The installed extension has no runtime dependencies, HTTP client, telemetry,
+or background networking. Every Git process blocks transports and lazy-fetch,
+disables prompts, tracing, fsmonitor, external diff, and text conversion
+helpers, and runs without a shell. The only remote-aware behavior is an
+explicit `openExternal` handoff of a validated URL to an exact approved GitLab
+origin. See `SECURITY.md` in the extension package for the complete guarantee
+and trust boundaries.
 
 Documentation lives in the `docs/` folder: `PRODUCT.md` (product definition),
 `ARCHITECTURE.md` (layers and components), `GIT-SEMANTICS.md` (normative Git

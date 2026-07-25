@@ -2,15 +2,22 @@ import * as vscode from "vscode";
 
 import type { CommitSearchKind } from "../domain/commitDetails";
 import type { CommitInfo } from "../domain/comparisonResult";
-import { discoverRepositories, searchCommits } from "../infrastructure/git/GitCli";
+import {
+  discoverRepositories,
+  listChangedFiles,
+  readCommitDetails,
+  searchCommits,
+} from "../infrastructure/git/GitCli";
 import { pickRepository } from "../ui/pickers/comparisonPickers";
 import {
   COMMIT_DETAILS_FOCUS_COMMAND,
+  type DetailNode,
   type CommitDetailsTreeNode,
   type CommitDetailsTreeProvider,
 } from "../ui/tree/CommitDetailsTreeProvider";
 import { formatRelativeTime } from "../ui/format";
 import type { Logger } from "./Logger";
+import type { ComparisonController } from "./ComparisonController";
 
 interface SearchModeItem extends vscode.QuickPickItem {
   readonly searchKind: CommitSearchKind;
@@ -20,6 +27,7 @@ export class CommitDetailsController {
   public constructor(
     private readonly treeProvider: CommitDetailsTreeProvider,
     private readonly treeView: vscode.TreeView<CommitDetailsTreeNode>,
+    private readonly comparisonController: ComparisonController,
     private readonly logger: Logger,
   ) {}
 
@@ -28,6 +36,49 @@ export class CommitDetailsController {
     this.treeView.description = commit.sha.slice(0, 8);
     await vscode.commands.executeCommand(COMMIT_DETAILS_FOCUS_COMMAND);
     this.logger.info("Opened commit details", { operation: "showCommitDetails" });
+  }
+
+  public async copyDetail(node: DetailNode): Promise<void> {
+    await vscode.env.clipboard.writeText(node.copyValue);
+    void vscode.window.showInformationMessage(`${node.label} copied to the clipboard.`);
+  }
+
+  public async openParent(node: DetailNode): Promise<void> {
+    if (!node.parentSha) throw new Error("Select a parent commit first.");
+    const details = await readCommitDetails(node.repositoryRoot, node.parentSha);
+    await this.show(node.repositoryRoot, details.commit);
+  }
+
+  public async compareWithParent(node: DetailNode): Promise<void> {
+    if (!node.parentSha) throw new Error("Select a parent commit first.");
+    const files = await listChangedFiles(node.repositoryRoot, node.parentSha, node.commitSha);
+    if (files.length === 0) {
+      void vscode.window.showInformationMessage(
+        "This commit has no changes relative to the parent.",
+      );
+      return;
+    }
+    const selected = await vscode.window.showQuickPick(
+      files.map((file) => ({
+        description: file.status,
+        file,
+        label: file.newPath,
+      })),
+      {
+        placeHolder: "Select a changed file to compare with the parent",
+        title: "RefHaven: Compare Commit with Parent",
+      },
+    );
+    if (!selected) return;
+    await this.comparisonController.openFileDiff(
+      {
+        fromSha: node.parentSha,
+        label: `${node.commitSha.slice(0, 8)} relative to ${node.parentSha.slice(0, 8)}`,
+        repositoryRootPath: node.repositoryRoot,
+        toSha: node.commitSha,
+      },
+      selected.file,
+    );
   }
 
   public async search(): Promise<void> {

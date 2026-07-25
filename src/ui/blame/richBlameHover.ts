@@ -14,6 +14,7 @@ export const RICH_BLAME_HOVER_COMMANDS: readonly string[] = [
   COMMAND_IDS.copyCommitMessage,
   COMMAND_IDS.copyCommitSha,
   COMMAND_IDS.openFileAtRevision,
+  COMMAND_IDS.openGitLabFile,
   COMMAND_IDS.openLineDiff,
   COMMAND_IDS.showCommitDetails,
   COMMAND_IDS.showFileHistory,
@@ -102,6 +103,12 @@ function secondaryActions(data: RichLineHover, commitNode: object): string {
     ]),
     link("Copy SHA", COMMAND_IDS.copyCommitSha, [commitNode]),
     link("Copy Message", COMMAND_IDS.copyCommitMessage, [commitNode]),
+    link("Open on GitLab", COMMAND_IDS.openGitLabFile, [
+      data.repositoryRoot,
+      data.blame.sha,
+      data.blame.path,
+      data.blame.originalLineNumber ?? data.lineNumber,
+    ]),
   ].join(" · ");
 }
 

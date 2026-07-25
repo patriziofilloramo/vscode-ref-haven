@@ -29,6 +29,24 @@ export class StashController {
     void vscode.window.showInformationMessage("Stash message copied to the clipboard.");
   }
 
+  public async copyStashSha(stash: StashEntry): Promise<void> {
+    await vscode.env.clipboard.writeText(stash.sha);
+    void vscode.window.showInformationMessage("Stash SHA copied to the clipboard.");
+  }
+
+  public async changeFilter(): Promise<void> {
+    const filter = await vscode.window.showInputBox({
+      ignoreFocusOut: true,
+      placeHolder: "Message, branch, selector, or SHA",
+      prompt: "Leave empty to show every stash",
+      title: "RefHaven: Filter Stashes",
+      value: this.treeProvider.getFilter(),
+      validateInput: (value) => (value.length > 256 ? "Filter is too long." : undefined),
+    });
+    if (filter === undefined) return;
+    this.treeProvider.setFilter(filter);
+  }
+
   public async stashFile(repositoryRoot: string, filePath: string, message: string): Promise<void> {
     const stashSha = await vscode.window.withProgress(
       {

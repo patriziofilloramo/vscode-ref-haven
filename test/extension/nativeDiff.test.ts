@@ -10,13 +10,18 @@ import { calculateComparison } from "../../src/application/ComparisonEngine";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
 import {
   blameFile,
+  fileExistsAtRevision,
+  listBranchDetails,
   listChangedLineRanges,
   listFileHistory,
+  listGitRemoteUrls,
   listLineHistory,
+  listRecentCommits,
   listWorkingTreeFileChanges,
   listWorktrees,
   readCommitDiffPreview,
   readCommitDetails,
+  readWorktreeState,
   searchCommits,
 } from "../../src/infrastructure/git/GitCli";
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
@@ -39,6 +44,7 @@ suite("native branch diff", () => {
     git("init", "--initial-branch=main");
     git("config", "user.name", "RefHaven Tests");
     git("config", "user.email", "refhaven@example.invalid");
+    git("remote", "add", "origin", "git@gitlab.example.invalid:group/project.git");
     writeFileSync(join(repositoryRoot, "modified.txt"), "before\n", "utf8");
     writeFileSync(join(repositoryRoot, "deleted.txt"), "deleted\n", "utf8");
     writeFileSync(join(repositoryRoot, "rename-old.txt"), "renamed\n", "utf8");
@@ -222,6 +228,44 @@ suite("native branch diff", () => {
     assert.ok(worktree);
     assert.equal(worktree.branchFullName, "refs/heads/feature/native-diff");
     assert.equal(worktree.detached, false);
+    assert.deepEqual(await readWorktreeState(repositoryRoot), {
+      changedPaths: 0,
+      conflicted: 0,
+      staged: 0,
+      unstaged: 0,
+      untracked: 0,
+    });
+  });
+
+  test("loads enriched branch metadata and bounded local history", async () => {
+    const branches = await listBranchDetails(repositoryRoot);
+    const feature = branches.find(
+      ({ branch }) => branch.fullName === "refs/heads/feature/native-diff",
+    );
+    assert.ok(feature);
+    assert.equal(feature.latestCommit.subject, "feature changes");
+    assert.equal(feature.sha, git("rev-parse", "HEAD"));
+
+    const commits = await listRecentCommits(repositoryRoot, feature.branch.fullName, 1);
+    assert.deepEqual(
+      commits.map(({ subject }) => subject),
+      ["feature changes"],
+    );
+  });
+
+  test("reads configured remote URLs without contacting them", async () => {
+    assert.deepEqual(await listGitRemoteUrls(repositoryRoot), [
+      {
+        name: "origin",
+        url: "git@gitlab.example.invalid:group/project.git",
+      },
+    ]);
+  });
+
+  test("verifies only blob paths available at an immutable local revision", async () => {
+    const head = git("rev-parse", "HEAD");
+    assert.equal(await fileExistsAtRevision(repositoryRoot, head, "modified.txt"), true);
+    assert.equal(await fileExistsAtRevision(repositoryRoot, head, "missing.txt"), false);
   });
 
   test("loads whole-file blame and changed line ranges locally", async () => {

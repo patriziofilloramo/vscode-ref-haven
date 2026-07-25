@@ -9,6 +9,7 @@ export const BLAME_HOVER_COMMANDS: readonly string[] = [
   COMMAND_IDS.copyCommitMessage,
   COMMAND_IDS.copyCommitSha,
   COMMAND_IDS.openFileAtRevision,
+  COMMAND_IDS.openGitLabFile,
 ];
 
 export function blameCommitInfo(blame: LineBlame): CommitInfo {
@@ -71,6 +72,14 @@ export function blameHoverMarkdown(
   const revisionArguments = encodeURIComponent(
     JSON.stringify([repositoryRootPath, blame.sha, blame.path]),
   );
+  const gitLabArguments = encodeURIComponent(
+    JSON.stringify([
+      repositoryRootPath,
+      blame.sha,
+      blame.path,
+      ...(blame.originalLineNumber === undefined ? [] : [blame.originalLineNumber]),
+    ]),
+  );
   return [
     `**${author}**, ${formatRelativeTime(blame.authorDate, nowMs)} (${new Date(blame.authorDate).toLocaleString()})`,
     escapeMarkdown(blame.summary),
@@ -79,6 +88,7 @@ export function blameHoverMarkdown(
       `[Copy SHA](command:${COMMAND_IDS.copyCommitSha}?${commitArguments})`,
       `[Copy Message](command:${COMMAND_IDS.copyCommitMessage}?${commitArguments})`,
       `[Open File at This Revision](command:${COMMAND_IDS.openFileAtRevision}?${revisionArguments})`,
+      `[Open on GitLab](command:${COMMAND_IDS.openGitLabFile}?${gitLabArguments})`,
     ].join(" · "),
   ].join("\n\n");
 }
