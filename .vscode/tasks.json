@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "compile",
+      "problemMatcher": "$tsc",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "label": "npm: compile"
+    },
+    {
+      "type": "npm",
+      "script": "package",
+      "problemMatcher": [],
+      "label": "npm: package"
+    },
+    {
+      "type": "process",
+      "command": "node",
+      "args": ["${workspaceFolder}/scripts/install-local.mjs"],
+      "dependsOrder": "sequence",
+      "dependsOn": "npm: package",
+      "problemMatcher": [],
+      "label": "Branch Compare: Install Local VSIX"
+    }
+  ]
+}

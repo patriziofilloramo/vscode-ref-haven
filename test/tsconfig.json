@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../.test-out",
+    "rootDir": "..",
+    "sourceMap": true,
+    "types": ["mocha", "node", "vscode"]
+  },
+  "include": ["../src/**/*.ts", "./**/*.ts"],
+  "exclude": ["../node_modules"]
+}

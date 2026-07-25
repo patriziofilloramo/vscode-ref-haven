@@ -1,0 +1,106 @@
+{
+  "name": "branch-compare",
+  "displayName": "Branch Compare",
+  "description": "Persistent, directional comparisons between Git branches.",
+  "version": "0.1.0",
+  "publisher": "local-development",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=20 <21",
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "SCM Providers"
+  ],
+  "activationEvents": [
+    "onView:branchCompare.comparisons",
+    "onCommand:branchCompare.newComparison",
+    "onCommand:branchCompare.compareCurrentBranch",
+    "onCommand:branchCompare.refreshAll"
+  ],
+  "main": "./dist/extension.js",
+  "files": [
+    "dist/**"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "branchCompare.newComparison",
+        "title": "New Comparison",
+        "category": "Branch Compare",
+        "icon": "$(add)"
+      },
+      {
+        "command": "branchCompare.compareCurrentBranch",
+        "title": "Compare Current Branch With...",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.refreshAll",
+        "title": "Refresh All Comparisons",
+        "category": "Branch Compare",
+        "icon": "$(refresh)"
+      }
+    ],
+    "views": {
+      "scm": [
+        {
+          "id": "branchCompare.comparisons",
+          "name": "Branch Comparisons"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "branchCompare.comparisons",
+        "contents": "No branch comparisons yet.\n[New Comparison](command:branchCompare.newComparison)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "branchCompare.newComparison",
+          "when": "view == branchCompare.comparisons",
+          "group": "navigation@1"
+        },
+        {
+          "command": "branchCompare.refreshAll",
+          "when": "view == branchCompare.comparisons",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist .test-out .vscode-test branch-compare-*.vsix",
+    "compile": "tsc -p tsconfig.json",
+    "compile:tests": "tsc -p test/tsconfig.json",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint src test scripts *.mjs --max-warnings 0",
+    "test": "npm run test:unit",
+    "test:unit": "npm run compile:tests && mocha --ui tdd \".test-out/test/unit/**/*.test.js\"",
+    "test:extension": "npm run compile && npm run compile:tests && vscode-test",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license --out branch-compare-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/mocha": "10.0.10",
+    "@types/node": "20.19.43",
+    "@types/vscode": "1.105.0",
+    "@vscode/test-cli": "0.0.11",
+    "@vscode/test-electron": "2.5.2",
+    "@vscode/vsce": "3.9.2",
+    "eslint": "10.7.0",
+    "mocha": "11.3.0",
+    "prettier": "3.9.5",
+    "rimraf": "6.0.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.64.0"
+  },
+  "overrides": {
+    "serialize-javascript": "7.0.5"
+  }
+}
