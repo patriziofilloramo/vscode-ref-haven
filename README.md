@@ -38,6 +38,28 @@ fix: prevent duplicates` — including in unsaved buffers.
   File at This Revision** actions; the same info lives in the status bar.
 - Toggle via the `RefHaven: Toggle Inline Blame` command or settings.
 
+### File and line history
+
+- The **File History** Source Control view follows the active file across
+  renames and opens each historical change in VS Code's native diff editor.
+- History commits support copy SHA/message and open-at-revision actions.
+- **Show Line History** traces the current selection locally with `git log -L`.
+
+### References and commit search
+
+- Comparisons support local/remote branches, tags, HEAD, typed revisions that
+  resolve locally, and the live Working Tree.
+- **Search Commits** finds local history by message, author, SHA, or changed
+  content and opens a native **Commit Details** view with metadata and files.
+
+### Branches and worktrees
+
+- Read-only **Branches** view for local and remote-tracking refs, with copy and
+  compare-with-current actions.
+- Read-only **Worktrees** view with branch/detached/lock state, path copy, and
+  open-in-new-window. RefHaven deliberately provides no repository-mutating
+  branch or worktree commands.
+
 ### Everywhere
 
 - Right-click any file for **Open File**, **Copy Path**, **Copy Relative
@@ -56,6 +78,7 @@ most common entry points:
 | `New Comparison`                 | Pick a repository, target, and base branch       |
 | `Compare Current Branch With...` | Compare the checked-out branch against a base    |
 | `Change Comparison Mode...`      | Switch between three-dot and two-dot diffs       |
+| `Search Commits...`              | Search commits already available locally         |
 | `Open File at Revision...`       | Open the active file at a chosen branch revision |
 | `Toggle Inline Blame`            | Show or hide current-line blame                  |
 

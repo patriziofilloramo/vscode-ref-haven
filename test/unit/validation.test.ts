@@ -9,6 +9,21 @@ const SHA = "a".repeat(40);
 suite("domain boundary validation", () => {
   test("accepts a complete saved comparison", () => {
     assert.equal(isSavedComparisonV1(createComparison()), true);
+    assert.equal(
+      isSavedComparisonV1({
+        ...createComparison(),
+        mode: "workingTree",
+        targetRef: { displayName: "Working Tree", fullName: "WORKTREE", kind: "workingTree" },
+      }),
+      true,
+    );
+    assert.equal(
+      isSavedComparisonV1({
+        ...createComparison(),
+        targetRef: { displayName: "v1", fullName: "refs/tags/v1", kind: "tag" },
+      }),
+      true,
+    );
   });
 
   test("rejects invalid modes, refs, roots, timestamps, and ordering", () => {
@@ -22,6 +37,11 @@ suite("domain boundary validation", () => {
       { ...valid, targetRef: { ...valid.targetRef, fullName: "refs/heads/../secret" } },
       { ...valid, targetRef: { ...valid.targetRef, fullName: "refs/heads/feature.lock" } },
       { ...valid, targetRef: { ...valid.targetRef, fullName: "refs/heads//feature" } },
+      {
+        ...valid,
+        mode: "workingTree",
+        targetRef: { displayName: "feature", fullName: "refs/heads/feature", kind: "localBranch" },
+      },
     ];
     for (const candidate of invalid) assert.equal(isSavedComparisonV1(candidate), false);
   });

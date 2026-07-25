@@ -53,29 +53,35 @@ tests, and packages before it merges to `master`.
   swap or a mode switch. Outcome of investigating a "0 files changed" report
   that was correct three-dot semantics, not a defect.
 
-## Planned
-
-### Batch 2 — History
+### Batch 2 — History (completed 2026-07-15)
 
 - File History view for the active file (`git log --follow`), with per-file
   diffs, open-at-revision, and copy actions.
 - Line History for the current selection (`git log -L`).
 
-### Batch 3 — References and search
+### Batch 3 — References and search (completed 2026-07-15)
 
-- Compare arbitrary references: tags, HEAD, and typed revisions in the
-  comparison pickers.
-- Compare-with-working-tree mode.
-- Commit search quickpick by message, author, SHA, or changed content
-  (`--grep`, `--author`, `-S`).
-- Commit details view (full message, metadata, files) from any commit node or
-  search result.
+- Compare tags, HEAD, typed locally resolvable revisions, and the live Working
+  Tree in addition to local and remote-tracking branches.
+- Commit search by message, author, SHA, or changed content, restricted to
+  objects already present in the local repository.
+- Native Commit Details view with full message, author/committer metadata,
+  parents, and expandable changed files.
 
-### Batch 4 — Repository management
+### Batch 4 — Repository navigation (completed 2026-07-15)
 
-- Branches view: locals and remotes with checkout, create, delete, and
-  compare-with-current context actions.
-- Worktrees view: list, add, remove, open in new window.
+- Read-only Branches view: local and remote-tracking branches with copy and
+  compare-with-current actions.
+- Read-only Worktrees view: local metadata, branch/detached/lock state, path
+  copy, and open in a new VS Code window.
+- Command arguments are revalidated against freshly enumerated repositories,
+  refs, and worktrees before they can open or persist anything.
+
+Checkout/create/delete branch and add/remove worktree operations are excluded:
+they mutate repositories and can execute repository-configured hooks or
+filters. RefHaven keeps the stronger local-only, read-only security boundary.
+
+## Planned
 
 ### Batch 5 — File annotations
 

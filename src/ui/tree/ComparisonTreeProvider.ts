@@ -387,7 +387,11 @@ function comparisonDescription(
     `↑${formatCount(result.aheadCount)} ↓${formatCount(result.behindCount)}`,
     pluralize(result.files.length, "file"),
     formatDiffStats(totals.additions, totals.deletions),
-    ...(comparison.mode === "tipToTip" ? ["tip-to-tip"] : []),
+    ...(comparison.mode === "tipToTip"
+      ? ["tip-to-tip"]
+      : comparison.mode === "workingTree"
+        ? ["working tree"]
+        : []),
   ].join(" · ");
 }
 
@@ -425,7 +429,11 @@ function comparisonTooltip(
   error: string | undefined,
 ): vscode.MarkdownString {
   const modeLabel =
-    comparison.mode === "branchChanges" ? "branch changes (three-dot)" : "tip to tip (two-dot)";
+    comparison.mode === "branchChanges"
+      ? "branch changes (three-dot)"
+      : comparison.mode === "tipToTip"
+        ? "tip to tip (two-dot)"
+        : "working tree";
   const lines = [
     `**${escapeMarkdown(comparison.targetRef.displayName)}** relative to **${escapeMarkdown(comparison.baseRef.displayName)}**`,
     `$(repo) ${escapeMarkdown(comparison.repository.label)} · ${modeLabel}`,

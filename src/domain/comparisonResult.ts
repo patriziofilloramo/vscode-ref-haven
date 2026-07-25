@@ -40,7 +40,8 @@ export interface ComparisonResult {
   readonly fromSha: string;
   readonly mergeBaseSha?: string;
   readonly targetSha: string;
-  readonly toSha: string;
+  /** Right-side revision; null represents the live working tree. */
+  readonly toSha: string | null;
 }
 
 export interface DiffTotals {

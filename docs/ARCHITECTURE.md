@@ -29,6 +29,7 @@ src/
   compositionRoot.ts       // manual dependency injection and wiring
   domain/                  // VS Code-free types and pure logic
     blame.ts
+    commitDetails.ts
     comparison.ts
     comparisonResult.ts
     fileDiffScope.ts
@@ -36,10 +37,13 @@ src/
     validation.ts
   application/             // orchestration; owns runtime state
     BlameController.ts
+    CommitDetailsController.ts
     ComparisonController.ts
     ComparisonEngine.ts
     ComparisonStore.ts
+    FileHistoryController.ts
     Logger.ts
+    RepositoryNavigationController.ts
     RepositoryWatcher.ts
     StashController.ts
   infrastructure/
@@ -48,9 +52,12 @@ src/
       blamePorcelain.ts
       branchRefs.ts
       commitLog.ts
+      commitDetails.ts
+      fileHistory.ts
       nameStatus.ts
       numstat.ts
       stashList.ts
+      worktreeList.ts
     logging/
       OutputChannelLogger.ts
   ui/
@@ -65,9 +72,13 @@ src/
     pickers/
       comparisonPickers.ts
     tree/
+      BranchesTreeProvider.ts
       ChangeDecorationProvider.ts
       ComparisonTreeProvider.ts
+      CommitDetailsTreeProvider.ts
+      FileHistoryTreeProvider.ts
       StashTreeProvider.ts
+      WorktreesTreeProvider.ts
       changeNodes.ts       // file/folder/message nodes shared by all trees
       fileTree.ts
 test/
@@ -134,7 +145,14 @@ Reads and atomically writes `refhaven.comparisons.v1` in `workspaceState`. It st
 
 ### ComparisonEngine
 
-Accepts a comparison specification and cancellation token, resolves both refs, computes counts and commit pages, selects the diff endpoints by mode, and combines name-status and numstat results. It returns a typed result and does not call VS Code UI APIs.
+Accepts a comparison specification and cancellation token, resolves both refs, computes counts and commit pages, selects the diff endpoints by mode, and combines name-status and numstat results. Working-tree comparisons keep the resolved base immutable while using the live file as the right diff side. It returns a typed result and does not call VS Code UI APIs.
+
+### CommitDetailsController and provider
+
+Commit search dispatches typed, bounded local Git queries by message, author,
+SHA, or changed content. Selecting a result loads full NUL-delimited metadata
+and changed files into a native tree; neither search results nor commit details
+are persisted.
 
 ### ComparisonController
 
@@ -168,6 +186,14 @@ Renames use the old path at the from-SHA and the new path at the to-SHA. Binary 
 
 The read-only stash view lists `git stash list` entries (parsed from a NUL-safe `--format`) per repository and expands each stash into its tracked file changes (first parent → stash commit). Mutating stash actions are excluded because Git may invoke repository-configured filters or merge drivers during them; those processes cannot be sandboxed portably.
 
+### Repository navigation
+
+The Branches and Worktrees providers expose only local metadata from
+`for-each-ref` and NUL-delimited `git worktree list --porcelain -z`. Actions
+copy identifiers, create a saved comparison, or ask VS Code to open an already
+enumerated worktree. Command inputs are re-enumerated before use. Branch and
+worktree mutation is intentionally absent.
+
 ### BlameController
 
 Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders a dimmed end-of-line decoration and a status-bar item; both carry a trusted-markdown hover whose fixed command links reuse existing copy/open commands. All Git-controlled Markdown is escaped before trust is enabled.
@@ -184,7 +210,8 @@ Disposables, cancellation sources, process handles, event subscriptions, and con
 
 ## Security and resource controls
 
-- Refs originate from Git enumeration, not arbitrary user text.
+- Enumerated refs originate from Git. Typed revisions are syntax-limited,
+  resolved locally, and canonicalized to an immutable SHA before persistence.
 - Git is never invoked through a shell or interpolated command string.
 - Revision paths are canonicalized, proven repository-relative, signed in URI components, and revalidated before use.
 - Output limits apply independently to stdout and stderr; timeouts are configurable from 1 to 300 seconds.

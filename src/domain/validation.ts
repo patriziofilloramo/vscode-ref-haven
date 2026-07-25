@@ -16,9 +16,14 @@ export function isBranchRef(value: unknown): value is BranchRef {
   const candidate = value as Partial<BranchRef>;
   return (
     isNonEmptyString(candidate.displayName) &&
-    isValidBranchFullName(candidate.fullName) &&
-    ((candidate.kind === "localBranch" && candidate.fullName.startsWith("refs/heads/")) ||
-      (candidate.kind === "remoteBranch" && candidate.fullName.startsWith("refs/remotes/")))
+    ((candidate.kind === "localBranch" && isValidNamedRef(candidate.fullName, "refs/heads/")) ||
+      (candidate.kind === "remoteBranch" &&
+        isValidNamedRef(candidate.fullName, "refs/remotes/") &&
+        !candidate.fullName.endsWith("/HEAD")) ||
+      (candidate.kind === "tag" && isValidNamedRef(candidate.fullName, "refs/tags/")) ||
+      (candidate.kind === "head" && candidate.fullName === "HEAD") ||
+      (candidate.kind === "revision" && isObjectId(candidate.fullName)) ||
+      (candidate.kind === "workingTree" && candidate.fullName === "WORKTREE"))
   );
 }
 
@@ -33,7 +38,9 @@ export function isSavedComparisonV1(value: unknown): value is SavedComparisonV1 
     Number.isSafeInteger(candidate.order) &&
     (candidate.order ?? -1) >= 0 &&
     typeof candidate.pinned === "boolean" &&
-    (candidate.mode === "branchChanges" || candidate.mode === "tipToTip") &&
+    (candidate.mode === "branchChanges" ||
+      candidate.mode === "tipToTip" ||
+      candidate.mode === "workingTree") &&
     isNonEmptyString(candidate.repository?.rootPath) &&
     isAbsolute(candidate.repository.rootPath) &&
     isNonEmptyString(candidate.repository.workspaceFolderUri) &&
@@ -41,7 +48,10 @@ export function isSavedComparisonV1(value: unknown): value is SavedComparisonV1 
     isNonEmptyString(candidate.repository.label) &&
     (candidate.customLabel === undefined || isNonEmptyString(candidate.customLabel)) &&
     isBranchRef(candidate.baseRef) &&
-    isBranchRef(candidate.targetRef)
+    isBranchRef(candidate.targetRef) &&
+    ((candidate.mode === "workingTree" && candidate.targetRef.kind === "workingTree") ||
+      (candidate.mode !== "workingTree" && candidate.targetRef.kind !== "workingTree")) &&
+    candidate.baseRef.kind !== "workingTree"
   );
 }
 
@@ -70,7 +80,7 @@ export function isFileDiffScope(value: unknown): value is FileDiffScope {
     isNonEmptyString(candidate.repositoryRootPath) &&
     isAbsolute(candidate.repositoryRootPath) &&
     (candidate.fromSha === null || isObjectId(candidate.fromSha)) &&
-    isObjectId(candidate.toSha)
+    (candidate.toSha === null || isObjectId(candidate.toSha))
   );
 }
 
@@ -93,14 +103,13 @@ function isOptionalPercentage(value: unknown): boolean {
   );
 }
 
-function isValidBranchFullName(value: unknown): value is string {
+function isValidNamedRef(value: unknown, prefix: string): value is string {
   if (!isNonEmptyString(value)) return false;
-  if (!value.startsWith("refs/heads/") && !value.startsWith("refs/remotes/")) return false;
-  const relativeName = value.replace(/^refs\/(?:heads|remotes)\//, "");
+  if (!value.startsWith(prefix)) return false;
+  const relativeName = value.slice(prefix.length);
   const segments = relativeName.split("/");
   return !(
     relativeName.length === 0 ||
-    (value.startsWith("refs/remotes/") && value.endsWith("/HEAD")) ||
     value.endsWith("/") ||
     value.endsWith(".") ||
     value.includes("..") ||

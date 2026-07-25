@@ -5,6 +5,7 @@ import {
   findMergeBase,
   listChangedFiles,
   listCommitRange,
+  listWorkingTreeChanges,
   resolveRef,
 } from "../infrastructure/git/GitCli";
 
@@ -33,7 +34,11 @@ async function calculateComparisonCore(
   const repositoryRoot = comparison.repository.rootPath;
   const [baseSha, targetSha] = await Promise.all([
     resolveRef(repositoryRoot, comparison.baseRef.fullName, signal),
-    resolveRef(repositoryRoot, comparison.targetRef.fullName, signal),
+    resolveRef(
+      repositoryRoot,
+      comparison.mode === "workingTree" ? "HEAD" : comparison.targetRef.fullName,
+      signal,
+    ),
   ]);
 
   const mergeBaseSha =
@@ -50,7 +55,9 @@ async function calculateComparisonCore(
   if (!fromSha) throw new Error("Could not determine the comparison start revision.");
 
   const [files, counts, aheadCommits, behindCommits] = await Promise.all([
-    listChangedFiles(repositoryRoot, fromSha, targetSha, signal),
+    comparison.mode === "workingTree"
+      ? listWorkingTreeChanges(repositoryRoot, fromSha, signal)
+      : listChangedFiles(repositoryRoot, fromSha, targetSha, signal),
     countAheadBehind(repositoryRoot, baseSha, targetSha, signal),
     listCommitRange(repositoryRoot, baseSha, targetSha, COMMIT_PAGE_SIZE, signal),
     listCommitRange(repositoryRoot, targetSha, baseSha, COMMIT_PAGE_SIZE, signal),
@@ -68,6 +75,6 @@ async function calculateComparisonCore(
     fromSha,
     ...(mergeBaseSha ? { mergeBaseSha } : {}),
     targetSha,
-    toSha: targetSha,
+    toSha: comparison.mode === "workingTree" ? null : targetSha,
   };
 }

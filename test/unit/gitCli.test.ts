@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { parseBranchRefs } from "../../src/infrastructure/git/branchRefs";
+import { parseBranchRefs, parseComparisonRefs } from "../../src/infrastructure/git/branchRefs";
 
 suite("GitCli branch parsing", () => {
   test("parses local and remote branch refs from git for-each-ref output", () => {
@@ -47,5 +47,11 @@ suite("GitCli branch parsing", () => {
         },
       ],
     );
+  });
+
+  test("includes tags when parsing comparison references", () => {
+    assert.deepEqual(parseComparisonRefs("refs/tags/v1.0\tv1.0\n"), [
+      { displayName: "v1.0", fullName: "refs/tags/v1.0", kind: "tag" },
+    ]);
   });
 });

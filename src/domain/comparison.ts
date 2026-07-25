@@ -3,7 +3,7 @@ export const COMPARISON_STORAGE_KEY = "refhaven.comparisons.v1";
 export interface BranchRef {
   readonly displayName: string;
   readonly fullName: string;
-  readonly kind: "localBranch" | "remoteBranch";
+  readonly kind: "head" | "localBranch" | "remoteBranch" | "revision" | "tag" | "workingTree";
 }
 
 export interface RepositoryIdentity {
@@ -18,7 +18,7 @@ export interface SavedComparisonV1 {
   readonly createdAt: number;
   readonly customLabel?: string;
   readonly id: string;
-  readonly mode: "branchChanges" | "tipToTip";
+  readonly mode: "branchChanges" | "tipToTip" | "workingTree";
   readonly order: number;
   readonly pinned: boolean;
   readonly repository: RepositoryIdentity;

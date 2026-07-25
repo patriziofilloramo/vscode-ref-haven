@@ -46,12 +46,16 @@ suite("extension manifest", () => {
     assert.match(manifest.description, /entirely local/u);
   });
 
-  test("contributes the Branch Comparisons and Stashes views to Source Control", () => {
+  test("contributes the RefHaven views to Source Control", () => {
     const manifest = loadManifest();
 
     assert.deepEqual(manifest.contributes.views.scm, [
       { id: "refhaven.comparisons", name: "Branch Comparisons" },
       { id: "refhaven.stashes", name: "Stashes" },
+      { id: "refhaven.fileHistory", name: "File History" },
+      { id: "refhaven.commitDetails", name: "Commit Details" },
+      { id: "refhaven.branches", name: "Branches" },
+      { id: "refhaven.worktrees", name: "Worktrees" },
     ]);
     assert.deepEqual(
       manifest.activationEvents,
@@ -67,21 +71,32 @@ suite("extension manifest", () => {
     assert.deepEqual(commands, [
       "refhaven.changeComparisonMode",
       "refhaven.closeComparison",
+      "refhaven.compareBranchWithCurrent",
       "refhaven.compareCurrentBranch",
+      "refhaven.copyBranchName",
       "refhaven.copyCommitMessage",
       "refhaven.copyCommitSha",
       "refhaven.copyComparisonSummary",
       "refhaven.copyFilePath",
       "refhaven.copyRelativeFilePath",
       "refhaven.copyStashMessage",
+      "refhaven.copyWorktreePath",
       "refhaven.newComparison",
       "refhaven.openFile",
       "refhaven.openFileAtRevision",
+      "refhaven.openFileHistoryAtRevision",
+      "refhaven.openFileHistoryDiff",
+      "refhaven.openWorktree",
       "refhaven.pinComparison",
       "refhaven.refreshAll",
       "refhaven.refreshComparison",
+      "refhaven.refreshFileHistory",
+      "refhaven.refreshRepositoryNavigation",
       "refhaven.refreshStashes",
+      "refhaven.searchCommits",
+      "refhaven.showCommitDetails",
       "refhaven.showLineBlameActions",
+      "refhaven.showLineHistory",
       "refhaven.swapComparison",
       "refhaven.toggleInlineBlame",
       "refhaven.unpinComparison",

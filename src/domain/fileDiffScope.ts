@@ -8,5 +8,6 @@ export interface FileDiffScope {
   /** Suffix appended to diff editor titles, e.g. `feature relative to main`. */
   readonly label: string;
   readonly repositoryRootPath: string;
-  readonly toSha: string;
+  /** Right-side revision; null reads the current working-tree file. */
+  readonly toSha: string | null;
 }

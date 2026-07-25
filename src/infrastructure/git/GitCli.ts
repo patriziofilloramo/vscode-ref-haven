@@ -5,15 +5,21 @@ import * as vscode from "vscode";
 
 import type { LineBlame } from "../../domain/blame";
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
-import type { CommitInfo, FileChange } from "../../domain/comparisonResult";
+import type { CommitDetails, CommitSearchKind } from "../../domain/commitDetails";
+import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
+import type { FileHistoryEntry } from "../../domain/history";
+import { assertRepositoryRelativeGitPath, pathIdentityKey } from "../../domain/pathValidation";
 import type { StashEntry } from "../../domain/stash";
-import { pathIdentityKey } from "../../domain/pathValidation";
+import type { WorktreeInfo } from "../../domain/worktree";
 import { parseBlamePorcelain } from "./blamePorcelain";
-import { parseBranchRefs } from "./branchRefs";
+import { parseBranchRefs, parseComparisonRefs } from "./branchRefs";
 import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
+import { COMMIT_DETAILS_FORMAT, parseCommitDetails } from "./commitDetails";
+import { FILE_HISTORY_LOG_FORMAT, parseFileHistory } from "./fileHistory";
 import { parseNameStatusZ } from "./nameStatus";
 import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
 import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
+import { parseWorktreeList } from "./worktreeList";
 import { GitScheduler } from "./GitScheduler";
 import { buildLocalOnlyGitArguments, buildLocalOnlyGitEnvironment } from "./gitProcessPolicy";
 import { buildRepositoryIdentities } from "./repositoryDiscovery";
@@ -88,6 +94,40 @@ export async function listBranchRefs(
   return parseBranchRefs(stdout);
 }
 
+export async function listComparisonRefs(
+  repositoryRoot: string,
+  signal?: AbortSignal,
+): Promise<BranchRef[]> {
+  const stdout = await runGit(
+    repositoryRoot,
+    [
+      "for-each-ref",
+      "--format=%(refname)%09%(refname:short)",
+      "refs/heads",
+      "refs/remotes",
+      "refs/tags",
+    ],
+    signal,
+  ).catch((error: unknown) =>
+    failGitOperation(error, "Git could not list the references for this repository."),
+  );
+  return [{ displayName: "HEAD", fullName: "HEAD", kind: "head" }, ...parseComparisonRefs(stdout)];
+}
+
+export async function listWorktrees(
+  repositoryRoot: string,
+  signal?: AbortSignal,
+): Promise<WorktreeInfo[]> {
+  const stdout = await runGit(
+    repositoryRoot,
+    ["worktree", "list", "--porcelain", "-z"],
+    signal,
+  ).catch((error: unknown) =>
+    failGitOperation(error, "Git could not list the repository worktrees."),
+  );
+  return parseWorktreeList(stdout);
+}
+
 export async function readCurrentBranch(
   repositoryRoot: string,
   signal?: AbortSignal,
@@ -108,10 +148,10 @@ export async function resolveRef(
 ): Promise<string> {
   const stdout = await runGit(
     repositoryRoot,
-    ["rev-parse", "--verify", `${fullName}^{commit}`],
+    ["rev-parse", "--verify", "--end-of-options", `${fullName}^{commit}`],
     signal,
   ).catch((error: unknown) =>
-    failGitOperation(error, "A selected branch no longer exists or cannot be resolved."),
+    failGitOperation(error, "The selected reference no longer exists or cannot be resolved."),
   );
   return parseObjectId(stdout, `Could not resolve ${fullName}.`);
 }
@@ -171,6 +211,27 @@ export async function listChangedFiles(
   return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
 }
 
+export async function listWorkingTreeChanges(
+  repositoryRoot: string,
+  fromSha: string,
+  signal?: AbortSignal,
+): Promise<FileChange[]> {
+  const baseArgs = ["diff", "--no-ext-diff", "--no-textconv"];
+  const [nameStatusOutput, numstatOutput] = await Promise.all([
+    runGit(
+      repositoryRoot,
+      [...baseArgs, "--name-status", "-z", "--find-renames", fromSha, "--"],
+      signal,
+    ),
+    runGit(
+      repositoryRoot,
+      [...baseArgs, "--numstat", "-z", "--find-renames", fromSha, "--"],
+      signal,
+    ),
+  ]).catch((error: unknown) => failGitOperation(error, "Git could not compare the working tree."));
+  return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
+}
+
 export async function countAheadBehind(
   repositoryRoot: string,
   baseSha: string,
@@ -214,6 +275,114 @@ export async function listCommitRange(
   ).catch((error: unknown) =>
     failGitOperation(error, "Git could not list the commits between these branches."),
   );
+  return parseCommitLog(stdout);
+}
+
+export async function listFileHistory(
+  repositoryRoot: string,
+  filePath: string,
+  limit = COMMIT_PAGE_SIZE,
+  signal?: AbortSignal,
+): Promise<FileHistoryEntry[]> {
+  assertRepositoryRelativeGitPath(filePath);
+  const stdout = await runGit(
+    repositoryRoot,
+    [
+      "log",
+      "--follow",
+      `--max-count=${limit.toString()}`,
+      `--format=${FILE_HISTORY_LOG_FORMAT}`,
+      "--name-status",
+      "-z",
+      "--find-renames",
+      "--",
+      filePath,
+    ],
+    signal,
+  ).catch((error: unknown) => failGitOperation(error, "Git could not load the file history."));
+  return parseFileHistory(stdout);
+}
+
+export async function listLineHistory(
+  repositoryRoot: string,
+  filePath: string,
+  startLine: number,
+  endLine: number,
+  limit = COMMIT_PAGE_SIZE,
+  signal?: AbortSignal,
+): Promise<CommitInfo[]> {
+  assertRepositoryRelativeGitPath(filePath);
+  if (
+    !Number.isInteger(startLine) ||
+    !Number.isInteger(endLine) ||
+    startLine < 1 ||
+    endLine < startLine
+  ) {
+    throw new Error("The selected line range is invalid.");
+  }
+  const stdout = await runGit(
+    repositoryRoot,
+    [
+      "log",
+      "--no-patch",
+      `--max-count=${limit.toString()}`,
+      `--format=${COMMIT_LOG_FORMAT}`,
+      "-L",
+      `${startLine.toString()},${endLine.toString()}:${filePath}`,
+    ],
+    signal,
+  ).catch((error: unknown) => failGitOperation(error, "Git could not load the line history."));
+  return parseCommitLog(stdout);
+}
+
+export async function readCommitDetails(
+  repositoryRoot: string,
+  sha: string,
+  signal?: AbortSignal,
+): Promise<CommitDetails> {
+  const stdout = await runGit(
+    repositoryRoot,
+    ["show", "--no-patch", `--format=${COMMIT_DETAILS_FORMAT}`, sha],
+    signal,
+  ).catch((error: unknown) => failGitOperation(error, "Git could not load the commit details."));
+  return parseCommitDetails(stdout);
+}
+
+export async function searchCommits(
+  repositoryRoot: string,
+  kind: CommitSearchKind,
+  query: string,
+  limit = COMMIT_PAGE_SIZE,
+  signal?: AbortSignal,
+): Promise<CommitInfo[]> {
+  if (query.length === 0 || query.length > 512 || query.includes("\0")) {
+    throw new Error("The commit search query is invalid.");
+  }
+  if (kind === "sha") {
+    if (!/^[0-9a-f]{4,64}$/iu.test(query)) return [];
+    const sha = await resolveRef(repositoryRoot, query, signal).catch(() => null);
+    if (!sha) return [];
+    const details = await readCommitDetails(repositoryRoot, sha, signal);
+    return [details.commit];
+  }
+  const criterion =
+    kind === "message"
+      ? ["--regexp-ignore-case", `--grep=${query}`]
+      : kind === "author"
+        ? [`--author=${query}`]
+        : [`-S${query}`, "--pickaxe-all"];
+  const stdout = await runGit(
+    repositoryRoot,
+    [
+      "log",
+      "--all",
+      `--max-count=${limit.toString()}`,
+      `--format=${COMMIT_LOG_FORMAT}`,
+      ...criterion,
+      "--",
+    ],
+    signal,
+  ).catch((error: unknown) => failGitOperation(error, "Git could not search the local commits."));
   return parseCommitLog(stdout);
 }
 

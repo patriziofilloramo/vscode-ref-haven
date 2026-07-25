@@ -52,7 +52,11 @@ export class GitRevisionContentProvider implements vscode.TextDocumentContentPro
   }
 
   public async prepareTextDiff(left: vscode.Uri, right: vscode.Uri): Promise<void> {
-    await Promise.all([this.loadContent(left), this.loadContent(right)]);
+    await Promise.all(
+      [left, right]
+        .filter((uri) => uri.scheme === REVISION_DOCUMENT_SCHEME)
+        .map((uri) => this.loadContent(uri)),
+    );
   }
 
   public dispose(): void {

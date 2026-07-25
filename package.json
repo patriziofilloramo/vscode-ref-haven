@@ -33,6 +33,17 @@
         "category": "RefHaven"
       },
       {
+        "command": "refhaven.compareBranchWithCurrent",
+        "title": "Compare with Current Branch",
+        "category": "RefHaven",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "refhaven.copyBranchName",
+        "title": "Copy Branch Name",
+        "category": "RefHaven"
+      },
+      {
         "command": "refhaven.refreshAll",
         "title": "Refresh All Comparisons",
         "category": "RefHaven",
@@ -143,6 +154,58 @@
         "command": "refhaven.showLineBlameActions",
         "title": "Show Line Blame Actions",
         "category": "RefHaven"
+      },
+      {
+        "command": "refhaven.refreshFileHistory",
+        "title": "Refresh File History",
+        "category": "RefHaven",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "refhaven.showLineHistory",
+        "title": "Show Line History",
+        "category": "RefHaven"
+      },
+      {
+        "command": "refhaven.openFileHistoryDiff",
+        "title": "Open File Change",
+        "category": "RefHaven",
+        "icon": "$(compare-changes)"
+      },
+      {
+        "command": "refhaven.openFileHistoryAtRevision",
+        "title": "Open File at This Revision",
+        "category": "RefHaven",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "refhaven.searchCommits",
+        "title": "Search Commits",
+        "category": "RefHaven",
+        "icon": "$(search)"
+      },
+      {
+        "command": "refhaven.showCommitDetails",
+        "title": "Show Commit Details",
+        "category": "RefHaven",
+        "icon": "$(inspect)"
+      },
+      {
+        "command": "refhaven.refreshRepositoryNavigation",
+        "title": "Refresh Branches and Worktrees",
+        "category": "RefHaven",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "refhaven.openWorktree",
+        "title": "Open Worktree in New Window",
+        "category": "RefHaven",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "refhaven.copyWorktreePath",
+        "title": "Copy Worktree Path",
+        "category": "RefHaven"
       }
     ],
     "configuration": {
@@ -176,6 +239,22 @@
         {
           "id": "refhaven.stashes",
           "name": "Stashes"
+        },
+        {
+          "id": "refhaven.fileHistory",
+          "name": "File History"
+        },
+        {
+          "id": "refhaven.commitDetails",
+          "name": "Commit Details"
+        },
+        {
+          "id": "refhaven.branches",
+          "name": "Branches"
+        },
+        {
+          "id": "refhaven.worktrees",
+          "name": "Worktrees"
         }
       ]
     },
@@ -187,6 +266,22 @@
       {
         "view": "refhaven.stashes",
         "contents": "No stashes in this workspace."
+      },
+      {
+        "view": "refhaven.fileHistory",
+        "contents": "Open a tracked file to view its history."
+      },
+      {
+        "view": "refhaven.commitDetails",
+        "contents": "Select **Show Commit Details** from a commit or use [Search Commits](command:refhaven.searchCommits)."
+      },
+      {
+        "view": "refhaven.branches",
+        "contents": "No local or remote-tracking branches found."
+      },
+      {
+        "view": "refhaven.worktrees",
+        "contents": "No worktrees found."
       }
     ],
     "menus": {
@@ -242,6 +337,34 @@
         {
           "command": "refhaven.copyStashMessage",
           "when": "false"
+        },
+        {
+          "command": "refhaven.openFileHistoryDiff",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openFileHistoryAtRevision",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.showCommitDetails",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.compareBranchWithCurrent",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.copyBranchName",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openWorktree",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.copyWorktreePath",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -268,6 +391,16 @@
         {
           "command": "refhaven.refreshStashes",
           "when": "view == refhaven.stashes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "refhaven.refreshFileHistory",
+          "when": "view == refhaven.fileHistory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "refhaven.refreshRepositoryNavigation",
+          "when": "view == refhaven.branches || view == refhaven.worktrees",
           "group": "navigation@1"
         }
       ],
@@ -333,24 +466,91 @@
           "group": "2_copy@2"
         },
         {
+          "command": "refhaven.showCommitDetails",
+          "when": "view == refhaven.comparisons && viewItem == refhaven.commit",
+          "group": "1_actions@1"
+        },
+        {
           "command": "refhaven.openFile",
-          "when": "(view == refhaven.comparisons || view == refhaven.stashes) && viewItem =~ /^refhaven\\.file/",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.commitDetails) && viewItem =~ /^refhaven\\.file/",
           "group": "1_open@1"
         },
         {
           "command": "refhaven.copyFilePath",
-          "when": "(view == refhaven.comparisons || view == refhaven.stashes) && viewItem =~ /^refhaven\\.file/",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.commitDetails) && viewItem =~ /^refhaven\\.file/",
           "group": "2_copy@1"
         },
         {
           "command": "refhaven.copyRelativeFilePath",
-          "when": "(view == refhaven.comparisons || view == refhaven.stashes) && viewItem =~ /^refhaven\\.file/",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.commitDetails) && viewItem =~ /^refhaven\\.file/",
           "group": "2_copy@2"
         },
         {
           "command": "refhaven.copyStashMessage",
           "when": "view == refhaven.stashes && viewItem == refhaven.stash",
           "group": "2_copy@1"
+        },
+        {
+          "command": "refhaven.openFileHistoryDiff",
+          "when": "view == refhaven.fileHistory && viewItem == refhaven.fileHistoryCommit",
+          "group": "1_open@1"
+        },
+        {
+          "command": "refhaven.openFileHistoryAtRevision",
+          "when": "view == refhaven.fileHistory && viewItem == refhaven.fileHistoryCommit",
+          "group": "1_open@2"
+        },
+        {
+          "command": "refhaven.copyCommitSha",
+          "when": "view == refhaven.fileHistory && viewItem == refhaven.fileHistoryCommit",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "refhaven.copyCommitMessage",
+          "when": "view == refhaven.fileHistory && viewItem == refhaven.fileHistoryCommit",
+          "group": "2_copy@2"
+        },
+        {
+          "command": "refhaven.showCommitDetails",
+          "when": "view == refhaven.fileHistory && viewItem == refhaven.fileHistoryCommit",
+          "group": "1_open@3"
+        },
+        {
+          "command": "refhaven.compareBranchWithCurrent",
+          "when": "view == refhaven.branches && viewItem == refhaven.branch",
+          "group": "inline@1"
+        },
+        {
+          "command": "refhaven.compareBranchWithCurrent",
+          "when": "view == refhaven.branches && viewItem == refhaven.branch",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "refhaven.copyBranchName",
+          "when": "view == refhaven.branches && viewItem =~ /^refhaven\\.branch/",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "refhaven.openWorktree",
+          "when": "view == refhaven.worktrees && viewItem == refhaven.worktree",
+          "group": "inline@1"
+        },
+        {
+          "command": "refhaven.openWorktree",
+          "when": "view == refhaven.worktrees && viewItem == refhaven.worktree",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "refhaven.copyWorktreePath",
+          "when": "view == refhaven.worktrees && viewItem == refhaven.worktree",
+          "group": "2_copy@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "refhaven.showLineHistory",
+          "when": "resourceScheme == file",
+          "group": "navigation@20"
         }
       ]
     }

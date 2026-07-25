@@ -12,6 +12,8 @@ import {
   withMode,
   withPinned,
   withSwappedRefs,
+  type BranchRef,
+  type RepositoryIdentity,
   type SavedComparisonV1,
 } from "../domain/comparison";
 import {
@@ -27,7 +29,7 @@ import { formatDiffStats, pluralize } from "../ui/format";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
   findRepositoryRoot,
-  listBranchRefs,
+  listComparisonRefs,
   discoverRepositories,
   readCurrentBranch,
   resolveRef,
@@ -71,6 +73,46 @@ export class ComparisonController {
     await this.createComparison({ useCurrentBranchAsTarget: true });
   }
 
+  public async compareReferenceWithCurrent(
+    repository: RepositoryIdentity,
+    targetRef: BranchRef,
+  ): Promise<void> {
+    const expectedRoot = pathIdentityKey(repository.rootPath);
+    const canonicalRepository = (await discoverRepositories()).find(
+      ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
+    );
+    if (!canonicalRepository) {
+      throw new Error("The selected repository is not part of the current workspace.");
+    }
+    const currentBranchName = await readCurrentBranch(canonicalRepository.rootPath);
+    const refs = await listComparisonRefs(canonicalRepository.rootPath);
+    const canonicalTarget = refs.find(
+      (ref) => ref.fullName === targetRef.fullName && ref.kind === targetRef.kind,
+    );
+    if (!canonicalTarget || canonicalTarget.kind === "head") {
+      throw new Error("The selected branch is no longer available in this repository.");
+    }
+    const currentRef = currentBranchName
+      ? refs.find((ref) => ref.kind === "localBranch" && ref.displayName === currentBranchName)
+      : undefined;
+    if (!currentRef) {
+      void vscode.window.showWarningMessage(
+        "The current repository is detached or its current branch is unavailable.",
+      );
+      return;
+    }
+    if (currentRef.fullName === canonicalTarget.fullName) {
+      void vscode.window.showInformationMessage("This is already the current branch.");
+      return;
+    }
+    await this.saveAndRevealComparison(
+      canonicalRepository,
+      currentRef,
+      canonicalTarget,
+      "branchChanges",
+    );
+  }
+
   public refreshAll(): void {
     const comparisons = this.store.getAll();
     this.treeProvider.invalidateAllResults();
@@ -87,6 +129,10 @@ export class ComparisonController {
   }
 
   public async swapComparison(comparison: SavedComparisonV1): Promise<void> {
+    if (comparison.mode === "workingTree") {
+      void vscode.window.showInformationMessage("Working-tree comparisons cannot be swapped.");
+      return;
+    }
     const swapped = withSwappedRefs(comparison, Date.now());
     const duplicate = this.store
       .getAll()
@@ -112,6 +158,12 @@ export class ComparisonController {
    * target has no commits of its own, which branch-changes renders as empty.
    */
   public async changeComparisonMode(comparison: SavedComparisonV1): Promise<void> {
+    if (comparison.mode === "workingTree") {
+      void vscode.window.showInformationMessage(
+        "Working-tree comparisons have a fixed comparison mode.",
+      );
+      return;
+    }
     const currentSuffix = { description: "current mode" };
     const selected = await vscode.window.showQuickPick(
       [
@@ -276,7 +328,7 @@ export class ComparisonController {
     }
     const relativePath = relative(repositoryRoot, fsPath).replaceAll("\\", "/");
 
-    const branches = await listBranchRefs(repositoryRoot);
+    const branches = await listComparisonRefs(repositoryRoot);
     if (branches.length === 0) {
       void vscode.window.showWarningMessage("This repository has no branches to open from.");
       return;
@@ -286,6 +338,7 @@ export class ComparisonController {
       branches,
       `Select the revision of ${relativePath} to open`,
       currentBranchName,
+      repositoryRoot,
     );
     if (!ref) return;
 
@@ -325,7 +378,9 @@ export class ComparisonController {
     const right =
       file.status === "deleted"
         ? this.revisionProvider.createEmptyUri(file.newPath)
-        : this.revisionProvider.createRevisionUri(repositoryRoot, scope.toSha, file.newPath);
+        : scope.toSha === null
+          ? vscode.Uri.file(resolvePathWithinRepository(repositoryRoot, file.newPath))
+          : this.revisionProvider.createRevisionUri(repositoryRoot, scope.toSha, file.newPath);
 
     try {
       await this.revisionProvider.prepareTextDiff(left, right);
@@ -365,11 +420,9 @@ export class ComparisonController {
     const repository = await pickRepository(repositories);
     if (!repository) return;
 
-    const branches = await listBranchRefs(repository.rootPath);
+    const branches = await listComparisonRefs(repository.rootPath);
     if (branches.length < 2) {
-      void vscode.window.showWarningMessage(
-        "RefHaven needs at least two local or remote branches.",
-      );
+      void vscode.window.showWarningMessage("RefHaven needs at least two local references.");
       return;
     }
 
@@ -380,7 +433,13 @@ export class ComparisonController {
 
     const targetRef = options.useCurrentBranchAsTarget
       ? currentBranch
-      : await pickBranch(branches, "Select the branch to analyse", currentBranchName);
+      : await pickBranch(
+          branches,
+          "Select the reference to analyse",
+          currentBranchName,
+          repository.rootPath,
+          true,
+        );
     if (!targetRef) {
       if (options.useCurrentBranchAsTarget) {
         void vscode.window.showWarningMessage(
@@ -391,12 +450,26 @@ export class ComparisonController {
     }
 
     const baseRef = await pickBranch(
-      branches.filter((branch) => branch.fullName !== targetRef.fullName),
-      `Select the base branch for ${targetRef.displayName}`,
+      branches.filter(
+        (branch) => branch.fullName !== targetRef.fullName && branch.kind !== "workingTree",
+      ),
+      `Select the base reference for ${targetRef.displayName}`,
+      undefined,
+      repository.rootPath,
     );
     if (!baseRef) return;
 
-    const mode = "branchChanges" as const;
+    const mode =
+      targetRef.kind === "workingTree" ? ("workingTree" as const) : ("branchChanges" as const);
+    await this.saveAndRevealComparison(repository, baseRef, targetRef, mode);
+  }
+
+  private async saveAndRevealComparison(
+    repository: RepositoryIdentity,
+    baseRef: BranchRef,
+    targetRef: BranchRef,
+    mode: SavedComparisonV1["mode"],
+  ): Promise<void> {
     const existingComparison = this.store.findByIdentity({ baseRef, mode, repository, targetRef });
     if (existingComparison) {
       this.logger.info("Skipped duplicate comparison", { mode, operation: "newComparison" });

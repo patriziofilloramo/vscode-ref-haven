@@ -30,6 +30,14 @@ Windows is mandatory for process spawning, path, encoding, and filesystem edge c
 
 ## Milestone acceptance coverage
 
+History coverage includes delimiter-safe `--follow` parser tests, rename-aware
+File History integration, and real `git log -L` execution in the Extension Host.
+Reference/search coverage includes tag parsing, strict typed-ref validation,
+real Working Tree comparison, local commit search, and full commit-detail
+loading in the Extension Host.
+Repository-navigation coverage includes strict NUL-delimited worktree parser
+fixtures and real worktree enumeration in the Extension Host.
+
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | 0: decision/docs | documentation links, terminology and protected-decision review                         | five foundational documents present and internally consistent         |

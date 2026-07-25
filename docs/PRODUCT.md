@@ -31,14 +31,14 @@ interface SavedComparisonV1 {
   baseRef: {
     fullName: string;
     displayName: string;
-    kind: "localBranch" | "remoteBranch";
+    kind: "head" | "localBranch" | "remoteBranch" | "revision" | "tag";
   };
   targetRef: {
     fullName: string;
     displayName: string;
-    kind: "localBranch" | "remoteBranch";
+    kind: "head" | "localBranch" | "remoteBranch" | "revision" | "tag" | "workingTree";
   };
-  mode: "branchChanges" | "tipToTip";
+  mode: "branchChanges" | "tipToTip" | "workingTree";
   customLabel?: string;
   pinned: boolean;
   order: number;
@@ -79,6 +79,10 @@ The product has since grown toward a GitLens-style feature set while keeping the
 - **Read-only stash inspection:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees, native diffs, and copy-message. Mutation is excluded to prevent execution of repository-configured filters or merge drivers.
 - **File and commit context actions:** Open File, Copy Path, Copy Relative Path, Copy Commit SHA, and Copy Commit Message from any file or commit node.
 - **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `refhaven.inlineBlame.enabled` and `refhaven.statusBarBlame.enabled`.
+- **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
+- **Line history:** a selection-aware quickpick backed by `git log -L`, opening the selected historical revision locally.
+- **Flexible local references:** comparisons accept branches, tags, HEAD, typed locally resolvable revisions, and the live Working Tree; typed revisions are resolved and persisted as immutable SHAs.
+- **Commit search and details:** local history can be searched by message, author, SHA, or changed content, with full metadata and changed files shown in a native tree view.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
 - **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
 
@@ -95,7 +99,7 @@ The main flows are:
 1. **New Comparison:** choose a repository when needed, base branch, target branch, and mode; save, reveal, expand, and compute it.
 2. **Compare Current Branch With...:** use the current branch as target, ask only for a base, and default to `branchChanges`. Detached HEAD produces an explanatory message.
 
-Branch pickers group local and remote-tracking refs, display short names, and retain full ref names. Commit section labels state direction explicitly, for example `Commits only in feature/oauth`; the initial page size is 50. Changed files initially use a list layout. Tree layout is required before public beta but is not a first-milestone requirement.
+Reference pickers group special refs, local branches, remote-tracking refs, and tags. They display short names while retaining full names; typed revisions must resolve locally and are canonicalized to a SHA before persistence. Commit section labels state direction explicitly, for example `Commits only in feature/oauth`; the initial page size is 50.
 
 Inline actions are Refresh, Swap, Edit, Pin/Unpin, and Close. The context menu additionally supports changing mode, copying a summary, closing all unpinned comparisons, and closing comparisons for a repository.
 
@@ -107,7 +111,7 @@ Refresh is generation-based and cancellable. At most two Git processes run concu
 
 ## Privacy, safety, and limits
 
-The extension has no telemetry, runtime dependency, networking API, remote operation, or automatic fetch. Git is launched without a shell and with argument arrays. Every invocation blocks protocols and partial-clone lazy fetch, disables prompts and tracing, removes inherited Git redirection, and prevents configured fsmonitor/diff/textconv helpers. Missing local objects fail closed. Version 0.1 only accepts refs selected from Git-provided lists. The complete threat model is in [SECURITY.md](../SECURITY.md).
+The extension has no telemetry, runtime dependency, networking API, remote operation, or automatic fetch. Git is launched without a shell and with argument arrays. Every invocation blocks protocols and partial-clone lazy fetch, disables prompts and tracing, removes inherited Git redirection, and prevents configured fsmonitor/diff/textconv helpers. Missing local objects fail closed. Typed revisions pass strict syntax validation and must resolve through the transport-blocked local Git boundary before use. The complete threat model is in [SECURITY.md](../SECURITY.md).
 
 Logs contain command category and non-sensitive operational metadata. Metadata keys associated with credentials, environment, remote URLs, secrets, tokens, and file content are redacted; Git file content is never logged.
 

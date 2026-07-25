@@ -8,6 +8,13 @@ import * as vscode from "vscode";
 
 import { calculateComparison } from "../../src/application/ComparisonEngine";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
+import {
+  listFileHistory,
+  listLineHistory,
+  listWorktrees,
+  readCommitDetails,
+  searchCommits,
+} from "../../src/infrastructure/git/GitCli";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
 const EXTENSION_ID = "local-development.refhaven";
@@ -107,6 +114,70 @@ suite("native branch diff", () => {
       "after\n",
       "before\n",
     ]);
+  });
+
+  test("loads file and line history without leaving the repository", async () => {
+    const fileHistory = await listFileHistory(repositoryRoot, "rename-new.txt");
+    assert.equal(fileHistory.length, 2);
+    const [latestEntry, originalEntry] = fileHistory;
+    assert.ok(latestEntry);
+    assert.ok(originalEntry);
+    assert.equal(latestEntry.change.status, "renamed");
+    assert.equal(latestEntry.change.oldPath, "rename-old.txt");
+    assert.equal(originalEntry.change.newPath, "rename-old.txt");
+
+    const lineHistory = await listLineHistory(repositoryRoot, "modified.txt", 1, 1);
+    assert.deepEqual(
+      lineHistory.map(({ subject }) => subject),
+      ["feature changes", "base"],
+    );
+  });
+
+  test("compares a reference with the live working tree", async () => {
+    writeFileSync(join(repositoryRoot, "modified.txt"), "working tree\n", "utf8");
+    try {
+      const comparison: SavedComparisonV1 = {
+        ...createComparison(repositoryRoot),
+        baseRef: { displayName: "main", fullName: "refs/heads/main", kind: "localBranch" },
+        id: "working-tree-test",
+        mode: "workingTree",
+        targetRef: {
+          displayName: "Working Tree",
+          fullName: "WORKTREE",
+          kind: "workingTree",
+        },
+      };
+      const result = await calculateComparison(comparison);
+      assert.equal(result.toSha, null);
+      assert.ok(result.files.some(({ newPath }) => newPath === "modified.txt"));
+    } finally {
+      writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+    }
+  });
+
+  test("searches local commits and loads full commit details", async () => {
+    const byMessage = await searchCommits(repositoryRoot, "message", "feature changes");
+    assert.equal(byMessage[0]?.subject, "feature changes");
+    const byAuthor = await searchCommits(repositoryRoot, "author", "RefHaven Tests");
+    assert.ok(byAuthor.length >= 2);
+    const byContent = await searchCommits(repositoryRoot, "content", "added");
+    assert.equal(byContent[0]?.subject, "feature changes");
+    const bySha = await searchCommits(repositoryRoot, "sha", git("rev-parse", "HEAD").slice(0, 10));
+    assert.equal(bySha.length, 1);
+
+    const details = await readCommitDetails(repositoryRoot, git("rev-parse", "HEAD"));
+    assert.equal(details.commit.subject, "feature changes");
+    assert.equal(details.authorEmail, "refhaven@example.invalid");
+    assert.equal(details.parentShas.length, 1);
+  });
+
+  test("lists worktrees through local porcelain metadata", async () => {
+    const worktrees = await listWorktrees(repositoryRoot);
+    assert.equal(worktrees.length, 1);
+    const [worktree] = worktrees;
+    assert.ok(worktree);
+    assert.equal(worktree.branchFullName, "refs/heads/feature/native-diff");
+    assert.equal(worktree.detached, false);
   });
 
   function git(...args: string[]): string {

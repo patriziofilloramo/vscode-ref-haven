@@ -21,6 +21,12 @@ If a required object is not already available locally, the operation fails inste
 
 RefHaven performs no repository mutation. Stashes can be listed and inspected, but creating, applying, popping, or dropping them is intentionally outside scope: those Git operations can invoke repository-configured filters or merge drivers that cannot be sandboxed reliably across Windows, Linux, and macOS.
 
+For the same reason, the Branches and Worktrees views are read-only. They can
+copy metadata, create RefHaven comparison records, and ask VS Code to open an
+already enumerated local worktree, but they never checkout/create/delete a
+branch or add/remove a worktree. Command arguments are checked against fresh
+local Git enumeration before use.
+
 ## Stored and displayed data
 
 Only comparison specifications are persisted, in VS Code `workspaceState`. Computed history, diffs, blame results, and file contents are not persisted. Revision content is loaded on demand into a bounded in-memory cache and revision URIs are authenticated with a session-only HMAC.
