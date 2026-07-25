@@ -183,21 +183,33 @@ create, delete, or rewrite them.
 </details>
 
 <details>
-<summary><strong>🔗 Validated GitLab links</strong></summary>
+<summary><strong>🔗 Validated browser links</strong></summary>
 
 RefHaven can open a project, commit, comparison, branch revision, file, issue,
-or merge request on the repository's GitLab host. Project, commit, branch,
+or merge/pull request on the repository's own host. Project, commit, branch,
 comparison, and file actions can also copy the same fully validated URL
 without opening a browser.
 
-By default it derives a validated browser origin from the repository's local
-remote configuration. For strict organisation policy, configure an exact
-allowlist:
+GitHub, GitLab, Bitbucket, and Gitea/Forgejo/Codeberg are supported, each with
+its own URL grammar: the `/-/` scope segment, `/blob/` versus `/src/commit/`,
+`#L10-L12` versus `#lines-10:12`, and four different names for a merge or pull
+request. The grammar is detected from the remote's hostname alone — RefHaven
+never asks the host what it is.
 
-Run **RefHaven: Configure Restricted GitLab Origin...** from `Ctrl+Shift+P` for
-the fast path. Enter one exact origin, or submit an empty value to restore the
-zero-configuration behavior. The JSON setting remains available for advanced
-multi-origin policies:
+Detection is exact for the public hostnames and a heuristic for self-hosted
+instances, where it reads the leading label (`gitlab.company.example`) and
+falls back to GitLab. When that guess is wrong, set
+`refhaven.browserLinks.hostGrammar` explicitly. Where a correct link cannot be
+built — Azure DevOps, which addresses files through query parameters, or a
+Bitbucket comparison, which has no stable commit-to-commit address — RefHaven
+offers no link rather than one that opens an empty page.
+
+By default it derives a validated browser origin from the repository's local
+remote configuration. To enforce an exact allowlist instead, run
+**RefHaven: Configure Restricted Remote Origin...** from `Ctrl+Shift+P`. Enter
+one exact origin, or submit an empty value to restore the zero-configuration
+behavior. The JSON setting remains available for advanced multi-origin
+policies:
 
 ```json
 "refhaven.gitLab.approvedOrigins": [

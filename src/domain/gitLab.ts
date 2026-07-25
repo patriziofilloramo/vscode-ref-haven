@@ -3,9 +3,95 @@ import { requireGitObjectId } from "./gitObjectId";
 const WINDOWS_DRIVE_PATH = /^[a-z]:[\\/]/iu;
 const SCP_REMOTE_PATTERN = /^(?:[^@/\s]+@)?(\[[^\]]+\]|[^:/\s]+):(.+)$/u;
 
+/**
+ * Which browser URL grammar a host speaks. Detection is by hostname only —
+ * RefHaven never asks the host what it is. `azure` is recognised precisely so
+ * that its links can be refused: Azure DevOps addresses files through query
+ * parameters rather than a path, and a guessed URL would open a dead page.
+ */
+export type RemoteHostKind = "azure" | "bitbucket" | "gitea" | "github" | "gitlab";
+
 export interface GitLabBrowserOrigin {
+  readonly hostKind: RemoteHostKind;
   readonly hostname: string;
   readonly origin: string;
+}
+
+/** Human-readable name for a detected host grammar, for messages and tooltips. */
+export function describeHostKind(hostKind: RemoteHostKind): string {
+  switch (hostKind) {
+    case "azure":
+      return "Azure DevOps";
+    case "bitbucket":
+      return "Bitbucket";
+    case "gitea":
+      return "Gitea";
+    case "github":
+      return "GitHub";
+    case "gitlab":
+      return "GitLab";
+  }
+}
+
+/**
+ * Detects the URL grammar from the hostname alone.
+ *
+ * The exact public hostnames are certain. Self-hosted instances use arbitrary
+ * hostnames, so the product name is looked for as a leading label — the
+ * `gitlab.company.example` convention — which is a guess and can be wrong.
+ * GitLab remains the fallback because it is the most common self-hosted Git
+ * forge; a wrong guess is correctable through the host-grammar setting.
+ */
+export function detectRemoteHostKind(hostname: string): RemoteHostKind {
+  const normalized = normalizeHostname(hostname).replace(/^www\./u, "");
+  const known: Readonly<Record<string, RemoteHostKind>> = {
+    "bitbucket.org": "bitbucket",
+    "codeberg.org": "gitea",
+    "dev.azure.com": "azure",
+    "github.com": "github",
+    "gitlab.com": "gitlab",
+  };
+  const exact = known[normalized];
+  if (exact) return exact;
+  if (normalized.endsWith(".visualstudio.com")) return "azure";
+  const label = normalized.split(".")[0] ?? "";
+  if (label === "github") return "github";
+  if (label === "bitbucket") return "bitbucket";
+  if (label === "gitea" || label === "forgejo") return "gitea";
+  return "gitlab";
+}
+
+/**
+ * Applies an explicit host-grammar choice to resolved projects. Hostname
+ * detection is a heuristic for self-hosted instances, so the user must be able
+ * to state the answer outright rather than rely on the guess. `auto` keeps the
+ * detected grammar; an unrecognised value is ignored rather than trusted.
+ */
+export function applyHostGrammarOverride(
+  projects: readonly GitLabProject[],
+  override: unknown,
+): GitLabProject[] {
+  const kinds: readonly RemoteHostKind[] = ["azure", "bitbucket", "gitea", "github", "gitlab"];
+  const hostKind = kinds.find((kind) => kind === override);
+  if (!hostKind) return [...projects];
+  return projects.map((project) => ({
+    ...project,
+    browserOrigin: { ...project.browserOrigin, hostKind },
+  }));
+}
+
+/**
+ * Whether a host can address a target at all. A host that cannot is refused
+ * rather than approximated: no link is honest, a dead link is not.
+ */
+export function supportsBrowserTarget(
+  hostKind: RemoteHostKind,
+  kind: GitLabTarget["kind"],
+): boolean {
+  if (hostKind === "azure") return false;
+  // Bitbucket compares refs through a query-driven branch view with no stable
+  // commit-to-commit address, so comparison links are not offered there.
+  return !(hostKind === "bitbucket" && kind === "compare");
 }
 
 export interface GitRemoteUrl {
@@ -35,19 +121,19 @@ export type GitLabTarget =
   | { readonly kind: "tree"; readonly sha: string };
 
 export function parseApprovedGitLabOrigins(values: readonly unknown[]): GitLabBrowserOrigin[] {
-  if (values.length > 20) throw new Error("At most 20 GitLab origins may be approved.");
+  if (values.length > 20) throw new Error("At most 20 browser origins may be approved.");
   const origins = new Map<string, GitLabBrowserOrigin>();
   for (const [index, value] of values.entries()) {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error(
-        `Approved GitLab origin entry ${(index + 1).toString()} must be a string of at most 2048 characters.`,
+        `Approved browser origin entry ${(index + 1).toString()} must be a string of at most 2048 characters.`,
       );
     }
     let url: URL;
     try {
       url = new URL(value.trim());
     } catch {
-      throw new Error(`Approved GitLab origin entry ${(index + 1).toString()} is invalid.`);
+      throw new Error(`Approved browser origin entry ${(index + 1).toString()} is invalid.`);
     }
     if (
       (url.protocol !== "https:" && url.protocol !== "http:") ||
@@ -58,10 +144,11 @@ export function parseApprovedGitLabOrigins(values: readonly unknown[]): GitLabBr
       url.hash.length > 0
     ) {
       throw new Error(
-        `Approved GitLab origin entry ${(index + 1).toString()} must be an exact HTTP(S) origin.`,
+        `Approved browser origin entry ${(index + 1).toString()} must be an exact HTTP(S) origin.`,
       );
     }
     origins.set(url.origin, {
+      hostKind: detectRemoteHostKind(url.hostname),
       hostname: normalizeHostname(url.hostname),
       origin: url.origin,
     });
@@ -130,44 +217,26 @@ function sortProjects(projects: ReadonlyMap<string, GitLabProject>): GitLabProje
   );
 }
 
+/**
+ * Builds a browser URL in the path shape the detected host actually uses.
+ * GitHub and GitLab differ in the `/-/` scope segment, in how a merge or
+ * pull request is addressed, and in their line-range fragment.
+ */
 export function buildGitLabUrl(project: GitLabProject, target: GitLabTarget): string {
   const projectUrl = `${project.browserOrigin.origin}/${encodeProjectPath(project.projectPath)}`;
-  let value: string;
-  switch (target.kind) {
-    case "project":
-      value = projectUrl;
-      break;
-    case "commit":
-      value = `${projectUrl}/-/commit/${requireObjectId(target.sha)}`;
-      break;
-    case "tree":
-      value = `${projectUrl}/-/tree/${requireObjectId(target.sha)}`;
-      break;
-    case "compare":
-      value = `${projectUrl}/-/compare/${requireObjectId(target.baseSha)}...${requireObjectId(
-        target.targetSha,
-      )}`;
-      break;
-    case "issue":
-      value = `${projectUrl}/-/issues/${requirePositiveInteger(target.number)}`;
-      break;
-    case "mergeRequest":
-      value = `${projectUrl}/-/merge_requests/${requirePositiveInteger(target.number)}`;
-      break;
-    case "file": {
-      const path = encodeGitLabFilePath(target.filePath);
-      const fragment = lineFragment(target.startLine, target.endLine);
-      value = `${projectUrl}/-/blob/${requireObjectId(target.sha)}/${path}${fragment}`;
-      break;
-    }
+  const { hostKind } = project.browserOrigin;
+  if (!supportsBrowserTarget(hostKind, target.kind)) {
+    throw new Error(
+      `${describeHostKind(hostKind)} has no browser address RefHaven can build for this target.`,
+    );
   }
-  const url = new URL(value);
+  const url = new URL(`${projectUrl}${targetPath(hostKind, target)}`);
   if (
     url.origin !== project.browserOrigin.origin ||
     url.username.length > 0 ||
     url.password.length > 0
   ) {
-    throw new Error("RefHaven refused a GitLab URL outside the allowed origin.");
+    throw new Error("RefHaven refused a browser URL outside the allowed origin.");
   }
   return url.toString();
 }
@@ -295,32 +364,105 @@ function encodeGitLabFilePath(filePath: string): string {
         hasControlCharacter(segment),
     )
   ) {
-    throw new Error("The GitLab file path is invalid.");
+    throw new Error("The browser file path is invalid.");
   }
   return segments.map(encodeURIComponent).join("/");
 }
 
 function encodeProjectPath(projectPath: string): string {
   const segments = projectPath.split("/");
-  if (segments.length < 2) throw new Error("The GitLab project path is invalid.");
+  if (segments.length < 2) throw new Error("The browser project path is invalid.");
   return encodeGitLabFilePath(projectPath);
 }
 
-function lineFragment(startLine: number | undefined, endLine: number | undefined): string {
+/**
+ * The path and fragment a host appends to the project URL for a target.
+ *
+ * The forges agree on far less than they appear to: GitLab scopes every
+ * project route under `/-/`, Gitea addresses blobs as `/src/commit/`,
+ * Bitbucket as `/src/` with a `#lines-` fragment, and each names a
+ * pull or merge request differently.
+ */
+function targetPath(hostKind: RemoteHostKind, target: GitLabTarget): string {
+  const scope = hostKind === "gitlab" ? "/-" : "";
+  switch (target.kind) {
+    case "project":
+      return "";
+    case "commit": {
+      const sha = requireObjectId(target.sha);
+      return hostKind === "bitbucket" ? `/commits/${sha}` : `${scope}/commit/${sha}`;
+    }
+    case "tree": {
+      const sha = requireObjectId(target.sha);
+      switch (hostKind) {
+        case "bitbucket":
+          return `/src/${sha}`;
+        case "gitea":
+          return `/src/commit/${sha}`;
+        default:
+          return `${scope}/tree/${sha}`;
+      }
+    }
+    case "compare":
+      return `${scope}/compare/${requireObjectId(target.baseSha)}...${requireObjectId(
+        target.targetSha,
+      )}`;
+    case "issue":
+      return `${scope}/issues/${requirePositiveInteger(target.number)}`;
+    case "mergeRequest": {
+      const number = requirePositiveInteger(target.number);
+      switch (hostKind) {
+        case "bitbucket":
+          return `/pull-requests/${number}`;
+        case "gitea":
+          return `/pulls/${number}`;
+        case "gitlab":
+          return `/-/merge_requests/${number}`;
+        default:
+          return `/pull/${number}`;
+      }
+    }
+    case "file": {
+      const sha = requireObjectId(target.sha);
+      const path = encodeGitLabFilePath(target.filePath);
+      const fragment = lineFragment(target.startLine, target.endLine, hostKind);
+      switch (hostKind) {
+        case "bitbucket":
+          return `/src/${sha}/${path}${fragment}`;
+        case "gitea":
+          return `/src/commit/${sha}/${path}${fragment}`;
+        default:
+          return `${scope}/blob/${sha}/${path}${fragment}`;
+      }
+    }
+  }
+}
+
+/**
+ * Line ranges: GitHub and Gitea read `#L5-L9`, GitLab `#L5-9`, and Bitbucket
+ * abandons the convention entirely with `#lines-5:9`.
+ */
+function lineFragment(
+  startLine: number | undefined,
+  endLine: number | undefined,
+  hostKind: RemoteHostKind,
+): string {
   if (startLine === undefined && endLine === undefined) return "";
   const start = requirePositiveInteger(startLine ?? endLine);
   const end = requirePositiveInteger(endLine ?? startLine);
-  if (end < start) throw new Error("The GitLab line range is invalid.");
-  return end === start ? `#L${start}` : `#L${start}-${end}`;
+  if (end < start) throw new Error("The browser line range is invalid.");
+  if (hostKind === "bitbucket") return end === start ? `#lines-${start}` : `#lines-${start}:${end}`;
+  if (end === start) return `#L${start}`;
+  return hostKind === "gitlab" ? `#L${start}-${end}` : `#L${start}-L${end}`;
 }
 
 function requireObjectId(value: string): string {
-  return requireGitObjectId(value, "The GitLab revision is invalid.");
+  return requireGitObjectId(value, "The browser revision is invalid.");
 }
 
 function requirePositiveInteger(value: number | undefined): string {
   if (value === undefined || !Number.isSafeInteger(value) || value < 1) {
-    throw new Error("The GitLab reference number is invalid.");
+    throw new Error("The browser reference number is invalid.");
   }
   return value.toString();
 }

@@ -146,7 +146,7 @@ Process-control failures use stable codes for `commandTimedOut`, `commandCancell
 `GitProcess.ts` is the only child-process execution adapter. It launches `git`
 with `execFile`, argument arrays, and no shell. Every operation runs through
 `GitScheduler`, which enforces four global and two per-repository processes.
-The adapter owns cancellation, centrally configured timeouts, encoding, 5 MiB
+The adapter owns cancellation, centrally configured timeouts, encoding, 5 MiBxxxx
 stdout/stderr limits, stdin bounds, and stable process-control errors.
 
 The Git executable is resolved to an absolute path once and memoized:

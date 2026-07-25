@@ -88,7 +88,7 @@ suite("RefHaven extension", () => {
       )
       .join("\n");
 
-    assert.match(markdown, /Show Commit Details/u);
+    assert.match(markdown, /Commit Details/u);
     assert.match(markdown, /Diff Working Tree/u);
     assert.match(markdown, /File History/u);
   });

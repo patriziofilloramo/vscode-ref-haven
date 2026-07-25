@@ -99,17 +99,6 @@ export class ComparisonController {
       });
   }
 
-  public updateViewBadge(): void {
-    const unreviewedCount = this.treeProvider.getUnreviewedCount();
-    this.treeView.badge =
-      unreviewedCount > 0
-        ? {
-            tooltip: `${pluralize(unreviewedCount, "unreviewed file")} in loaded comparisons`,
-            value: unreviewedCount,
-          }
-        : undefined;
-  }
-
   public async newComparison(): Promise<void> {
     await this.createComparison({ useCurrentBranchAsTarget: false });
   }

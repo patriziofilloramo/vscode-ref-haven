@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
@@ -18,8 +18,14 @@ if (
   throw new Error("package.json does not contain a valid extension identity and version.");
 }
 
-const vsixPath = resolve(projectRoot, `${manifest.name}-${manifest.version}.vsix`);
-await access(vsixPath);
+const vsixPath = resolve(projectRoot, "build", `${manifest.name}-${manifest.version}.vsix`);
+try {
+  await access(vsixPath);
+} catch {
+  throw new Error(
+    `No package found at ${relative(projectRoot, vsixPath)}. Run "npm run package" first.`,
+  );
+}
 
 function runCodeCli(arguments_, stdio) {
   if (process.platform === "win32") {

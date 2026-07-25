@@ -85,9 +85,6 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     revisionProvider,
     reviewStore,
   );
-  const comparisonBadgeSubscription = treeProvider.onDidChangeTreeData(() =>
-    controller.updateViewBadge(),
-  );
   const stashController = new StashController(stashTreeProvider, logger);
   const repositoryNavigationController = new RepositoryNavigationController(
     branchesTreeProvider,
@@ -224,7 +221,6 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     revisionProvider,
     decorationProviderRegistration,
     lineHoverProviderRegistration,
-    comparisonBadgeSubscription,
     branchesTreeProvider,
     commitDetailsTreeProvider,
     inspectorTreeProvider,
@@ -246,7 +242,6 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     savedDocumentListener,
   );
   controller.initialize();
-  controller.updateViewBadge();
   runInBackground(
     stashController.initialize(),
     logger,

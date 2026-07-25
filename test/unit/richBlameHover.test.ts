@@ -48,7 +48,20 @@ function data(overrides: Partial<RichLineHover> = {}): RichLineHover {
     filePath: "src/example.ts",
     lineNumber: 12,
     parentSha: PARENT_SHA,
-    patchPreview: "@@ -1 +1 @@\n-old\n+new",
+    // Realistic `git show --unified=2` output: plumbing headers, then the
+    // hunk covering new lines 6-9. The blamed line is 8.
+    patchPreview: [
+      "diff --git a/src/example.ts b/src/example.ts",
+      "index 1111111..2222222 100644",
+      "--- a/src/example.ts",
+      "+++ b/src/example.ts",
+      "@@ -6,3 +6,4 @@ export function example() {",
+      " context six",
+      "-removed seven",
+      "+added seven",
+      "+added eight",
+      " context nine",
+    ].join("\n"),
     repositoryRoot: "C:\\repo",
     userName: null,
     ...overrides,
@@ -60,17 +73,39 @@ suite("rich blame hover", () => {
     const markdown = richBlameHoverMarkdown(data(), NOW);
 
     assert.match(markdown, /patrizio@example\\\.invalid/u);
-    assert.match(markdown, new RegExp(SHA, "u"));
     assert.match(markdown, /Originally `src\/old\\-example\\\.ts:8`/u);
     assert.match(markdown, /3 changed files/u);
-    assert.match(markdown, /\+4 −2 in this file/u);
-    assert.match(markdown, /Previous revision diff/u);
+    assert.match(markdown, /\+4 −2 here/u);
+    assert.match(markdown, /What changed here.*line 8/u);
+    assert.match(markdown, /\+added eight/u);
+    // The file plumbing repeats what the hover already says: it must not appear.
+    assert.doesNotMatch(markdown, /diff --git|index 1111111|@@/u);
     assert.match(markdown, /command:refhaven\.showCommitDetails\?/u);
     assert.match(markdown, /command:refhaven\.openLineDiff\?/u);
     assert.match(markdown, /command:refhaven\.compareFileWithRevision\?/u);
     assert.match(markdown, /command:refhaven\.showFileHistory\?/u);
     assert.match(markdown, /command:refhaven\.showLineHistory\?/u);
     assert.match(markdown, /command:refhaven\.openGitLabFile\?/u);
+  });
+
+  test("answers why before it shows metadata, and never spends a line on the full SHA", () => {
+    const markdown = richBlameHoverMarkdown(data(), NOW);
+    const sections = markdown.split("\n\n");
+
+    // Who and when, then the commit message, then the change itself.
+    assert.match(sections[0] ?? "", /^\*\*Patrizio Filloramo\*\* · .+ · `aaaaaaaa`$/u);
+    assert.match(sections[1] ?? "", /^\*\*feat: rich hover\*\*$/u);
+    assert.match(sections[2] ?? "", /^\$\(diff\) /u);
+    assert.match(sections[3] ?? "", /^````?diff\n/u);
+
+    const at = (pattern: RegExp): number => sections.findIndex((s) => pattern.test(s));
+    assert.ok(at(/^\$\(diff\)/u) < at(/^\$\(files\)/u), "the diff precedes the metadata");
+    assert.ok(at(/^\$\(files\)/u) < at(/^\$\(zap\)/u), "the metadata precedes the actions");
+    assert.ok(at(/^\$\(zap\)/u) < at(/^\$\(ellipsis\)/u), "primary actions precede secondary ones");
+
+    // The full SHA is reachable through "Copy SHA"; it does not earn a line.
+    assert.doesNotMatch(markdown, new RegExp(`\`${SHA}\``, "u"));
+    assert.doesNotMatch(markdown, /timezone/iu);
   });
 
   test("offers time-travel to the revision before the blamed commit", () => {
@@ -118,7 +153,7 @@ suite("rich blame hover", () => {
         authorName: "[Run](command:refhaven.openFileAtRevision?bad)",
         summary: "``` [Run](command:bad)",
       },
-      patchPreview: "```\n[Run](command:bad)\n```",
+      patchPreview: "@@ -1,2 +1,2 @@\n-old\n+``` [Run](command:bad)",
     });
 
     const markdown = richBlameHoverMarkdown(malicious, NOW);

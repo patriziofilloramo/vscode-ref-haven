@@ -4,6 +4,7 @@ export const EXTENSION_CONFIGURATION_SECTION = "refhaven";
 /** Relative setting names. Keep these aligned with `package.json`. */
 export const EXTENSION_SETTINGS = {
   approvedGitLabOrigins: "gitLab.approvedOrigins",
+  browserHostGrammar: "browserLinks.hostGrammar",
   fileAnnotationsMode: "fileAnnotations.mode",
   gitTimeoutSeconds: "git.timeoutSeconds",
   inlineBlameEnabled: "inlineBlame.enabled",
@@ -16,6 +17,7 @@ export type ExtensionSetting = (typeof EXTENSION_SETTINGS)[keyof typeof EXTENSIO
 /** Defaults shared by runtime code and manifest tests. */
 export const EXTENSION_SETTING_DEFAULTS = {
   approvedGitLabOrigins: [] as readonly string[],
+  browserHostGrammar: "auto",
   fileAnnotationsMode: "off",
   gitTimeoutSeconds: 30,
   inlineBlameEnabled: true,

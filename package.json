@@ -28,7 +28,8 @@
     "history",
     "stash",
     "privacy",
-    "gitlab"
+    "gitlab",
+    "github"
   ],
   "extensionKind": [
     "workspace"
@@ -253,7 +254,7 @@
       },
       {
         "command": "refhaven.copyGitLabComparisonUrl",
-        "title": "Copy Validated GitLab Comparison URL",
+        "title": "Copy Comparison URL",
         "category": "RefHaven"
       },
       {
@@ -307,7 +308,7 @@
       },
       {
         "command": "refhaven.copyGitLabCommitUrl",
-        "title": "Copy Validated GitLab Commit URL",
+        "title": "Copy Commit URL",
         "category": "RefHaven"
       },
       {
@@ -431,64 +432,64 @@
       },
       {
         "command": "refhaven.openGitLabProject",
-        "title": "Open Project on GitLab",
+        "title": "Open Project in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
         "command": "refhaven.copyGitLabProjectUrl",
-        "title": "Copy Validated GitLab Project URL",
+        "title": "Copy Project URL",
         "category": "RefHaven"
       },
       {
         "command": "refhaven.openGitLabCommit",
-        "title": "Open Commit on GitLab",
+        "title": "Open Commit in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
         "command": "refhaven.openGitLabBranch",
-        "title": "Open Branch Revision on GitLab",
+        "title": "Open Branch Revision in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
         "command": "refhaven.copyGitLabBranchUrl",
-        "title": "Copy Validated GitLab Branch URL",
+        "title": "Copy Branch URL",
         "category": "RefHaven"
       },
       {
         "command": "refhaven.openGitLabComparison",
-        "title": "Open Comparison on GitLab",
+        "title": "Open Comparison in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
         "command": "refhaven.openGitLabFile",
-        "title": "Open File on GitLab",
+        "title": "Open File in Browser",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
         "command": "refhaven.copyGitLabFileUrl",
-        "title": "Copy Validated GitLab File URL",
+        "title": "Copy File URL",
         "category": "RefHaven"
       },
       {
         "command": "refhaven.configureGitLabOrigin",
-        "title": "Configure Restricted GitLab Origin...",
+        "title": "Configure Restricted Remote Origin...",
         "category": "RefHaven",
         "icon": "$(shield)"
       },
       {
         "command": "refhaven.openGitLabLocalReference",
-        "title": "Open Local Reference on GitLab...",
+        "title": "Open Local Reference in Browser...",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
       {
         "command": "refhaven.openGitLabReference",
-        "title": "Open GitLab Issue or Merge Request...",
+        "title": "Open Issue or Merge Request in Browser...",
         "category": "RefHaven",
         "icon": "$(link-external)"
       },
@@ -567,7 +568,26 @@
           "default": [],
           "maxItems": 20,
           "uniqueItems": true,
-          "description": "Optional strict allowlist of exact HTTP(S) GitLab browser origins. Leave empty to use validated origins inferred from local repository remotes. Configure entries such as https://gitlab.company.example:8443 for policy enforcement or custom browser ports; paths and credentials are not allowed."
+          "description": "Optional strict allowlist of exact HTTP(S) browser origins. Leave empty to use validated origins inferred from local repository remotes. Configure entries such as https://gitlab.company.example:8443 for policy enforcement or custom browser ports; paths and credentials are not allowed."
+        },
+        "refhaven.browserLinks.hostGrammar": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "github",
+            "gitlab",
+            "bitbucket",
+            "gitea"
+          ],
+          "enumDescriptions": [
+            "Detect the URL shape from the remote hostname.",
+            "GitHub and GitHub Enterprise.",
+            "GitLab, including self-hosted instances.",
+            "Bitbucket.",
+            "Gitea, Forgejo, or Codeberg."
+          ],
+          "default": "auto",
+          "description": "Which URL shape browser links use. Detection reads the remote hostname only and never contacts the host, so a self-hosted instance on a custom hostname may be detected as GitLab; set this explicitly when links open the wrong page."
         },
         "refhaven.fileAnnotations.mode": {
           "type": "string",

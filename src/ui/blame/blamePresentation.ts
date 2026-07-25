@@ -84,7 +84,7 @@ export function blameHoverMarkdown(
       `[Copy SHA](command:${COMMAND_IDS.copyCommitSha}?${commitArguments})`,
       `[Copy Message](command:${COMMAND_IDS.copyCommitMessage}?${commitArguments})`,
       `[Open File at This Revision](command:${COMMAND_IDS.openFileAtRevision}?${revisionArguments})`,
-      `[Open on GitLab](command:${COMMAND_IDS.openGitLabFile}?${gitLabArguments})`,
+      `[Open in Browser](command:${COMMAND_IDS.openGitLabFile}?${gitLabArguments})`,
     ].join(" · "),
   ].join("\n\n");
 }

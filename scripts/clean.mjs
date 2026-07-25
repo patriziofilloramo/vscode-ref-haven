@@ -3,10 +3,11 @@ import { relative, resolve } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-const fixedTargets = ["dist", ".test-out", ".vscode-test"];
+const fixedTargets = ["build", "dist", ".test-out", ".vscode-test"];
 
 for (const target of fixedTargets) await removeProjectEntry(target);
 
+// Packages produced before the output moved into build/ may still sit here.
 for (const entry of await readdir(projectRoot, { withFileTypes: true })) {
   if (entry.isFile() && entry.name.endsWith(".vsix")) {
     await removeProjectEntry(entry.name);

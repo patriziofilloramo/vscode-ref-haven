@@ -10,9 +10,12 @@ import {
 import type { BranchRef, SavedComparisonV1 } from "../domain/comparison";
 import type { CommitInfo } from "../domain/comparisonResult";
 import {
+  applyHostGrammarOverride,
   buildGitLabUrl,
+  describeHostKind,
   parseApprovedGitLabOrigins,
   resolveGitLabProjects,
+  supportsBrowserTarget,
   type GitLabProject,
   type GitLabTarget,
 } from "../domain/gitLab";
@@ -37,7 +40,7 @@ export class GitLabController {
       EXTENSION_SETTING_DEFAULTS.approvedGitLabOrigins,
     );
     if (!Array.isArray(configured)) {
-      throw new Error("RefHaven GitLab approved origins must be an array.");
+      throw new Error("RefHaven approved browser origins must be an array.");
     }
     const value = await vscode.window.showInputBox({
       ignoreFocusOut: true,
@@ -45,8 +48,8 @@ export class GitLabController {
       prompt:
         configured.length > 1
           ? `${configured.length.toString()} origins are configured. Enter one exact origin to replace them, or leave empty to restore zero-config remote inference.`
-          : "Enter one exact GitLab browser origin to enforce. Leave empty to restore zero-config remote inference.",
-      title: "RefHaven: Configure Restricted GitLab Origin",
+          : "Enter one exact browser origin to enforce. Leave empty to restore zero-config remote inference.",
+      title: "RefHaven: Configure Restricted Remote Origin",
       validateInput: (input) => {
         if (input.trim().length === 0) return undefined;
         try {
@@ -73,9 +76,9 @@ export class GitLabController {
       target,
     );
     showTransientSuccess(
-      origin ? `Restricted GitLab origin set to ${origin}` : "Strict GitLab origin disabled",
+      origin ? `Restricted remote origin set to ${origin}` : "Strict remote origin disabled",
     );
-    this.logger.info("Updated restricted GitLab origin", {
+    this.logger.info("Updated restricted browser origin", {
       enabled: origins.length > 0,
       operation: "configureGitLabOrigin",
       scope: target === vscode.ConfigurationTarget.Workspace ? "workspace" : "global",
@@ -116,7 +119,7 @@ export class GitLabController {
     const repositoryRoot = await this.requireKnownRepository(comparison.repository.rootPath);
     if (comparison.targetRef.kind === "workingTree") {
       void vscode.window.showInformationMessage(
-        "Working Tree comparisons do not have an immutable GitLab revision.",
+        "Working Tree comparisons do not have an immutable remote revision.",
       );
       return;
     }
@@ -137,7 +140,7 @@ export class GitLabController {
     const sha = await resolveRef(target.repositoryRoot, "HEAD");
     if (!(await fileExistsAtRevision(target.repositoryRoot, sha, target.filePath))) {
       void vscode.window.showInformationMessage(
-        "This file is not available in HEAD and cannot be linked on GitLab yet.",
+        "This file is not available in HEAD and cannot be linked in the browser yet.",
       );
       return;
     }
@@ -163,7 +166,7 @@ export class GitLabController {
     const repositoryRoot = await this.requireKnownRepository(comparison.repository.rootPath);
     if (comparison.targetRef.kind === "workingTree") {
       void vscode.window.showInformationMessage(
-        "Working Tree comparisons do not have an immutable GitLab revision.",
+        "Working Tree comparisons do not have an immutable remote revision.",
       );
       return;
     }
@@ -191,7 +194,7 @@ export class GitLabController {
       {
         matchOnDescription: true,
         placeHolder: "Select a locally available branch, tag, or HEAD",
-        title: "RefHaven: Open Local Reference on GitLab",
+        title: "RefHaven: Open Local Reference in Browser",
       },
     );
     if (!selected) return;
@@ -205,7 +208,7 @@ export class GitLabController {
     const sha = await resolveRef(target.repositoryRoot, "HEAD");
     if (!(await fileExistsAtRevision(target.repositoryRoot, sha, target.filePath))) {
       void vscode.window.showInformationMessage(
-        "This file is not available in HEAD and cannot be opened on GitLab yet.",
+        "This file is not available in HEAD and cannot be opened in the browser yet.",
       );
       return;
     }
@@ -231,7 +234,7 @@ export class GitLabController {
   ): Promise<void> {
     const target = await resolveKnownFileTarget(repositoryRoot, filePath);
     if (!target) throw new Error("The selected repository file is not available.");
-    if (typeof sha !== "string") throw new Error("The selected GitLab revision is invalid.");
+    if (typeof sha !== "string") throw new Error("The selected remote revision is invalid.");
     const canonicalSha = await resolveRef(target.repositoryRoot, sha);
     if (!(await fileExistsAtRevision(target.repositoryRoot, canonicalSha, target.filePath))) {
       void vscode.window.showInformationMessage(
@@ -257,8 +260,8 @@ export class GitLabController {
     const value = await vscode.window.showInputBox({
       ignoreFocusOut: true,
       placeHolder: "#123 or !123",
-      prompt: "Enter a GitLab issue or merge request reference.",
-      title: "RefHaven: Open GitLab Reference",
+      prompt: "Enter an issue or merge/pull request reference.",
+      title: "RefHaven: Open Issue or Request Reference",
       validateInput: (input) =>
         /^[#!][1-9]\d*$/u.test(input.trim())
           ? undefined
@@ -268,7 +271,7 @@ export class GitLabController {
     const reference = /^([#!])([1-9]\d*)$/u.exec(value.trim());
     const number = Number.parseInt(reference?.[2] ?? "", 10);
     if (!reference || !Number.isSafeInteger(number)) {
-      throw new Error("The GitLab reference is invalid.");
+      throw new Error("The reference is invalid.");
     }
     await this.open(
       repositoryRoot,
@@ -284,7 +287,7 @@ export class GitLabController {
       typeof reference === "string" ? /^([#!])([1-9]\d{0,9})$/u.exec(reference.trim()) : null;
     const number = Number.parseInt(parsed?.[2] ?? "", 10);
     if (!parsed || !Number.isSafeInteger(number) || number < 1) {
-      throw new Error("The GitLab reference is invalid.");
+      throw new Error("The reference is invalid.");
     }
     await this.open(
       root,
@@ -301,11 +304,11 @@ export class GitLabController {
     const url = await this.resolveUrl(repositoryRoot, target);
     if (!url) return;
     const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
-    if (!opened) throw new Error("VS Code could not open the validated GitLab URL.");
+    if (!opened) throw new Error("VS Code could not open the validated browser URL.");
     // Non-blocking transparency: always show which origin was opened, which
     // matters most when the origin was inferred from the repository remote.
     showTransientSuccess(`Opened ${new URL(url).origin}`);
-    this.logger.info("Opened validated GitLab URL", { operation });
+    this.logger.info("Opened validated browser URL", { operation });
   }
 
   private async copy(
@@ -317,12 +320,22 @@ export class GitLabController {
     if (!url) return;
     await vscode.env.clipboard.writeText(url);
     showTransientSuccess(`Copied ${new URL(url).origin} URL`);
-    this.logger.info("Copied validated GitLab URL", { operation });
+    this.logger.info("Copied validated browser URL", { operation });
   }
 
   private async resolveUrl(repositoryRoot: string, target: GitLabTarget): Promise<string | null> {
     const project = await this.selectProject(repositoryRoot);
-    return project ? buildGitLabUrl(project, target) : null;
+    if (!project) return null;
+    const { hostKind } = project.browserOrigin;
+    // A host RefHaven cannot address correctly gets no link at all. Guessing
+    // produced valid-looking URLs that opened empty pages.
+    if (!supportsBrowserTarget(hostKind, target.kind)) {
+      void vscode.window.showInformationMessage(
+        `RefHaven cannot build a reliable ${describeHostKind(hostKind)} link for this target, so it will not open one.`,
+      );
+      return null;
+    }
+    return buildGitLabUrl(project, target);
   }
 
   private async selectProject(repositoryRoot: string): Promise<GitLabProject | null> {
@@ -331,17 +344,23 @@ export class GitLabController {
       EXTENSION_SETTING_DEFAULTS.approvedGitLabOrigins,
     );
     if (!Array.isArray(configured)) {
-      throw new Error("RefHaven GitLab approved origins must be an array.");
+      throw new Error("RefHaven approved browser origins must be an array.");
     }
     const approvedOrigins = parseApprovedGitLabOrigins(configured);
     const remotes = await listGitRemoteUrls(repositoryRoot);
     const hasExplicitAllowlist = approvedOrigins.length > 0;
-    const projects = resolveGitLabProjects(remotes, approvedOrigins);
+    const projects = applyHostGrammarOverride(
+      resolveGitLabProjects(remotes, approvedOrigins),
+      readExtensionSetting<unknown>(
+        EXTENSION_SETTINGS.browserHostGrammar,
+        EXTENSION_SETTING_DEFAULTS.browserHostGrammar,
+      ),
+    );
     if (projects.length === 0) {
       const action = await vscode.window.showInformationMessage(
         hasExplicitAllowlist
-          ? "No repository remote matches the configured approved GitLab origins."
-          : "No supported GitLab remote could provide a browser origin. Configure an exact origin for custom hosts or ports.",
+          ? "No repository remote matches the configured approved browser origins."
+          : "No supported remote could provide a browser origin. Configure an exact origin for custom hosts or ports.",
         "Configure Origins",
       );
       if (action === "Configure Origins") await this.openApprovedOriginsSetting();
@@ -358,8 +377,8 @@ export class GitLabController {
       {
         matchOnDescription: true,
         matchOnDetail: true,
-        placeHolder: "Select the approved GitLab project",
-        title: "RefHaven: Open on GitLab",
+        placeHolder: "Select the approved project",
+        title: "RefHaven: Open in Browser",
       },
     );
     return selected?.project ?? null;
@@ -388,7 +407,7 @@ export class GitLabController {
       })),
       {
         placeHolder: "Select a repository",
-        title: "RefHaven: GitLab Repository",
+        title: "RefHaven: Select Repository",
       },
     );
     return selected?.repository.rootPath ?? null;
@@ -433,7 +452,7 @@ function validatedLines(
     (endLine !== undefined &&
       (!Number.isSafeInteger(endLine) || (endLine as number) < (startLine as number)))
   ) {
-    throw new Error("The selected GitLab line range is invalid.");
+    throw new Error("The selected line range is invalid.");
   }
   return {
     ...(endLine === undefined ? {} : { endLine: endLine as number }),

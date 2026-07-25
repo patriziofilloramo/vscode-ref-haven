@@ -428,6 +428,7 @@ suite("native branch diff", () => {
     assert.deepEqual(resolveGitLabProjects(remotes, []), [
       {
         browserOrigin: {
+          hostKind: "gitlab",
           hostname: "gitlab.example.invalid",
           origin: "https://gitlab.example.invalid",
         },

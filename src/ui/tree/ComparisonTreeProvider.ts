@@ -220,15 +220,6 @@ export class ComparisonTreeProvider
     this.onDidChangeTreeDataEmitter.fire(node);
   }
 
-  public getUnreviewedCount(): number {
-    let count = 0;
-    for (const result of this.results.values()) {
-      const review = this.reviewSummary(result);
-      count += Math.max(0, review.totalCount - review.reviewedCount);
-    }
-    return count;
-  }
-
   public invalidateAllResults(): void {
     for (const comparison of this.comparisons) this.bumpGeneration(comparison.id);
     for (const id of this.results.keys()) this.staleResults.add(id);

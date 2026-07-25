@@ -122,7 +122,7 @@ suite("comparison tree lifecycle", () => {
     }
   });
 
-  test("shows loading, fresh, stale, and review-badge state explicitly", async () => {
+  test("shows loading, fresh, and stale state explicitly", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();
     let complete: ((result: ComparisonResult) => void) | undefined;
@@ -149,7 +149,6 @@ suite("comparison tree lifecycle", () => {
       );
       await pending;
       assert.match(String(provider.getTreeItem(root).description), /updated/u);
-      assert.equal(provider.getUnreviewedCount(), 1);
 
       provider.invalidateResult(comparison.id);
       assert.match(String(provider.getTreeItem(root).description), /Stale/u);
