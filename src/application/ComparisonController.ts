@@ -9,6 +9,7 @@ import type { ComparisonStore } from "./ComparisonStore";
 import {
   comparisonLabel,
   hasSameComparisonIdentity,
+  withMode,
   withPinned,
   withSwappedRefs,
   type SavedComparisonV1,
@@ -38,8 +39,8 @@ import {
   type GitRevisionContentProvider,
 } from "../ui/documents/GitRevisionContentProvider";
 
-const FILES_LAYOUT_STORAGE_KEY = "branchCompare.view.filesLayout";
-const FILES_LAYOUT_CONTEXT_KEY = "branchCompare.filesLayout";
+const FILES_LAYOUT_STORAGE_KEY = "refhaven.view.filesLayout";
+const FILES_LAYOUT_CONTEXT_KEY = "refhaven.filesLayout";
 
 export class ComparisonController {
   public constructor(
@@ -99,6 +100,57 @@ export class ComparisonController {
     this.logger.info("Swapped comparison direction", { operation: "swapComparison" });
   }
 
+  /**
+   * Switches between branch-changes (merge base → target) and tip-to-tip
+   * (base → target) diffs. Tip-to-tip shows the full difference even when the
+   * target has no commits of its own, which branch-changes renders as empty.
+   */
+  public async changeComparisonMode(comparison: SavedComparisonV1): Promise<void> {
+    const currentSuffix = { description: "current mode" };
+    const selected = await vscode.window.showQuickPick(
+      [
+        {
+          detail: "Only the changes the target branch made since the merge base.",
+          label: "$(git-merge) Branch changes (three-dot)",
+          mode: "branchChanges" as const,
+          ...(comparison.mode === "branchChanges" ? currentSuffix : {}),
+        },
+        {
+          detail: "Every difference between the two branch tips, in both directions.",
+          label: "$(git-compare) Tip to tip (two-dot)",
+          mode: "tipToTip" as const,
+          ...(comparison.mode === "tipToTip" ? currentSuffix : {}),
+        },
+      ],
+      {
+        placeHolder: `Select how ${comparisonLabel(comparison)} diffs its files`,
+        title: "RefHaven: Comparison Mode",
+      },
+    );
+    if (!selected || selected.mode === comparison.mode) return;
+
+    const updated = withMode(comparison, selected.mode, Date.now());
+    const duplicate = this.store
+      .getAll()
+      .find(
+        (candidate) =>
+          candidate.id !== comparison.id && hasSameComparisonIdentity(candidate, updated),
+      );
+    if (duplicate) {
+      void vscode.window.showInformationMessage(
+        `A ${selected.mode === "tipToTip" ? "tip-to-tip" : "branch-changes"} comparison for ${comparisonLabel(updated)} already exists.`,
+      );
+      return;
+    }
+    const comparisons = await this.store.replace(comparison.id, () => updated);
+    this.treeProvider.invalidateResult(comparison.id);
+    this.treeProvider.setComparisons(comparisons);
+    this.logger.info("Changed comparison mode", {
+      mode: selected.mode,
+      operation: "changeComparisonMode",
+    });
+  }
+
   public async setPinned(comparison: SavedComparisonV1, pinned: boolean): Promise<void> {
     const comparisons = await this.store.replace(comparison.id, (current) =>
       withPinned(current, pinned, Date.now()),
@@ -145,7 +197,7 @@ export class ComparisonController {
 
   public async openWorkingTreeFile(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
-      throw new Error("Branch Compare file selection is invalid.");
+      throw new Error("RefHaven file selection is invalid.");
     }
     if (file.status === "deleted") {
       void vscode.window.showInformationMessage(`${file.newPath} was deleted in this comparison.`);
@@ -168,7 +220,7 @@ export class ComparisonController {
 
   public async copyFilePath(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
-      throw new Error("Branch Compare file selection is invalid.");
+      throw new Error("RefHaven file selection is invalid.");
     }
     await vscode.env.clipboard.writeText(
       resolvePathWithinRepository(scope.repositoryRootPath, file.newPath),
@@ -178,7 +230,7 @@ export class ComparisonController {
 
   public async copyRelativeFilePath(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
-      throw new Error("Branch Compare file selection is invalid.");
+      throw new Error("RefHaven file selection is invalid.");
     }
     await vscode.env.clipboard.writeText(file.newPath);
     void vscode.window.showInformationMessage("Relative file path copied to the clipboard.");
@@ -255,7 +307,7 @@ export class ComparisonController {
 
   public async openFileDiff(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
-      throw new Error("Branch Compare file selection is invalid.");
+      throw new Error("RefHaven file selection is invalid.");
     }
 
     const repositoryRoot = scope.repositoryRootPath;
@@ -310,7 +362,7 @@ export class ComparisonController {
     const branches = await listBranchRefs(repository.rootPath);
     if (branches.length < 2) {
       void vscode.window.showWarningMessage(
-        "Branch Compare needs at least two local or remote branches.",
+        "RefHaven needs at least two local or remote branches.",
       );
       return;
     }

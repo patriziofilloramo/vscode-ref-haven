@@ -8,7 +8,7 @@ const fixedTargets = ["dist", ".test-out", ".vscode-test"];
 for (const target of fixedTargets) await removeProjectEntry(target);
 
 for (const entry of await readdir(projectRoot, { withFileTypes: true })) {
-  if (entry.isFile() && /^branch-compare-.*\.vsix$/u.test(entry.name)) {
+  if (entry.isFile() && entry.name.endsWith(".vsix")) {
     await removeProjectEntry(entry.name);
   }
 }

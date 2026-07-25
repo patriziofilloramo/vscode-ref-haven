@@ -23,8 +23,12 @@ interface PackageManifest {
     };
   };
   readonly dependencies?: Readonly<Record<string, string>>;
+  readonly description: string;
   readonly devDependencies: Readonly<Record<string, string>>;
+  readonly displayName: string;
   readonly files: readonly string[];
+  readonly name: string;
+  readonly publisher: string;
 }
 
 function loadManifest(): PackageManifest {
@@ -33,12 +37,21 @@ function loadManifest(): PackageManifest {
 }
 
 suite("extension manifest", () => {
+  test("declares the canonical RefHaven identity", () => {
+    const manifest = loadManifest();
+
+    assert.equal(manifest.name, "refhaven");
+    assert.equal(manifest.displayName, "RefHaven");
+    assert.equal(manifest.publisher, "local-development");
+    assert.match(manifest.description, /entirely local/u);
+  });
+
   test("contributes the Branch Comparisons and Stashes views to Source Control", () => {
     const manifest = loadManifest();
 
     assert.deepEqual(manifest.contributes.views.scm, [
-      { id: "branchCompare.comparisons", name: "Branch Comparisons" },
-      { id: "branchCompare.stashes", name: "Stashes" },
+      { id: "refhaven.comparisons", name: "Branch Comparisons" },
+      { id: "refhaven.stashes", name: "Stashes" },
     ]);
     assert.deepEqual(
       manifest.activationEvents,
@@ -52,28 +65,30 @@ suite("extension manifest", () => {
     const commands = manifest.contributes.commands.map(({ command }) => command).sort();
 
     assert.deepEqual(commands, [
-      "branchCompare.closeComparison",
-      "branchCompare.compareCurrentBranch",
-      "branchCompare.copyCommitMessage",
-      "branchCompare.copyCommitSha",
-      "branchCompare.copyComparisonSummary",
-      "branchCompare.copyFilePath",
-      "branchCompare.copyRelativeFilePath",
-      "branchCompare.copyStashMessage",
-      "branchCompare.newComparison",
-      "branchCompare.openFile",
-      "branchCompare.openFileAtRevision",
-      "branchCompare.pinComparison",
-      "branchCompare.refreshAll",
-      "branchCompare.refreshComparison",
-      "branchCompare.refreshStashes",
-      "branchCompare.showLineBlameActions",
-      "branchCompare.swapComparison",
-      "branchCompare.toggleInlineBlame",
-      "branchCompare.unpinComparison",
-      "branchCompare.viewFilesAsList",
-      "branchCompare.viewFilesAsTree",
+      "refhaven.changeComparisonMode",
+      "refhaven.closeComparison",
+      "refhaven.compareCurrentBranch",
+      "refhaven.copyCommitMessage",
+      "refhaven.copyCommitSha",
+      "refhaven.copyComparisonSummary",
+      "refhaven.copyFilePath",
+      "refhaven.copyRelativeFilePath",
+      "refhaven.copyStashMessage",
+      "refhaven.newComparison",
+      "refhaven.openFile",
+      "refhaven.openFileAtRevision",
+      "refhaven.pinComparison",
+      "refhaven.refreshAll",
+      "refhaven.refreshComparison",
+      "refhaven.refreshStashes",
+      "refhaven.showLineBlameActions",
+      "refhaven.swapComparison",
+      "refhaven.toggleInlineBlame",
+      "refhaven.unpinComparison",
+      "refhaven.viewFilesAsList",
+      "refhaven.viewFilesAsTree",
     ]);
+    assert.ok(commands.every((command) => command.startsWith("refhaven.")));
   });
 
   test("packages only compiled runtime files", () => {
@@ -94,7 +109,7 @@ suite("extension manifest", () => {
   });
 
   test("declares a bounded Git command timeout", () => {
-    const setting = manifestSetting(loadManifest(), "branchCompare.git.timeoutSeconds");
+    const setting = manifestSetting(loadManifest(), "refhaven.git.timeoutSeconds");
     assert.equal(setting.default, 30);
     assert.equal(setting.minimum, 1);
     assert.equal(setting.maximum, 300);

@@ -4,6 +4,7 @@ import {
   deduplicateComparisons,
   hasSameComparisonIdentity,
   sortComparisonsForDisplay,
+  withMode,
   withPinned,
   withSwappedRefs,
   type SavedComparisonV1,
@@ -73,6 +74,14 @@ suite("comparison helpers", () => {
     assert.equal(withPinned(createComparison({ id: "pin" }), true, 42).pinned, true);
   });
 
+  test("withMode switches the diff mode and bumps the update time", () => {
+    const changed = withMode(createComparison({ id: "mode" }), "tipToTip", 42);
+
+    assert.equal(changed.mode, "tipToTip");
+    assert.equal(changed.updatedAt, 42);
+    assert.equal(withMode(changed, "branchChanges", 43).mode, "branchChanges");
+  });
+
   test("sortComparisonsForDisplay lists pinned comparisons first, then by order", () => {
     const late = createComparison({ id: "late", order: 2 });
     const early = createComparison({ id: "early", mode: "tipToTip", order: 0 });
@@ -113,10 +122,10 @@ function createComparison(overrides: ComparisonOverrides): SavedComparisonV1 {
     order: overrides.order ?? 0,
     pinned: false,
     repository: {
-      label: "vscode-git-branch-compare",
+      label: "vscode-git-refhaven",
       relativeRepositoryPath: ".",
-      rootPath: overrides.rootPath ?? "P:/Projects/vscode-git-branch-compare",
-      workspaceFolderUri: "file:///p%3A/Projects/vscode-git-branch-compare",
+      rootPath: overrides.rootPath ?? "P:/Projects/vscode-git-refhaven",
+      workspaceFolderUri: "file:///p%3A/Projects/vscode-git-refhaven",
     },
     schemaVersion: 1,
     targetRef: {

@@ -1,4 +1,4 @@
-export const COMPARISON_STORAGE_KEY = "branchCompare.comparisons.v1";
+export const COMPARISON_STORAGE_KEY = "refhaven.comparisons.v1";
 
 export interface BranchRef {
   readonly displayName: string;
@@ -54,6 +54,14 @@ export function withPinned(
   now: number,
 ): SavedComparisonV1 {
   return { ...comparison, pinned, updatedAt: now };
+}
+
+export function withMode(
+  comparison: SavedComparisonV1,
+  mode: SavedComparisonV1["mode"],
+  now: number,
+): SavedComparisonV1 {
+  return { ...comparison, mode, updatedAt: now };
 }
 
 /** Pinned comparisons first, then by explicit order. */

@@ -24,7 +24,7 @@
       "dependsOrder": "sequence",
       "dependsOn": "npm: package",
       "problemMatcher": [],
-      "label": "Branch Compare: Install Local VSIX"
+      "label": "RefHaven: Install Local VSIX"
     }
   ]
 }

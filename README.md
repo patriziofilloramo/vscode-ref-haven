@@ -1,8 +1,10 @@
-# Branch Compare
+# RefHaven
 
-A Visual Studio Code extension for persistent, directional Git branch
-comparisons — growing toward a GitLens-style feature set with an entirely
-native UI (no webviews), no telemetry, and enforced local-only Git execution.
+**RefHaven for Git. Your refs stay home.**
+
+A private Visual Studio Code extension for persistent branch comparisons,
+history, blame, and stash inspection. It uses an entirely native UI (no
+webviews), has no telemetry, and enforces local-only Git execution.
 
 ## Features
 
@@ -14,6 +16,11 @@ native UI (no webviews), no telemetry, and enforced local-only Git execution.
   commit to see the files it changed and open each file's diff.
 - **Files changed** shows the merge-base diff as a flat list or compacted
   folder tree with status badges, `+added −deleted` stats, and rich tooltips.
+- Two diff modes per comparison (right-click → **Change Comparison Mode...**):
+  **branch changes** (three-dot: only what the target added since the merge
+  base) and **tip to tip** (two-dot: every difference between the branches).
+  A fully merged target legitimately shows `0 files changed` in branch-changes
+  mode — the view now explains why and suggests swapping or switching mode.
 - Every file opens in VS Code's native readonly diff editor.
 
 ### Stashes view
@@ -29,7 +36,7 @@ native UI (no webviews), no telemetry, and enforced local-only Git execution.
 fix: prevent duplicates` — including in unsaved buffers.
 - Hover for the full commit with **Copy SHA**, **Copy Message**, and **Open
   File at This Revision** actions; the same info lives in the status bar.
-- Toggle via the `Branch Compare: Toggle Inline Blame` command or settings.
+- Toggle via the `RefHaven: Toggle Inline Blame` command or settings.
 
 ### Everywhere
 
@@ -41,23 +48,24 @@ fix: prevent duplicates` — including in unsaved buffers.
 
 ## Commands
 
-Open the Command Palette and type `Branch Compare:` to see all commands. The
+Open the Command Palette and type `RefHaven:` to see all commands. The
 most common entry points:
 
 | Command                          | Description                                      |
 | -------------------------------- | ------------------------------------------------ |
 | `New Comparison`                 | Pick a repository, target, and base branch       |
 | `Compare Current Branch With...` | Compare the checked-out branch against a base    |
+| `Change Comparison Mode...`      | Switch between three-dot and two-dot diffs       |
 | `Open File at Revision...`       | Open the active file at a chosen branch revision |
 | `Toggle Inline Blame`            | Show or hide current-line blame                  |
 
 ## Settings
 
-| Setting                                | Default | Description                           |
-| -------------------------------------- | ------- | ------------------------------------- |
-| `branchCompare.inlineBlame.enabled`    | `true`  | Inline blame text on the current line |
-| `branchCompare.statusBarBlame.enabled` | `true`  | Blame entry in the status bar         |
-| `branchCompare.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
+| Setting                           | Default | Description                           |
+| --------------------------------- | ------- | ------------------------------------- |
+| `refhaven.inlineBlame.enabled`    | `true`  | Inline blame text on the current line |
+| `refhaven.statusBarBlame.enabled` | `true`  | Blame entry in the status bar         |
+| `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
 
 ## Development
 
@@ -70,10 +78,10 @@ npm run lint           # ESLint (strict, type-checked)
 npm run format:check   # Prettier
 npm run test:unit      # mocha unit tests (parsers, domain, manifest)
 npm run test:extension # integration tests in a real VS Code instance
-npm run package        # build branch-compare-<version>.vsix
+npm run package        # build refhaven-<version>.vsix
 ```
 
-The VS Code task **Install VSIX (current window)** packages and installs the
+The VS Code task **RefHaven: Install Local VSIX** packages and installs the
 extension into your running VS Code via the `code` CLI.
 
 ## Security

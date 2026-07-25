@@ -24,7 +24,7 @@ import {
   type MessageNode,
 } from "./changeNodes";
 
-export const COMPARISON_VIEW_ID = "branchCompare.comparisons";
+export const COMPARISON_VIEW_ID = "refhaven.comparisons";
 
 export type { FilesLayout } from "./changeNodes";
 
@@ -265,9 +265,7 @@ export class ComparisonTreeProvider
     );
     const result = this.results.get(comparison.id);
     const error = this.errors.get(comparison.id);
-    item.contextValue = comparison.pinned
-      ? "branchCompare.comparisonPinned"
-      : "branchCompare.comparison";
+    item.contextValue = comparison.pinned ? "refhaven.comparisonPinned" : "refhaven.comparison";
     item.description = comparisonDescription(comparison, result);
     item.iconPath = comparison.pinned
       ? new vscode.ThemeIcon("pinned")
@@ -357,7 +355,36 @@ function comparisonDescription(
     `↑${formatCount(result.aheadCount)} ↓${formatCount(result.behindCount)}`,
     pluralize(result.files.length, "file"),
     formatDiffStats(totals.additions, totals.deletions),
+    ...(comparison.mode === "tipToTip" ? ["tip-to-tip"] : []),
   ].join(" · ");
+}
+
+/** Explains WHY a comparison legitimately has no changed files. */
+function emptyFilesDescription(result: ComparisonResult): string {
+  const target = result.comparison.targetRef.displayName;
+  if (result.aheadCount === 0 && result.behindCount === 0) {
+    return "branches point at the same commit";
+  }
+  if (result.comparison.mode === "branchChanges" && result.aheadCount === 0) {
+    return `${target} has no commits of its own`;
+  }
+  return "no differences";
+}
+
+function emptyFilesTooltip(result: ComparisonResult): string {
+  const base = result.comparison.baseRef.displayName;
+  const target = result.comparison.targetRef.displayName;
+  if (result.aheadCount === 0 && result.behindCount === 0) {
+    return `${target} and ${base} point at the same commit, so there is nothing to diff.`;
+  }
+  if (result.comparison.mode === "branchChanges" && result.aheadCount === 0) {
+    return (
+      `Branch-changes mode diffs the merge base against ${target}, and every commit of ` +
+      `${target} is already part of ${base}. Swap base and target to see what ${base} adds, ` +
+      `or switch the comparison to tip-to-tip mode to see the full difference.`
+    );
+  }
+  return `The trees of ${base} and ${target} are identical for this comparison mode.`;
 }
 
 function comparisonTooltip(
@@ -407,7 +434,10 @@ function createSectionItem(element: SectionNode): vscode.TreeItem {
         : vscode.TreeItemCollapsibleState.None,
     );
     item.description =
-      result.files.length > 0 ? formatDiffStats(totals.additions, totals.deletions) : "";
+      result.files.length > 0
+        ? formatDiffStats(totals.additions, totals.deletions)
+        : emptyFilesDescription(result);
+    if (result.files.length === 0) item.tooltip = emptyFilesTooltip(result);
     item.iconPath = new vscode.ThemeIcon("request-changes");
     item.id = `${result.comparison.id}:section:files`;
     return item;
@@ -461,7 +491,7 @@ function getSectionChildren(element: SectionNode, layout: FilesLayout): Comparis
 function createCommitItem(element: CommitTreeNode): vscode.TreeItem {
   const { commit } = element;
   const item = new vscode.TreeItem(commit.subject, vscode.TreeItemCollapsibleState.Collapsed);
-  item.contextValue = "branchCompare.commit";
+  item.contextValue = "refhaven.commit";
   item.description = `${commit.authorName}, ${formatRelativeTime(commit.authorDate)}`;
   item.iconPath = new vscode.ThemeIcon("git-commit");
   item.id = `${element.comparisonId}:commit:${commit.sha}`;

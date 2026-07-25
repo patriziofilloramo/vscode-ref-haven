@@ -2,7 +2,7 @@
 
 ## Architectural goals
 
-Branch Compare uses a clean, layered implementation with a native VS Code Tree View. Git mechanics, comparison semantics, persistence, orchestration, and presentation remain independently testable. Tree nodes never execute Git directly, and the Git process layer has no knowledge of comparisons or VS Code UI.
+RefHaven uses a clean, layered implementation with a native VS Code Tree View. Git mechanics, comparison semantics, persistence, orchestration, and presentation remain independently testable. Tree nodes never execute Git directly, and the Git process layer has no knowledge of comparisons or VS Code UI.
 
 ## Layers and dependency direction
 
@@ -130,7 +130,7 @@ If `vscode.git` is unavailable, discovery probes each workspace folder with `git
 
 ### ComparisonStore
 
-Reads and atomically writes `branchCompare.comparisons.v1` in `workspaceState`. It strictly validates the complete schema, rejects malformed repository paths and branch refs, removes duplicate logical identities and IDs, and implements create, update, delete, and pin operations. It sorts pinned comparisons first while preserving explicit order within pinned and unpinned groups.
+Reads and atomically writes `refhaven.comparisons.v1` in `workspaceState`. It strictly validates the complete schema, rejects malformed repository paths and branch refs, removes duplicate logical identities and IDs, and implements create, update, delete, and pin operations. It sorts pinned comparisons first while preserving explicit order within pinned and unpinned groups.
 
 ### ComparisonEngine
 
@@ -156,7 +156,7 @@ The controller creates restored nodes synchronously in `notComputed`. Expansion 
 
 ### Revision document provider
 
-The readonly `branch-compare:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be canonical forward-slash Git paths and cannot be absolute, traverse, or change meaning on Windows. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
+The readonly `refhaven:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be canonical forward-slash Git paths and cannot be absolute, traverse, or change meaning on Windows. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
 
 Renames use the old path at the from-SHA and the new path at the to-SHA. Binary files do not pass through the text provider; UI actions offer opening available revisions instead of a misleading text diff.
 

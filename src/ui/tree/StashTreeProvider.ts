@@ -18,7 +18,7 @@ import {
   type MessageNode,
 } from "./changeNodes";
 
-export const STASH_VIEW_ID = "branchCompare.stashes";
+export const STASH_VIEW_ID = "refhaven.stashes";
 
 export interface StashRepositoryNode {
   readonly kind: "repository";
@@ -230,7 +230,7 @@ function createRepositoryItem(repository: RepositoryIdentity): vscode.TreeItem {
 function createStashItem(element: StashNode): vscode.TreeItem {
   const { repository, stash } = element;
   const item = new vscode.TreeItem(stash.message, vscode.TreeItemCollapsibleState.Collapsed);
-  item.contextValue = "branchCompare.stash";
+  item.contextValue = "refhaven.stash";
   item.description = [
     stash.selector,
     ...(stash.branchName ? [`on ${stash.branchName}`] : []),

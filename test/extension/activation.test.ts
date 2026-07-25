@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 
 import * as vscode from "vscode";
 
-const EXTENSION_ID = "local-development.branch-compare";
+const EXTENSION_ID = "local-development.refhaven";
 
-suite("Branch Compare extension", () => {
+suite("RefHaven extension", () => {
   test("activates and registers its public commands", async () => {
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
 
@@ -13,9 +13,9 @@ suite("Branch Compare extension", () => {
     assert.equal(extension.isActive, true);
 
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(commands.includes("branchCompare.newComparison"));
-    assert.ok(commands.includes("branchCompare.compareCurrentBranch"));
-    assert.ok(commands.includes("branchCompare.openFileDiff"));
-    assert.ok(commands.includes("branchCompare.refreshAll"));
+    assert.ok(commands.includes("refhaven.newComparison"));
+    assert.ok(commands.includes("refhaven.compareCurrentBranch"));
+    assert.ok(commands.includes("refhaven.openFileDiff"));
+    assert.ok(commands.includes("refhaven.refreshAll"));
   });
 });

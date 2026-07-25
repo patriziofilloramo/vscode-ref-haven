@@ -15,7 +15,7 @@ import {
 } from "../ui/blame/blamePresentation";
 import { COMMAND_IDS } from "../ui/commands/commandIds";
 
-const CONFIG_SECTION = "branchCompare";
+const CONFIG_SECTION = "refhaven";
 const INLINE_BLAME_SETTING = "inlineBlame.enabled";
 const STATUS_BAR_BLAME_SETTING = "statusBarBlame.enabled";
 const UPDATE_DEBOUNCE_MS = 250;
@@ -47,11 +47,11 @@ export class BlameController implements vscode.Disposable {
 
   public constructor(private readonly logger: Logger) {
     this.statusBarItem = vscode.window.createStatusBarItem(
-      "branchCompare.lineBlame",
+      "refhaven.lineBlame",
       vscode.StatusBarAlignment.Right,
       100,
     );
-    this.statusBarItem.name = "Branch Compare Line Blame";
+    this.statusBarItem.name = "RefHaven Line Blame";
     this.statusBarItem.command = COMMAND_IDS.showLineBlameActions;
 
     this.disposables.push(
@@ -131,7 +131,7 @@ export class BlameController implements vscode.Disposable {
           label: "$(go-to-file) Open File at This Revision",
         },
       ],
-      { placeHolder: current.blame.summary, title: "Branch Compare: Line Blame" },
+      { placeHolder: current.blame.summary, title: "RefHaven: Line Blame" },
     );
     await selected?.action();
   }

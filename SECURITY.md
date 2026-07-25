@@ -2,7 +2,7 @@
 
 ## Security objective
 
-Branch Compare is designed for repositories whose paths, refs, history, metadata, and file contents must remain on the workstation. The installed extension has no telemetry, analytics, authentication, remote-service integration, networking API, runtime dependency, or automatic fetch. It never sends repository data to a vendor or hosted service.
+RefHaven is designed for repositories whose paths, refs, history, metadata, and file contents must remain on the workstation. The installed extension has no telemetry, analytics, authentication, remote-service integration, networking API, runtime dependency, or automatic fetch. It never sends repository data to a vendor or hosted service.
 
 ## Enforced runtime controls
 
@@ -17,9 +17,9 @@ Every Git child process is started without a shell and receives a centrally test
 - optional Git locks and replace-object rewriting are disabled;
 - diff operations pass `--no-ext-diff` and `--no-textconv`.
 
-If a required object is not already available locally, the operation fails instead of contacting a remote. The extension does not activate VS Code's built-in Git extension. If that extension is already active, Branch Compare reads its repository list only; all comparison data still comes from the restricted local Git process.
+If a required object is not already available locally, the operation fails instead of contacting a remote. The extension does not activate VS Code's built-in Git extension. If that extension is already active, RefHaven reads its repository list only; all comparison data still comes from the restricted local Git process.
 
-Branch Compare performs no repository mutation. Stashes can be listed and inspected, but creating, applying, popping, or dropping them is intentionally outside scope: those Git operations can invoke repository-configured filters or merge drivers that cannot be sandboxed reliably across Windows, Linux, and macOS.
+RefHaven performs no repository mutation. Stashes can be listed and inspected, but creating, applying, popping, or dropping them is intentionally outside scope: those Git operations can invoke repository-configured filters or merge drivers that cannot be sandboxed reliably across Windows, Linux, and macOS.
 
 ## Stored and displayed data
 
@@ -29,7 +29,7 @@ Logs exclude file contents and redact credential-, secret-, environment-, token-
 
 ## Trust boundaries
 
-The guarantee above covers Branch Compare and the Git processes it creates. The following components are outside the extension's control and must be governed by workstation policy:
+The guarantee above covers RefHaven and the Git processes it creates. The following components are outside the extension's control and must be governed by workstation policy:
 
 - the installed VS Code and Git binaries;
 - other extensions, including VS Code's built-in Git autofetch setting;
@@ -37,7 +37,7 @@ The guarantee above covers Branch Compare and the Git processes it creates. The 
 - repositories or object stores located on network-mounted filesystems;
 - development-time package installation and Extension Host test downloads.
 
-For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; Branch Compare itself neither enables nor calls remote Git operations.
+For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; RefHaven itself neither enables nor calls remote Git operations.
 
 ## Supply-chain policy
 

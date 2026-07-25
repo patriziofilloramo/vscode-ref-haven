@@ -22,7 +22,7 @@ import { COMPARISON_VIEW_ID, ComparisonTreeProvider } from "./ui/tree/Comparison
 import { STASH_VIEW_ID, StashTreeProvider } from "./ui/tree/StashTreeProvider";
 
 export function createCompositionRoot(context: vscode.ExtensionContext): void {
-  const outputChannel = vscode.window.createOutputChannel("Branch Compare");
+  const outputChannel = vscode.window.createOutputChannel("RefHaven");
   const logger = new OutputChannelLogger(outputChannel);
   const store = new ComparisonStore(context.workspaceState);
   const treeProvider = new ComparisonTreeProvider();

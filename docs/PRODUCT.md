@@ -1,8 +1,8 @@
-# Branch Compare product definition
+# RefHaven product definition
 
 ## Mission
 
-Branch Compare is a Visual Studio Code extension dedicated to persistent, directional comparisons between Git branches. It deliberately focuses on the Search & Compare / Compare References use case rather than attempting to reproduce a complete Git client.
+RefHaven is a Visual Studio Code extension dedicated to persistent, directional comparisons between Git branches. It deliberately focuses on the Search & Compare / Compare References use case rather than attempting to reproduce a complete Git client.
 
 The product lets users create several comparisons, view them together, keep them across reloads, refresh them as refs move, inspect commits and changed files, and open file changes in VS Code's native diff editor.
 
@@ -18,7 +18,7 @@ A comparison has a baseline (`baseRef`) and the branch being analysed (`targetRe
 
 Every created comparison is saved automatically in the current workspace and remains until explicitly closed. Pinning affects priority and ordering, not persistence.
 
-The extension stores configuration only in `ExtensionContext.workspaceState`, under `branchCompare.comparisons.v1`. It does not write comparison configuration to the repository, `.git`, workspace settings, or another committable file. Computed Git results are never persisted.
+The extension stores configuration only in `ExtensionContext.workspaceState`, under `refhaven.comparisons.v1`. It does not write comparison configuration to the repository, `.git`, workspace settings, or another committable file. Computed Git results are never persisted.
 
 ```ts
 interface SavedComparisonV1 {
@@ -75,9 +75,10 @@ Version 0.1 explicitly excluded N-way comparisons, working-tree comparisons, mer
 The product has since grown toward a GitLens-style feature set while keeping the native-UI, no-webview, no-telemetry principles:
 
 - **Commit drill-down:** commits in the Ahead/Behind sections expand to the files they changed and open per-commit diffs (first parent; root commits diff against the empty tree).
+- **Comparison mode switching:** each saved comparison can switch between `branchChanges` (three-dot) and `tipToTip` (two-dot) diffs via _Change Comparison Mode..._; tip-to-tip comparisons are labelled in the tree. When a three-dot comparison legitimately has no files — the target has no commits of its own, or both refs point at the same commit — the Files section states the reason and its tooltip suggests swapping the direction or switching mode.
 - **Read-only stash inspection:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees, native diffs, and copy-message. Mutation is excluded to prevent execution of repository-configured filters or merge drivers.
 - **File and commit context actions:** Open File, Copy Path, Copy Relative Path, Copy Commit SHA, and Copy Commit Message from any file or commit node.
-- **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `branchCompare.inlineBlame.enabled` and `branchCompare.statusBarBlame.enabled`.
+- **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `refhaven.inlineBlame.enabled` and `refhaven.statusBarBlame.enabled`.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
 - **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
 
@@ -85,7 +86,7 @@ All file diffs — comparison, commit, and stash — open through one shared `Fi
 
 ## User experience
 
-The extension contributes the native `branchCompare.comparisons` Tree View to the Source Control container. It uses native commands, context menus, theme icons, keyboard navigation, and accessibility support; it does not use a Webview.
+The extension contributes the native `refhaven.comparisons` Tree View to the Source Control container. It uses native commands, context menus, theme icons, keyboard navigation, and accessibility support; it does not use a Webview.
 
 Comparisons are grouped by repository only when more than one repository is present. A comparison node displays its directional label and a compact summary such as `↑8 ↓2 · 14 files`. Its tooltip includes repository, full refs, mode, resolved SHAs, merge base, and update time, without credentials or file contents.
 

@@ -10,7 +10,7 @@ import { calculateComparison } from "../../src/application/ComparisonEngine";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
-const EXTENSION_ID = "local-development.branch-compare";
+const EXTENSION_ID = "local-development.refhaven";
 
 suite("native branch diff", () => {
   let repositoryRoot: string;
@@ -20,13 +20,13 @@ suite("native branch diff", () => {
     // by a previous run, so never reuse an old fixture directory.
     repositoryRoot = join(
       tmpdir(),
-      `branch-compare-extension-tests-${process.pid.toString()}-${Date.now().toString()}`,
+      `refhaven-extension-tests-${process.pid.toString()}-${Date.now().toString()}`,
     );
     rmSync(repositoryRoot, { force: true, recursive: true });
     mkdirSync(repositoryRoot, { recursive: true });
     git("init", "--initial-branch=main");
-    git("config", "user.name", "Branch Compare Tests");
-    git("config", "user.email", "branch-compare@example.invalid");
+    git("config", "user.name", "RefHaven Tests");
+    git("config", "user.email", "refhaven@example.invalid");
     writeFileSync(join(repositoryRoot, "modified.txt"), "before\n", "utf8");
     writeFileSync(join(repositoryRoot, "deleted.txt"), "deleted\n", "utf8");
     writeFileSync(join(repositoryRoot, "rename-old.txt"), "renamed\n", "utf8");
@@ -92,18 +92,16 @@ suite("native branch diff", () => {
     const modifiedItem = treeProvider.getTreeItem(modifiedNode);
     const command = modifiedItem.command;
     assert.ok(command);
-    assert.equal(command.command, "branchCompare.openFileDiff");
+    assert.equal(command.command, "refhaven.openFileDiff");
     const commandArguments = (command.arguments ?? []) as readonly unknown[];
     await vscode.commands.executeCommand(command.command, ...commandArguments);
 
     assert.ok(
-      vscode.window.visibleTextEditors.some(
-        ({ document }) => document.uri.scheme === "branch-compare",
-      ),
-      "Expected vscode.diff to open Branch Compare revision documents",
+      vscode.window.visibleTextEditors.some(({ document }) => document.uri.scheme === "refhaven"),
+      "Expected vscode.diff to open RefHaven revision documents",
     );
     const revisionDocuments = vscode.workspace.textDocuments.filter(
-      ({ uri }) => uri.scheme === "branch-compare",
+      ({ uri }) => uri.scheme === "refhaven",
     );
     assert.deepEqual(revisionDocuments.map((document) => document.getText()).sort(), [
       "after\n",

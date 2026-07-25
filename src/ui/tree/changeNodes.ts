@@ -56,7 +56,7 @@ export function createFolderItem(node: FolderNode): vscode.TreeItem {
   item.id = `${node.idPrefix}:folder:${node.folder.path}`;
   item.resourceUri = vscode.Uri.from({
     path: `/${node.folder.path}`,
-    scheme: "branch-compare-folder",
+    scheme: "refhaven-folder",
   });
   return item;
 }
@@ -72,7 +72,7 @@ export function createFileItem(node: FileNode): vscode.TreeItem {
     command: COMMAND_IDS.openFileDiff,
     title: "Open File Comparison",
   };
-  item.contextValue = `branchCompare.file.${file.status}`;
+  item.contextValue = `refhaven.file.${file.status}`;
   item.description = fileDescription(node, directory);
   item.iconPath = vscode.ThemeIcon.File;
   item.id = `${node.idPrefix}:file:${file.newPath}`;

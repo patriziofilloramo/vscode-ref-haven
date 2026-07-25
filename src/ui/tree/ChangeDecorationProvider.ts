@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import type { FileChangeStatus } from "../../domain/comparisonResult";
 
 /** URI scheme carrying a change status so tree items get SCM-style decorations. */
-export const CHANGE_DECORATION_SCHEME = "branch-compare-change";
+export const CHANGE_DECORATION_SCHEME = "refhaven-change";
 
 interface StatusPresentation {
   readonly badge: string;

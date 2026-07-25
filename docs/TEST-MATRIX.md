@@ -105,7 +105,7 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
 
 - extension activation stays independent of comparison calculation;
 - all declared commands are registered;
-- `branchCompare.comparisons` is contributed to Source Control;
+- `refhaven.comparisons` is contributed to Source Control;
 - New Comparison works by keyboard through repository/base/target/mode picks;
 - Compare Current Branch With uses current branch as target and defaults to branchChanges;
 - restored nodes appear immediately as not computed;
@@ -117,7 +117,7 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
 
 ## Manual release scenarios
 
-Before delivering `branch-compare-x.y.z.vsix`:
+Before delivering `refhaven-x.y.z.vsix`:
 
 1. Install the VSIX into a clean stable VS Code profile.
 2. Open a workspace containing at least two repositories.

@@ -21,7 +21,7 @@ export async function pickRepository(
     {
       matchOnDescription: true,
       placeHolder: "Select a repository",
-      title: "Branch Compare: New Comparison",
+      title: "RefHaven: New Comparison",
     },
   );
   return selected?.repository ?? null;
@@ -54,7 +54,7 @@ export async function pickBranch(
   const selected = await vscode.window.showQuickPick(items, {
     matchOnDescription: true,
     placeHolder,
-    title: "Branch Compare: New Comparison",
+    title: "RefHaven: New Comparison",
   });
   return selected?.branch ?? null;
 }

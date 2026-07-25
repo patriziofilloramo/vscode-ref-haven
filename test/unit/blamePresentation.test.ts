@@ -60,11 +60,11 @@ suite("blame presentation", () => {
     assert.match(markdown, /\*\*Patrizio Filloramo\*\*, 2 hours ago/);
     assert.match(markdown, /feat: add blame support/);
     assert.match(markdown, /`aaaaaaaa`/);
-    assert.match(markdown, /command:branchCompare\.copyCommitSha\?/);
-    assert.match(markdown, /command:branchCompare\.copyCommitMessage\?/);
-    assert.match(markdown, /command:branchCompare\.openFileAtRevision\?/);
+    assert.match(markdown, /command:refhaven\.copyCommitSha\?/);
+    assert.match(markdown, /command:refhaven\.copyCommitMessage\?/);
+    assert.match(markdown, /command:refhaven\.openFileAtRevision\?/);
 
-    const revisionLink = /command:branchCompare\.openFileAtRevision\?([^)]+)\)/.exec(markdown);
+    const revisionLink = /command:refhaven\.openFileAtRevision\?([^)]+)\)/.exec(markdown);
     assert.ok(revisionLink?.[1]);
     assert.deepEqual(JSON.parse(decodeURIComponent(revisionLink[1])), [
       "C:\\repo",
@@ -83,7 +83,7 @@ suite("blame presentation", () => {
     const malicious: LineBlame = {
       ...COMMITTED,
       authorName: "**spoofed**",
-      summary: "[Injected](command:branchCompare.openFileAtRevision?payload)",
+      summary: "[Injected](command:refhaven.openFileAtRevision?payload)",
     };
     const markdown = blameHoverMarkdown(malicious, null, "C:\\repo", NOW);
 

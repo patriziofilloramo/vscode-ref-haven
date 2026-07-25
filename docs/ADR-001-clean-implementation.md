@@ -2,11 +2,11 @@
 
 - Status: Accepted
 - Date: 2026-07-14
-- Decision owners: Branch Compare maintainers
+- Decision owners: RefHaven maintainers
 
 ## Context
 
-Branch Compare targets the focused Search & Compare / Compare References capability historically available in GitLess/GitLens, but it has a deliberately narrower product boundary and a persistence-first model. The proposed architecture requires strict separation between Git processes, typed Git operations, comparison semantics, workspace persistence, controller state, a native Tree View, and immutable revision documents.
+RefHaven targets the focused Search & Compare / Compare References capability historically available in GitLess/GitLens, but it has a deliberately narrower product boundary and a persistence-first model. The proposed architecture requires strict separation between Git processes, typed Git operations, comparison semantics, workspace persistence, controller state, a native Tree View, and immutable revision documents.
 
 The technical-spike question was whether to extract historical `SearchAndCompareView`, `CompareResultsNode`, Git service, and revision-provider code from GitLens/GitLess 11.7 or build these focused components directly.
 
@@ -14,7 +14,7 @@ The source workspace begins as a new standalone extension with no inherited GitL
 
 ## Decision
 
-Implement Branch Compare cleanly against public VS Code extension APIs and the Git CLI. Do not extract the historical GitLens/GitLess view, container, Git service, revision provider, branding, icons, or assets.
+Implement RefHaven cleanly against public VS Code extension APIs and the Git CLI. Do not extract the historical GitLens/GitLess view, container, Git service, revision provider, branding, icons, or assets.
 
 GitLens/GitLess may be used as behavioural research and prior art during development, subject to its applicable historical licence. Any future reuse of MIT-licensed implementation code must be isolated, justified, reviewed, and accompanied by the required copyright and licence notice.
 
@@ -61,7 +61,7 @@ Rejected because the view and node classes rely on broader service, configuratio
 
 ### Depend on GitLens as an installed extension
 
-Rejected because Branch Compare must remain standalone, predictable, packageable, and testable without another optional extension or its non-public APIs.
+Rejected because RefHaven must remain standalone, predictable, packageable, and testable without another optional extension or its non-public APIs.
 
 ### Use a Webview implementation
 

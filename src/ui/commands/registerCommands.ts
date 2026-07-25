@@ -21,6 +21,8 @@ export function registerCommands(
   blameController: BlameController,
 ): void {
   const handlers: Readonly<Record<CommandId, CommandHandler>> = {
+    [COMMAND_IDS.changeComparisonMode]: (node) =>
+      controller.changeComparisonMode(requireComparison(node)),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
     [COMMAND_IDS.compareCurrentBranch]: () => controller.compareCurrentBranch(),
     [COMMAND_IDS.copyCommitMessage]: (node) => controller.copyCommitMessage(requireCommit(node)),
@@ -76,7 +78,7 @@ export function registerCommands(
           operation: commandId,
         });
         void vscode.window.showErrorMessage(
-          error instanceof Error ? error.message : "Branch Compare command failed.",
+          error instanceof Error ? error.message : "RefHaven command failed.",
         );
       }
     });
@@ -104,7 +106,7 @@ function requireFile(node: unknown): FileNode {
   if (candidate?.kind === "file" && candidate.file !== undefined && candidate.scope !== undefined) {
     return candidate as FileNode;
   }
-  throw new Error("Select a changed file in a Branch Compare view first.");
+  throw new Error("Select a changed file in a RefHaven view first.");
 }
 
 function requireStash(node: unknown): StashNode {

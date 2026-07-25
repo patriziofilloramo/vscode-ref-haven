@@ -7,7 +7,7 @@ import { assertRepositoryRelativeGitPath } from "../../domain/pathValidation";
 import { readFileAtRevision } from "../../infrastructure/git/GitCli";
 import { BoundedPromiseCache } from "./BoundedPromiseCache";
 
-export const REVISION_DOCUMENT_SCHEME = "branch-compare";
+export const REVISION_DOCUMENT_SCHEME = "refhaven";
 
 interface EmptyRevisionRequest {
   readonly kind: "empty";
@@ -100,16 +100,16 @@ export class GitRevisionContentProvider implements vscode.TextDocumentContentPro
   }
 
   private verifyAndExtractPayload(token: string): string {
-    if (token.length > 32 * 1024) throw new Error("Branch Compare revision URI is invalid.");
+    if (token.length > 32 * 1024) throw new Error("RefHaven revision URI is invalid.");
     const separator = token.lastIndexOf(".");
     if (separator <= 0 || separator === token.length - 1) {
-      throw new Error("Unknown Branch Compare revision document.");
+      throw new Error("Unknown RefHaven revision document.");
     }
     const payload = token.slice(0, separator);
     const signature = Buffer.from(token.slice(separator + 1), "base64url");
     const expected = Buffer.from(this.sign(payload), "base64url");
     if (signature.length !== expected.length || !timingSafeEqual(signature, expected)) {
-      throw new Error("Unknown Branch Compare revision document.");
+      throw new Error("Unknown RefHaven revision document.");
     }
     return payload;
   }
@@ -120,11 +120,11 @@ function parseRequest(payload: string): RevisionRequest {
   try {
     value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
   } catch {
-    throw new Error("Branch Compare revision URI is invalid.");
+    throw new Error("RefHaven revision URI is invalid.");
   }
 
   if (!value || typeof value !== "object") {
-    throw new Error("Branch Compare revision URI is invalid.");
+    throw new Error("RefHaven revision URI is invalid.");
   }
   const request = value as Record<string, unknown>;
   if (request.kind === "empty") return { kind: "empty" };
@@ -136,7 +136,7 @@ function parseRequest(payload: string): RevisionRequest {
     !/^[0-9a-f]{40,64}$/i.test(request.sha) ||
     typeof request.filePath !== "string"
   ) {
-    throw new Error("Branch Compare revision URI is invalid.");
+    throw new Error("RefHaven revision URI is invalid.");
   }
   assertRepositoryRelativeGitPath(request.filePath);
   return {

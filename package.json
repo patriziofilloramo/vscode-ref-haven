@@ -1,7 +1,7 @@
 {
-  "name": "branch-compare",
-  "displayName": "Branch Compare",
-  "description": "Persistent, directional comparisons between Git branches.",
+  "name": "refhaven",
+  "displayName": "RefHaven",
+  "description": "Private Git comparisons, history, blame, and stash inspection — entirely local.",
   "version": "0.1.0",
   "publisher": "local-development",
   "license": "UNLICENSED",
@@ -22,137 +22,143 @@
   "contributes": {
     "commands": [
       {
-        "command": "branchCompare.newComparison",
+        "command": "refhaven.newComparison",
         "title": "New Comparison",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(add)"
       },
       {
-        "command": "branchCompare.compareCurrentBranch",
+        "command": "refhaven.compareCurrentBranch",
         "title": "Compare Current Branch With...",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.refreshAll",
+        "command": "refhaven.refreshAll",
         "title": "Refresh All Comparisons",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(refresh)"
       },
       {
-        "command": "branchCompare.refreshComparison",
+        "command": "refhaven.refreshComparison",
         "title": "Refresh Comparison",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(refresh)"
       },
       {
-        "command": "branchCompare.swapComparison",
+        "command": "refhaven.swapComparison",
         "title": "Swap Base and Target",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(arrow-swap)"
       },
       {
-        "command": "branchCompare.pinComparison",
+        "command": "refhaven.changeComparisonMode",
+        "title": "Change Comparison Mode...",
+        "category": "RefHaven",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "refhaven.pinComparison",
         "title": "Pin Comparison",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(pin)"
       },
       {
-        "command": "branchCompare.unpinComparison",
+        "command": "refhaven.unpinComparison",
         "title": "Unpin Comparison",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(pinned)"
       },
       {
-        "command": "branchCompare.closeComparison",
+        "command": "refhaven.closeComparison",
         "title": "Close Comparison",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(close)"
       },
       {
-        "command": "branchCompare.copyComparisonSummary",
+        "command": "refhaven.copyComparisonSummary",
         "title": "Copy Summary",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.copyCommitSha",
+        "command": "refhaven.copyCommitSha",
         "title": "Copy Commit SHA",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.viewFilesAsList",
+        "command": "refhaven.viewFilesAsList",
         "title": "View Changed Files as List",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(list-flat)"
       },
       {
-        "command": "branchCompare.viewFilesAsTree",
+        "command": "refhaven.viewFilesAsTree",
         "title": "View Changed Files as Tree",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(list-tree)"
       },
       {
-        "command": "branchCompare.copyCommitMessage",
+        "command": "refhaven.copyCommitMessage",
         "title": "Copy Commit Message",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.openFile",
+        "command": "refhaven.openFile",
         "title": "Open File",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "branchCompare.copyFilePath",
+        "command": "refhaven.copyFilePath",
         "title": "Copy Path",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.copyRelativeFilePath",
+        "command": "refhaven.copyRelativeFilePath",
         "title": "Copy Relative Path",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.refreshStashes",
+        "command": "refhaven.refreshStashes",
         "title": "Refresh Stashes",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(refresh)"
       },
       {
-        "command": "branchCompare.copyStashMessage",
+        "command": "refhaven.copyStashMessage",
         "title": "Copy Stash Message",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.openFileAtRevision",
+        "command": "refhaven.openFileAtRevision",
         "title": "Open File at Revision...",
-        "category": "Branch Compare",
+        "category": "RefHaven",
         "icon": "$(history)"
       },
       {
-        "command": "branchCompare.toggleInlineBlame",
+        "command": "refhaven.toggleInlineBlame",
         "title": "Toggle Inline Blame",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       },
       {
-        "command": "branchCompare.showLineBlameActions",
+        "command": "refhaven.showLineBlameActions",
         "title": "Show Line Blame Actions",
-        "category": "Branch Compare"
+        "category": "RefHaven"
       }
     ],
     "configuration": {
-      "title": "Branch Compare",
+      "title": "RefHaven",
       "properties": {
-        "branchCompare.inlineBlame.enabled": {
+        "refhaven.inlineBlame.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show blame for the current line as dimmed inline text at the end of the line."
         },
-        "branchCompare.statusBarBlame.enabled": {
+        "refhaven.statusBarBlame.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show blame for the current line in the status bar."
         },
-        "branchCompare.git.timeoutSeconds": {
+        "refhaven.git.timeoutSeconds": {
           "type": "number",
           "default": 30,
           "minimum": 1,
@@ -164,177 +170,186 @@
     "views": {
       "scm": [
         {
-          "id": "branchCompare.comparisons",
+          "id": "refhaven.comparisons",
           "name": "Branch Comparisons"
         },
         {
-          "id": "branchCompare.stashes",
+          "id": "refhaven.stashes",
           "name": "Stashes"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "branchCompare.comparisons",
-        "contents": "No branch comparisons yet.\n[New Comparison](command:branchCompare.newComparison)\nCompare any two branches and keep the comparison across reloads."
+        "view": "refhaven.comparisons",
+        "contents": "No branch comparisons yet.\n[New Comparison](command:refhaven.newComparison)\nCompare any two branches and keep the comparison across reloads."
       },
       {
-        "view": "branchCompare.stashes",
+        "view": "refhaven.stashes",
         "contents": "No stashes in this workspace."
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "branchCompare.refreshComparison",
+          "command": "refhaven.refreshComparison",
           "when": "false"
         },
         {
-          "command": "branchCompare.swapComparison",
+          "command": "refhaven.swapComparison",
           "when": "false"
         },
         {
-          "command": "branchCompare.pinComparison",
+          "command": "refhaven.changeComparisonMode",
           "when": "false"
         },
         {
-          "command": "branchCompare.unpinComparison",
+          "command": "refhaven.pinComparison",
           "when": "false"
         },
         {
-          "command": "branchCompare.closeComparison",
+          "command": "refhaven.unpinComparison",
           "when": "false"
         },
         {
-          "command": "branchCompare.copyComparisonSummary",
+          "command": "refhaven.closeComparison",
           "when": "false"
         },
         {
-          "command": "branchCompare.copyCommitSha",
+          "command": "refhaven.copyComparisonSummary",
           "when": "false"
         },
         {
-          "command": "branchCompare.copyCommitMessage",
+          "command": "refhaven.copyCommitSha",
           "when": "false"
         },
         {
-          "command": "branchCompare.openFile",
+          "command": "refhaven.copyCommitMessage",
           "when": "false"
         },
         {
-          "command": "branchCompare.copyFilePath",
+          "command": "refhaven.openFile",
           "when": "false"
         },
         {
-          "command": "branchCompare.copyRelativeFilePath",
+          "command": "refhaven.copyFilePath",
           "when": "false"
         },
         {
-          "command": "branchCompare.copyStashMessage",
+          "command": "refhaven.copyRelativeFilePath",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.copyStashMessage",
           "when": "false"
         }
       ],
       "view/title": [
         {
-          "command": "branchCompare.newComparison",
-          "when": "view == branchCompare.comparisons",
+          "command": "refhaven.newComparison",
+          "when": "view == refhaven.comparisons",
           "group": "navigation@1"
         },
         {
-          "command": "branchCompare.viewFilesAsTree",
-          "when": "view == branchCompare.comparisons && branchCompare.filesLayout == list",
+          "command": "refhaven.viewFilesAsTree",
+          "when": "view == refhaven.comparisons && refhaven.filesLayout == list",
           "group": "navigation@2"
         },
         {
-          "command": "branchCompare.viewFilesAsList",
-          "when": "view == branchCompare.comparisons && branchCompare.filesLayout == tree",
+          "command": "refhaven.viewFilesAsList",
+          "when": "view == refhaven.comparisons && refhaven.filesLayout == tree",
           "group": "navigation@2"
         },
         {
-          "command": "branchCompare.refreshAll",
-          "when": "view == branchCompare.comparisons",
+          "command": "refhaven.refreshAll",
+          "when": "view == refhaven.comparisons",
           "group": "navigation@3"
         },
         {
-          "command": "branchCompare.refreshStashes",
-          "when": "view == branchCompare.stashes",
+          "command": "refhaven.refreshStashes",
+          "when": "view == refhaven.stashes",
           "group": "navigation@1"
         }
       ],
       "view/item/context": [
         {
-          "command": "branchCompare.refreshComparison",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.refreshComparison",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "inline@1"
         },
         {
-          "command": "branchCompare.swapComparison",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.swapComparison",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "inline@2"
         },
         {
-          "command": "branchCompare.pinComparison",
-          "when": "view == branchCompare.comparisons && viewItem == branchCompare.comparison",
+          "command": "refhaven.pinComparison",
+          "when": "view == refhaven.comparisons && viewItem == refhaven.comparison",
           "group": "inline@3"
         },
         {
-          "command": "branchCompare.unpinComparison",
-          "when": "view == branchCompare.comparisons && viewItem == branchCompare.comparisonPinned",
+          "command": "refhaven.unpinComparison",
+          "when": "view == refhaven.comparisons && viewItem == refhaven.comparisonPinned",
           "group": "inline@3"
         },
         {
-          "command": "branchCompare.closeComparison",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.closeComparison",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "inline@4"
         },
         {
-          "command": "branchCompare.refreshComparison",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.refreshComparison",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "1_actions@1"
         },
         {
-          "command": "branchCompare.swapComparison",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.swapComparison",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "1_actions@2"
         },
         {
-          "command": "branchCompare.copyComparisonSummary",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.changeComparisonMode",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "refhaven.copyComparisonSummary",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "2_copy@1"
         },
         {
-          "command": "branchCompare.closeComparison",
-          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "command": "refhaven.closeComparison",
+          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.comparison/",
           "group": "3_close@1"
         },
         {
-          "command": "branchCompare.copyCommitSha",
-          "when": "view == branchCompare.comparisons && viewItem == branchCompare.commit",
+          "command": "refhaven.copyCommitSha",
+          "when": "view == refhaven.comparisons && viewItem == refhaven.commit",
           "group": "2_copy@1"
         },
         {
-          "command": "branchCompare.copyCommitMessage",
-          "when": "view == branchCompare.comparisons && viewItem == branchCompare.commit",
+          "command": "refhaven.copyCommitMessage",
+          "when": "view == refhaven.comparisons && viewItem == refhaven.commit",
           "group": "2_copy@2"
         },
         {
-          "command": "branchCompare.openFile",
-          "when": "(view == branchCompare.comparisons || view == branchCompare.stashes) && viewItem =~ /^branchCompare\\.file/",
+          "command": "refhaven.openFile",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes) && viewItem =~ /^refhaven\\.file/",
           "group": "1_open@1"
         },
         {
-          "command": "branchCompare.copyFilePath",
-          "when": "(view == branchCompare.comparisons || view == branchCompare.stashes) && viewItem =~ /^branchCompare\\.file/",
+          "command": "refhaven.copyFilePath",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes) && viewItem =~ /^refhaven\\.file/",
           "group": "2_copy@1"
         },
         {
-          "command": "branchCompare.copyRelativeFilePath",
-          "when": "(view == branchCompare.comparisons || view == branchCompare.stashes) && viewItem =~ /^branchCompare\\.file/",
+          "command": "refhaven.copyRelativeFilePath",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes) && viewItem =~ /^refhaven\\.file/",
           "group": "2_copy@2"
         },
         {
-          "command": "branchCompare.copyStashMessage",
-          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "command": "refhaven.copyStashMessage",
+          "when": "view == refhaven.stashes && viewItem == refhaven.stash",
           "group": "2_copy@1"
         }
       ]
@@ -351,7 +366,7 @@
     "test:unit": "npm run compile:tests && mocha --ui tdd \".test-out/test/unit/**/*.test.js\"",
     "test:extension": "npm run compile && npm run compile:tests && node scripts/run-extension-tests.mjs",
     "vscode:prepublish": "npm run compile",
-    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license --out branch-compare-0.1.0.vsix"
+    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

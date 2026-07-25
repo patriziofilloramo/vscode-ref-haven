@@ -1,6 +1,6 @@
 # Roadmap
 
-Branch Compare is growing toward a GitLens-style feature set while staying a
+RefHaven is growing toward a GitLens-style feature set while staying a
 native-UI, no-webview, no-telemetry extension. Features are chosen for high
 user value at low-to-medium implementation effort and are delivered in
 verifiable batches: each batch compiles, lints, passes unit and extension
@@ -22,18 +22,36 @@ tests, and packages before it merges to `master`.
 - File context actions: Open File, Copy Path, Copy Relative Path; commit
   context actions: Copy SHA, Copy Commit Message.
 
-### Batch 1 — Editor intelligence (in progress on `feat/gitlens-essentials`)
+### Batch 1 — Editor intelligence (completed 2026-07-15)
 
 - Current-line inline blame with dimmed end-of-line text (works in dirty
   buffers via `git blame --contents -`).
 - Rich blame hover with Copy SHA / Copy Message / Open File at This Revision
   command links; status-bar blame with a quickpick of the same actions.
-- `branchCompare.inlineBlame.enabled` and `branchCompare.statusBarBlame.enabled`
+- `refhaven.inlineBlame.enabled` and `refhaven.statusBarBlame.enabled`
   settings plus a Toggle Inline Blame command.
 - Open File at Revision command (interactive branch picker or direct
   invocation from blame links).
 - Auto-refresh: a `.git` metadata watcher refreshes comparisons, stashes, and
   blame after commits, branch switches, fetches, and stash operations.
+
+### Security and reliability hardening (2026-07-15)
+
+- Local-only Git execution policy with a process scheduler, timeouts, and
+  cancellation via AbortSignal end to end; stash mutations removed.
+- Signed revision URIs, path identity normalization, worktree-aware `.git`
+  metadata watching, bounded caches, and Markdown escaping of Git-controlled
+  text.
+
+### Comparison mode switching and empty-state clarity (2026-07-15)
+
+- Change Comparison Mode command: each comparison can switch between branch
+  changes (three-dot) and tip-to-tip (two-dot) diffs; tip-to-tip comparisons
+  are labelled in the tree.
+- An empty Files section now explains itself ("branches point at the same
+  commit" / "target has no commits of its own") with a tooltip suggesting
+  swap or a mode switch. Outcome of investigating a "0 files changed" report
+  that was correct three-dot semantics, not a defect.
 
 ## Planned
 

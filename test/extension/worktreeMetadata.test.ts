@@ -10,7 +10,7 @@ suite("worktree metadata discovery", () => {
   test("resolves both the worktree git-dir and shared common-dir", async () => {
     const fixtureRoot = join(
       tmpdir(),
-      `branch-compare-worktree-tests-${process.pid.toString()}-${Date.now().toString()}`,
+      `refhaven-worktree-tests-${process.pid.toString()}-${Date.now().toString()}`,
     );
     const repositoryRoot = join(fixtureRoot, "repository");
     const worktreeRoot = join(fixtureRoot, "worktree");
@@ -21,8 +21,8 @@ suite("worktree metadata discovery", () => {
 
     try {
       git(repositoryRoot, "init", "--initial-branch=main");
-      git(repositoryRoot, "config", "user.name", "Branch Compare Tests");
-      git(repositoryRoot, "config", "user.email", "branch-compare@example.invalid");
+      git(repositoryRoot, "config", "user.name", "RefHaven Tests");
+      git(repositoryRoot, "config", "user.email", "refhaven@example.invalid");
       writeFileSync(join(repositoryRoot, "tracked.txt"), "content\n", "utf8");
       git(repositoryRoot, "add", ".");
       git(repositoryRoot, "commit", "-m", "initial");

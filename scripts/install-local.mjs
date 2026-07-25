@@ -18,7 +18,7 @@ if (
   throw new Error("package.json does not contain a valid extension identity and version.");
 }
 
-const vsixPath = resolve(projectRoot, `branch-compare-${manifest.version}.vsix`);
+const vsixPath = resolve(projectRoot, `${manifest.name}-${manifest.version}.vsix`);
 await access(vsixPath);
 
 function runCodeCli(arguments_, stdio) {

@@ -462,7 +462,7 @@ function discoverFromGitExtension(): string[] {
 
 function gitTimeoutMs(): number {
   const configured = vscode.workspace
-    .getConfiguration("branchCompare")
+    .getConfiguration("refhaven")
     .get<number>("git.timeoutSeconds", DEFAULT_GIT_TIMEOUT_SECONDS);
   const seconds = Number.isFinite(configured)
     ? Math.min(MAX_GIT_TIMEOUT_SECONDS, Math.max(1, configured))
@@ -485,7 +485,7 @@ function normalizeGitError(error: unknown): Error {
   if (candidate.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
     return new GitOperationError(
       "outputTooLarge",
-      "Git produced more output than Branch Compare can safely process.",
+      "Git produced more output than RefHaven can safely process.",
       { cause: error },
     );
   }

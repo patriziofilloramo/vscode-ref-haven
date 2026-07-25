@@ -25,7 +25,7 @@ suite("workspace tasks", () => {
   test("packages before installing the versioned VSIX into the current VS Code", () => {
     const tasks = loadTasks().tasks;
     const packageTask = tasks.find(({ label }) => label === "npm: package");
-    const installTask = tasks.find(({ label }) => label === "Branch Compare: Install Local VSIX");
+    const installTask = tasks.find(({ label }) => label === "RefHaven: Install Local VSIX");
 
     assert.deepEqual(packageTask, {
       label: "npm: package",
@@ -38,7 +38,7 @@ suite("workspace tasks", () => {
       command: "node",
       dependsOn: "npm: package",
       dependsOrder: "sequence",
-      label: "Branch Compare: Install Local VSIX",
+      label: "RefHaven: Install Local VSIX",
       problemMatcher: [],
       type: "process",
     });
