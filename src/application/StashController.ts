@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import type { Logger } from "./Logger";
 import type { StashEntry } from "../domain/stash";
-import { discoverRepositories } from "../infrastructure/git/GitCli";
+import { discoverRepositories, stashTrackedFile } from "../infrastructure/git/GitCli";
 import type { StashTreeProvider } from "../ui/tree/StashTreeProvider";
 
 export class StashController {
@@ -27,5 +27,31 @@ export class StashController {
   public async copyStashMessage(stash: StashEntry): Promise<void> {
     await vscode.env.clipboard.writeText(stash.message);
     void vscode.window.showInformationMessage("Stash message copied to the clipboard.");
+  }
+
+  public async stashFile(repositoryRoot: string, filePath: string, message: string): Promise<void> {
+    const stashSha = await vscode.window.withProgress(
+      {
+        cancellable: false,
+        location: vscode.ProgressLocation.Notification,
+        title: `RefHaven: Stashing ${filePath}`,
+      },
+      () => stashTrackedFile(repositoryRoot, filePath, message),
+    );
+    const refreshResults = await Promise.allSettled([
+      this.refresh(),
+      vscode.commands.executeCommand("git.refresh"),
+    ]);
+    if (refreshResults.some(({ status }) => status === "rejected")) {
+      this.logger.warn("Post-stash refresh was incomplete", {
+        operation: "stashFileRefresh",
+      });
+    }
+    this.logger.info("Created path-limited stash", {
+      operation: "stashFile",
+    });
+    void vscode.window.showInformationMessage(
+      `Stashed tracked changes for ${filePath} (${stashSha.slice(0, 8)}).`,
+    );
   }
 }

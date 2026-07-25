@@ -23,6 +23,8 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.showRefHavenMenu"));
     assert.ok(commands.includes("refhaven.showFileHistory"));
     assert.ok(commands.includes("refhaven.compareFileWithRevision"));
+    assert.ok(commands.includes("refhaven.stashFile"));
+    assert.ok(commands.includes("refhaven.compareStashFileWithHead"));
     assert.ok(commands.includes("refhaven.refreshAll"));
     assert.ok(commands.includes("refhaven.comparisons.focus"));
     await vscode.commands.executeCommand("refhaven.comparisons.focus");
@@ -36,6 +38,10 @@ suite("RefHaven extension", () => {
     );
     assert.ok(workspaceTarget);
     assert.equal(workspaceTarget.filePath, "test/fixtures/workspace/.gitkeep");
+    const sourceControlTarget = await resolveFileContextTarget({
+      resourceUri: vscode.Uri.joinPath(workspaceFolder.uri, ".gitkeep"),
+    });
+    assert.equal(sourceControlTarget?.filePath, "test/fixtures/workspace/.gitkeep");
 
     const outsideTarget = await resolveFileContextTarget(
       vscode.Uri.file(join(tmpdir(), "refhaven-outside-workspace.txt")),

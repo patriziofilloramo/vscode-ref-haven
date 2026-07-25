@@ -47,6 +47,11 @@ files.
 Rich-hover coverage includes extended blame-porcelain metadata, malicious
 Markdown/backtick fixtures, command allowlists, bounded patch rendering, real
 local patch loading, and `vscode.executeHoverProvider` over a complete line.
+Single-file-stash coverage uses real repositories for modified, staged,
+partially staged, deleted, renamed, Unicode, whitespace, bracket/pathspec,
+long-path, linked-worktree, clean, untracked, metadata, content-filter, and
+hook scenarios. Tests prove unrelated index/worktree preservation, standard
+stash-list parsing, and `git stash apply --index` compatibility.
 
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -125,6 +130,8 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
 - all declared commands are registered;
 - Explorer/editor RefHaven file actions and the editor-title quick menu are
   contributed with file-only context clauses;
+- Source Control resource objects resolve through the same canonical file
+  boundary, and the RefHaven submenu contributes Stash This File;
 - `refhaven.comparisons` is contributed to Source Control;
 - New Comparison works by keyboard through repository/base/target/mode picks;
 - Compare Current Branch With uses current branch as target and defaults to branchChanges;
@@ -151,6 +158,9 @@ Before delivering `refhaven-x.y.z.vsix`:
 10. From Explorer, editor, editor title, status-bar blame, and a changed-file
     node, verify the same file history/revision actions target the intended
     repository and path.
-11. Capture the required screenshot with at least three persistent comparisons.
+11. From Source Control, stash a partially staged file while unrelated staged
+    and unstaged files are present; verify only the selected path becomes
+    clean, then inspect and apply the stash with `--index`.
+12. Capture the required screenshot with at least three persistent comparisons.
 
 The release report records extension/version, commit SHA, VS Code and Git versions, operating systems, CI links, manual outcomes, known limitations, benchmark hardware/dataset, activation time, large-comparison responsiveness, and the final VSIX checksum.

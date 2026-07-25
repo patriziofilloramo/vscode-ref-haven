@@ -27,8 +27,16 @@ webviews), has no telemetry, and enforces local-only Git execution.
 
 - Lists all stashes per repository with message, `stash@{n}`, branch, and age.
 - Expand a stash to browse and diff its files.
-- Stash inspection is deliberately read-only so repository-configured filters
-  or merge drivers cannot be executed by a mutating command.
+- **Stash This File...** is available from editor, Explorer, Source Control,
+  and the file-actions quick menu. It stashes tracked staged and unstaged state
+  for only that file, including partial staging, deletes, and renames, while
+  preserving unrelated worktree and index changes.
+- Stash files support Open at Stash Revision, Compare with HEAD, Compare with
+  Working Tree, File History, and a cancellable search across the 50 most
+  recent other stashes.
+- Untracked files, conflicted files, repository metadata, and files with an
+  active Git content filter are rejected. Apply, pop, and drop remain outside
+  RefHaven.
 
 ### Line blame
 
@@ -74,9 +82,9 @@ fix: prevent duplicates` — including in unsaved buffers.
 
 ### Everywhere
 
-- The Explorer and editor context menus share one native **RefHaven** submenu
-  for file history, line history, annotations, open-at-revision, and
-  compare-with-revision.
+- The Explorer, editor, and Source Control file context menus share one native
+  **RefHaven** submenu for stash, history, annotations, open-at-revision, and
+  compare-with-revision actions.
 - The editor title exposes a compact **RefHaven: Show File Actions** quick
   menu; the line-blame status entry exposes the same daily file workflows.
 - Changed-file nodes support **Open File**, **Open File at Compared Revision**,
@@ -101,6 +109,7 @@ most common entry points:
 | `Search Commits...`              | Search commits already available locally         |
 | `Open File at Revision...`       | Open the active file at a chosen branch revision |
 | `Compare File with Revision...`  | Diff the active file against a local reference   |
+| `Stash This File...`             | Stash only the selected tracked file             |
 | `Show File Actions`              | Open the context-sensitive native file menu      |
 | `Toggle Inline Blame`            | Show or hide current-line blame                  |
 | `Change File Annotations...`     | Blame, heatmap, changes, or off                  |

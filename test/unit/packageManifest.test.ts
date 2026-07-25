@@ -52,7 +52,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "local-development");
-    assert.equal(manifest.version, "0.3.0");
+    assert.equal(manifest.version, "0.4.0");
     assert.match(manifest.description, /entirely local/u);
   });
 
@@ -85,6 +85,8 @@ suite("extension manifest", () => {
       "refhaven.compareBranchWithCurrent",
       "refhaven.compareCurrentBranch",
       "refhaven.compareFileWithRevision",
+      "refhaven.compareStashFileWithHead",
+      "refhaven.compareStashFileWithWorkingTree",
       "refhaven.copyBranchName",
       "refhaven.copyCommitMessage",
       "refhaven.copyCommitSha",
@@ -93,6 +95,7 @@ suite("extension manifest", () => {
       "refhaven.copyRelativeFilePath",
       "refhaven.copyStashMessage",
       "refhaven.copyWorktreePath",
+      "refhaven.findOtherStashesContainingFile",
       "refhaven.newComparison",
       "refhaven.openChangedFileAtRevision",
       "refhaven.openFile",
@@ -100,6 +103,7 @@ suite("extension manifest", () => {
       "refhaven.openFileHistoryAtRevision",
       "refhaven.openFileHistoryDiff",
       "refhaven.openLineDiff",
+      "refhaven.openStashFileAtRevision",
       "refhaven.openWorktree",
       "refhaven.pinComparison",
       "refhaven.refreshAll",
@@ -113,6 +117,7 @@ suite("extension manifest", () => {
       "refhaven.showLineBlameActions",
       "refhaven.showLineHistory",
       "refhaven.showRefHavenMenu",
+      "refhaven.stashFile",
       "refhaven.swapComparison",
       "refhaven.toggleInlineBlame",
       "refhaven.unpinComparison",
@@ -139,6 +144,11 @@ suite("extension manifest", () => {
       ),
     );
     assert.ok(
+      manifest.contributes.menus["scm/resourceState/context"]?.some(
+        ({ submenu }) => submenu === "refhaven.fileActions",
+      ),
+    );
+    assert.ok(
       manifest.contributes.menus["editor/title"]?.some(
         ({ command }) => command === "refhaven.showRefHavenMenu",
       ),
@@ -151,6 +161,7 @@ suite("extension manifest", () => {
       "refhaven.openFileAtRevision",
       "refhaven.compareFileWithRevision",
       "refhaven.changeFileAnnotations",
+      "refhaven.stashFile",
     ]);
   });
 

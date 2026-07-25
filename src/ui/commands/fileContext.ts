@@ -32,9 +32,8 @@ export async function resolveFileContextTarget(
   const uri =
     candidate instanceof vscode.Uri
       ? candidate
-      : candidate === undefined
-        ? vscode.window.activeTextEditor?.document.uri
-        : undefined;
+      : (resourceUri(candidate) ??
+        (candidate === undefined ? vscode.window.activeTextEditor?.document.uri : undefined));
   if (uri?.scheme !== "file") return null;
 
   const repositoryRoot = await findRepositoryRoot(dirname(uri.fsPath));
@@ -109,4 +108,10 @@ async function canonicalizeTarget(target: FileContextTarget): Promise<FileContex
     repositoryRoot: repository.rootPath,
     uri: vscode.Uri.file(resolvePathWithinRepository(repository.rootPath, target.filePath)),
   };
+}
+
+function resourceUri(candidate: unknown): vscode.Uri | undefined {
+  if (!candidate || typeof candidate !== "object") return undefined;
+  const uri = (candidate as { readonly resourceUri?: unknown }).resourceUri;
+  return uri instanceof vscode.Uri ? uri : undefined;
 }

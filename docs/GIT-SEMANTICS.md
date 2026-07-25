@@ -11,6 +11,10 @@ targetRef = refs/heads/feature/oauth
 
 The extension passes arguments directly to Git without a shell. Every command is prefixed with the local-only configuration defined in [SECURITY.md](../SECURITY.md), including blocked transports and lazy fetch. Before calculation it resolves both selected symbolic refs to immutable commit SHAs. Saved comparisons retain symbolic refs; calculated results and revision documents use SHAs.
 
+All filesystem path arguments use Git's global `--literal-pathspecs` mode in
+addition to `--`, so characters with pathspec meaning are never interpreted as
+patterns or magic signatures.
+
 ## Ahead and behind
 
 Run the equivalent of:
@@ -123,6 +127,38 @@ Text changes open through `vscode.diff` with preview enabled. Binary files never
 Ref resolution distinguishes missing base from missing target. Missing objects may indicate deletion, shallow history, or repository corruption and are mapped to the most specific safe error available. Timeouts, cancellation, output limits, Git absence, repository absence, and unknown command failures remain distinct.
 
 Raw stderr may inform redacted technical diagnostics but is never shown verbatim as the main user-facing error. A failed or invalid calculation never removes its saved comparison.
+
+## Single-file stash
+
+`Stash This File...` is defined as:
+
+- include the selected tracked file's staged and unstaged state;
+- preserve the index parent so `git stash apply --index` can restore partial
+  staging;
+- treat a detected rename as one logical change containing its old and new
+  paths;
+- exclude all unrelated index/worktree changes and every untracked file;
+- reject unmerged paths, `.git` metadata, active `filter` attributes, and
+  invalid or stale workspace/repository context.
+
+RefHaven does not use `git stash push -- <path>` because supported Git versions
+cannot represent a complete staged rename through that path-limited command.
+Instead it starts a temporary index from `HEAD`, imports only the selected real
+index entries, updates only those paths from the worktree, writes the index and
+worktree trees, and creates the standard two-parent stash shape:
+
+```text
+stash commit W
+  parent 1: H (HEAD)
+  parent 2: I (selected index state)
+```
+
+`refs/stash` is updated with `git update-ref --create-reflog` and an
+expected-old value. Only after the ref is safely reachable are selected paths
+restored to `HEAD`; a cleanup failure reports the new stash SHA and leaves the
+recoverable stash in place. Mutating commands override `core.hooksPath` with a
+private empty path, and the operation refuses content filters before any
+worktree/index mutation. Once started, it is intentionally not cancellable.
 
 ## Required semantic fixtures
 

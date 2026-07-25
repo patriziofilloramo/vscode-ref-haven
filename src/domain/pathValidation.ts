@@ -24,6 +24,14 @@ export function assertRepositoryRelativeGitPath(filePath: unknown): asserts file
   }
 }
 
+/** Rejects the repository metadata entry while accepting normal worktree paths. */
+export function assertRepositoryWorktreeGitPath(filePath: unknown): asserts filePath is string {
+  assertRepositoryRelativeGitPath(filePath);
+  if (filePath.split("/", 1)[0]?.toLowerCase() === ".git") {
+    throw new Error("Repository metadata cannot be selected for this operation.");
+  }
+}
+
 /** Resolves a Git path and proves that the result remains below the repository root. */
 export function resolvePathWithinRepository(repositoryRoot: string, filePath: unknown): string {
   if (!isAbsolute(repositoryRoot)) throw new Error("Repository root must be absolute.");

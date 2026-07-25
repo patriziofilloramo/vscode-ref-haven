@@ -79,5 +79,5 @@ export function buildLocalOnlyGitEnvironment(
 
 /** Applies command-scoped policy after all inherited and repository config. */
 export function buildLocalOnlyGitArguments(args: readonly string[]): string[] {
-  return [...LOCAL_ONLY_CONFIG_ARGUMENTS, ...args];
+  return ["--literal-pathspecs", ...LOCAL_ONLY_CONFIG_ARGUMENTS, ...args];
 }

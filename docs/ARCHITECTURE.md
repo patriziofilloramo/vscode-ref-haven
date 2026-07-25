@@ -129,7 +129,7 @@ Process-control failures use stable codes for `commandTimedOut`, `commandCancell
 
 `GitCli.ts` launches `git` with `execFile`, argument arrays, and no shell. Every operation runs through `GitScheduler`, which enforces four global and two per-repository processes. The adapter owns cancellation, configurable timeouts, encoding, 5 MiB stdout/stderr limits, and safe error mapping. It returns buffers only for immutable file content and decoded output for typed parsers.
 
-`gitProcessPolicy.ts` is the single local-only process boundary. It blocks every Git transport and lazy object fetch, disables prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes inherited repository and command-config redirection, and prevents external diff/textconv execution. The policy is applied to string, buffer, and stdin invocations and is covered by exact regression tests.
+`gitProcessPolicy.ts` is the single local-only process boundary. It blocks every Git transport and lazy object fetch, disables prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes inherited repository and command-config redirection, enables literal pathspec handling, and prevents external diff/textconv execution. The policy is applied to string, buffer, and stdin invocations and is covered by exact regression tests.
 
 ### GitClient
 
@@ -165,11 +165,12 @@ Only a result whose captured generation equals the state's current generation ma
 ### FileActionsController
 
 The file-actions controller is the single orchestration point for Explorer,
-editor, editor-title, status-bar, and changed-file-node actions. It resolves
-command arguments through `ui/commands/fileContext.ts`, canonicalises the
-repository-relative path, activates a working-tree editor only when required,
-and delegates history, annotations, revision documents, and native diffs to
-their owning controllers.
+editor, Source Control resource, editor-title, status-bar, and
+changed-file-node actions. It resolves command arguments through
+`ui/commands/fileContext.ts`, canonicalises the repository-relative path,
+activates a working-tree editor only when required, and delegates history,
+annotations, stash, revision documents, and native diffs to their owning
+controllers.
 
 Compare File with Revision resolves the selected reference to an immutable SHA
 and asks Git only for the selected path. Added and deleted sides reuse the
@@ -205,7 +206,20 @@ Renames use the old path at the from-SHA and the new path at the to-SHA. Binary 
 
 ### StashController and StashTreeProvider
 
-The read-only stash view lists `git stash list` entries (parsed from a NUL-safe `--format`) per repository and expands each stash into its tracked file changes (first parent → stash commit). Mutating stash actions are excluded because Git may invoke repository-configured filters or merge drivers during them; those processes cannot be sandboxed portably.
+The stash view lists `git stash list` entries (parsed from a delimiter-safe
+`--format`) per repository and expands each stash into its tracked file
+changes (first parent → stash commit). File nodes expose native revision,
+HEAD/working-tree comparison, history, and recent-stash-search actions.
+
+`StashController` owns the single allowed mutation, **Stash This File...**.
+The Git adapter validates the literal repository-relative path, detects a
+rename pair, rejects conflicts and active content filters, and creates standard
+stash index/worktree commits from an isolated temporary index. `refs/stash` is
+updated with a compare-and-swap expected value before only the selected paths
+are restored to `HEAD`. Every plumbing command that can update an index or ref
+uses a private empty `core.hooksPath`; unrelated real index and worktree state
+is never copied into the stash or reset. The progress notification becomes
+non-cancellable once this bounded mutation begins.
 
 ### Repository navigation
 

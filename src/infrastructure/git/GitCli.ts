@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { lstat, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 import * as vscode from "vscode";
@@ -9,7 +12,12 @@ import type { CommitDetails, CommitSearchKind } from "../../domain/commitDetails
 import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
 import type { FileHistoryEntry } from "../../domain/history";
 import type { ChangedLineRange } from "../../domain/fileAnnotations";
-import { assertRepositoryRelativeGitPath, pathIdentityKey } from "../../domain/pathValidation";
+import {
+  assertRepositoryRelativeGitPath,
+  assertRepositoryWorktreeGitPath,
+  pathIdentityKey,
+  resolvePathWithinRepository,
+} from "../../domain/pathValidation";
 import type { StashEntry } from "../../domain/stash";
 import type { WorktreeInfo } from "../../domain/worktree";
 import { parseBlameFilePorcelain, parseBlamePorcelain } from "./blamePorcelain";
@@ -210,6 +218,24 @@ export async function listChangedFiles(
     ),
   ]).catch((error: unknown) =>
     failGitOperation(error, "Git could not calculate the changed files for this comparison."),
+  );
+  return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
+}
+
+export async function listChangedFilesForPath(
+  repositoryRoot: string,
+  fromSha: string,
+  toSha: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<FileChange[]> {
+  assertRepositoryRelativeGitPath(filePath);
+  const baseArgs = ["diff", "--no-ext-diff", "--no-textconv", "--find-renames", fromSha, toSha];
+  const [nameStatusOutput, numstatOutput] = await Promise.all([
+    runGit(repositoryRoot, [...baseArgs, "--name-status", "-z", "--", filePath], signal),
+    runGit(repositoryRoot, [...baseArgs, "--numstat", "-z", "--", filePath], signal),
+  ]).catch((error: unknown) =>
+    failGitOperation(error, "Git could not compare this file between the selected revisions."),
   );
   return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
 }
@@ -472,6 +498,113 @@ export async function listStashes(
   return parseStashList(stdout);
 }
 
+export async function stashTrackedFile(
+  repositoryRoot: string,
+  filePath: string,
+  message: string,
+): Promise<string> {
+  assertRepositoryWorktreeGitPath(filePath);
+  const normalizedMessage = message.trim();
+  if (
+    normalizedMessage.length === 0 ||
+    normalizedMessage.length > 500 ||
+    normalizedMessage.includes("\0")
+  ) {
+    throw new Error("The stash message must contain between 1 and 500 characters.");
+  }
+
+  const headSha = await resolveRef(repositoryRoot, "HEAD");
+  const branchName = (await readCurrentBranch(repositoryRoot)) ?? "(no branch)";
+  const stashSubject = `On ${branchName}: ${normalizedMessage}`;
+  const workingTreeChanges = await listWorkingTreeChanges(repositoryRoot, headSha);
+  const selectedChange = workingTreeChanges.find(
+    ({ newPath, oldPath }) => newPath === filePath || oldPath === filePath,
+  );
+  const pathspecs =
+    selectedChange?.status === "renamed" && selectedChange.oldPath
+      ? [selectedChange.oldPath, selectedChange.newPath]
+      : [filePath];
+  const [status, unmerged, attributes] = await Promise.all([
+    runGit(repositoryRoot, [
+      "status",
+      "--porcelain=v2",
+      "-z",
+      "--untracked-files=no",
+      "--",
+      ...pathspecs,
+    ]),
+    runGit(repositoryRoot, ["ls-files", "--unmerged", "-z", "--", ...pathspecs]),
+    runGit(repositoryRoot, ["check-attr", "-z", "filter", "--", ...pathspecs]),
+  ]).catch((error: unknown) =>
+    failGitOperation(error, "Git could not inspect the selected file before stashing it."),
+  );
+  if (status.length === 0) {
+    throw new Error("The selected file has no tracked changes to stash.");
+  }
+  if (unmerged.length > 0) {
+    throw new Error("Resolve the selected file's merge conflicts before stashing it.");
+  }
+  if (hasActiveGitFilter(attributes)) {
+    throw new Error(
+      "RefHaven will not stash a file with an active Git content filter. Use an approved local workflow for this repository.",
+    );
+  }
+
+  const previousStash = await resolveOptionalCommit(repositoryRoot, "refs/stash");
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "refhaven-stash-index-")).catch(
+    (error: unknown) =>
+      failGitOperation(error, "RefHaven could not create secure temporary Git state."),
+  );
+  const temporaryIndex = join(temporaryDirectory, "index");
+  const disabledHooksPath = join(temporaryDirectory, "hooks-disabled");
+  try {
+    const stashCommit = await createPathLimitedStashCommit(
+      repositoryRoot,
+      headSha,
+      branchName,
+      normalizedMessage,
+      pathspecs,
+      temporaryIndex,
+      disabledHooksPath,
+    ).catch((error: unknown) =>
+      failGitOperation(
+        error,
+        "Git could not safely create the file stash. The selected file was not changed.",
+      ),
+    );
+    const expectedOldValue = previousStash ?? "0".repeat(stashCommit.length);
+    await runGit(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, [
+        "update-ref",
+        "--create-reflog",
+        "-m",
+        stashSubject,
+        "refs/stash",
+        stashCommit,
+        expectedOldValue,
+      ]),
+    ).catch((error: unknown) =>
+      failGitOperation(
+        error,
+        "Another process changed the stash list. RefHaven left the selected file untouched.",
+      ),
+    );
+
+    try {
+      await restorePathsFromHead(repositoryRoot, headSha, pathspecs, disabledHooksPath);
+    } catch (error) {
+      throw new Error(
+        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not fully clean the selected file. Refresh Source Control and inspect both states before continuing.`,
+        { cause: error },
+      );
+    }
+    return stashCommit;
+  } finally {
+    await rm(temporaryDirectory, { force: true, recursive: true }).catch(() => undefined);
+  }
+}
+
 /** Resolves the repository root containing `directory`, or null outside a repo. */
 export async function findRepositoryRoot(directory: string): Promise<string | null> {
   const stdout = await runGit(directory, ["rev-parse", "--show-toplevel"]).catch(() => null);
@@ -648,6 +781,36 @@ async function runGit(
   );
 }
 
+async function runGitWithTemporaryIndex(
+  cwd: string,
+  args: readonly string[],
+  temporaryIndex: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  return scheduler.run(
+    pathIdentityKey(cwd),
+    async () => {
+      try {
+        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
+          cwd,
+          env: {
+            ...buildLocalOnlyGitEnvironment(process.env),
+            GIT_INDEX_FILE: temporaryIndex,
+          },
+          maxBuffer: MAX_GIT_OUTPUT_BYTES,
+          signal,
+          timeout: gitTimeoutMs(),
+          windowsHide: true,
+        });
+        return stdout;
+      } catch (error) {
+        throw normalizeGitError(error);
+      }
+    },
+    signal,
+  );
+}
+
 async function runGitBuffer(
   cwd: string,
   args: readonly string[],
@@ -681,9 +844,10 @@ function runGitWithInput(
   args: readonly string[],
   input: string | undefined,
   signal?: AbortSignal,
+  temporaryIndex?: string,
 ): Promise<string> {
   if (input !== undefined && Buffer.byteLength(input, "utf8") > MAX_GIT_INPUT_BYTES) {
-    return Promise.reject(new Error("The active document is too large for inline blame."));
+    return Promise.reject(new Error("The Git operation input is too large to process safely."));
   }
   return scheduler.run(
     pathIdentityKey(cwd),
@@ -694,7 +858,10 @@ function runGitWithInput(
           buildLocalOnlyGitArguments(args),
           {
             cwd,
-            env: buildLocalOnlyGitEnvironment(process.env),
+            env: {
+              ...buildLocalOnlyGitEnvironment(process.env),
+              ...(temporaryIndex ? { GIT_INDEX_FILE: temporaryIndex } : {}),
+            },
             maxBuffer: MAX_GIT_OUTPUT_BYTES,
             signal,
             timeout: gitTimeoutMs(),
@@ -717,10 +884,184 @@ function runGitWithInput(
   );
 }
 
+function hasActiveGitFilter(output: string): boolean {
+  const fields = output.split("\0");
+  if (fields.at(-1) === "") fields.pop();
+  if (fields.length % 3 !== 0) return true;
+  for (let index = 2; index < fields.length; index += 3) {
+    const value = fields[index];
+    if (value !== "unspecified" && value !== "unset") return true;
+  }
+  return false;
+}
+
+async function createPathLimitedStashCommit(
+  repositoryRoot: string,
+  headSha: string,
+  branchName: string,
+  message: string,
+  pathspecs: readonly string[],
+  temporaryIndex: string,
+  disabledHooksPath: string,
+): Promise<string> {
+  await runGitWithTemporaryIndex(
+    repositoryRoot,
+    withoutGitHooks(disabledHooksPath, ["read-tree", headSha]),
+    temporaryIndex,
+  );
+  await runGitWithTemporaryIndex(
+    repositoryRoot,
+    withoutGitHooks(disabledHooksPath, ["update-index", "--force-remove", "--", ...pathspecs]),
+    temporaryIndex,
+  );
+  const selectedIndexEntries = await runGit(repositoryRoot, [
+    "ls-files",
+    "--stage",
+    "-z",
+    "--",
+    ...pathspecs,
+  ]);
+  if (selectedIndexEntries.length > 0) {
+    await runGitWithInput(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, ["update-index", "-z", "--index-info"]),
+      selectedIndexEntries,
+      undefined,
+      temporaryIndex,
+    );
+  }
+  const indexTree = parseObjectId(
+    await runGitWithTemporaryIndex(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, ["write-tree"]),
+      temporaryIndex,
+    ),
+    "Git returned an invalid temporary index tree.",
+  );
+  const indexCommit = parseObjectId(
+    await runGitWithInput(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, ["commit-tree", indexTree, "-p", headSha]),
+      `index on ${branchName}: ${headSha.slice(0, 8)} ${message}\n`,
+    ),
+    "Git returned an invalid stash index commit.",
+  );
+
+  await updateTemporaryIndexFromWorktree(
+    repositoryRoot,
+    pathspecs,
+    temporaryIndex,
+    disabledHooksPath,
+  );
+  const worktreeTree = parseObjectId(
+    await runGitWithTemporaryIndex(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, ["write-tree"]),
+      temporaryIndex,
+    ),
+    "Git returned an invalid temporary worktree tree.",
+  );
+  return parseObjectId(
+    await runGitWithInput(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, [
+        "commit-tree",
+        worktreeTree,
+        "-p",
+        headSha,
+        "-p",
+        indexCommit,
+      ]),
+      `On ${branchName}: ${message}\n`,
+    ),
+    "Git returned an invalid stash commit.",
+  );
+}
+
+async function updateTemporaryIndexFromWorktree(
+  repositoryRoot: string,
+  pathspecs: readonly string[],
+  temporaryIndex: string,
+  disabledHooksPath: string,
+): Promise<void> {
+  for (const filePath of pathspecs) {
+    try {
+      await lstat(resolvePathWithinRepository(repositoryRoot, filePath));
+      await runGitWithTemporaryIndex(
+        repositoryRoot,
+        withoutGitHooks(disabledHooksPath, ["add", "--", filePath]),
+        temporaryIndex,
+      );
+    } catch (error) {
+      const candidate = error as { readonly code?: unknown };
+      if (candidate.code !== "ENOENT") throw error;
+      await runGitWithTemporaryIndex(
+        repositoryRoot,
+        withoutGitHooks(disabledHooksPath, ["update-index", "--force-remove", "--", filePath]),
+        temporaryIndex,
+      );
+    }
+  }
+}
+
+async function restorePathsFromHead(
+  repositoryRoot: string,
+  headSha: string,
+  pathspecs: readonly string[],
+  disabledHooksPath: string,
+): Promise<void> {
+  const present: string[] = [];
+  const absent: string[] = [];
+  for (const filePath of pathspecs) {
+    const output = await runGit(repositoryRoot, [
+      "ls-tree",
+      "-z",
+      "--name-only",
+      headSha,
+      "--",
+      filePath,
+    ]);
+    (output.length > 0 ? present : absent).push(filePath);
+  }
+  if (absent.length > 0) {
+    await runGit(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, ["rm", "--force", "--ignore-unmatch", "--", ...absent]),
+    );
+  }
+  if (present.length > 0) {
+    await runGit(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, [
+        "restore",
+        `--source=${headSha}`,
+        "--staged",
+        "--worktree",
+        "--",
+        ...present,
+      ]),
+    );
+  }
+}
+
+function withoutGitHooks(hooksPath: string, args: readonly string[]): string[] {
+  return ["-c", `core.hooksPath=${hooksPath}`, ...args];
+}
+
 function parseObjectId(stdout: string, errorMessage: string): string {
   const objectId = stdout.trim();
   if (!/^[0-9a-f]{40,64}$/i.test(objectId)) throw new Error(errorMessage);
   return objectId;
+}
+
+async function resolveOptionalCommit(repositoryRoot: string, ref: string): Promise<string | null> {
+  const stdout = await runGit(repositoryRoot, [
+    "rev-parse",
+    "--verify",
+    "--end-of-options",
+    `${ref}^{commit}`,
+  ]).catch((error: unknown) => preserveControlErrorOrNull(error));
+  return stdout === null ? null : parseObjectId(stdout, `Git returned an invalid ${ref} revision.`);
 }
 
 function discoverFromGitExtension(): string[] {

@@ -15,11 +15,26 @@ Every Git child process is started without a shell and receives a centrally test
 - inherited repository/config redirection variables are removed;
 - pagers and configured `core.fsmonitor` processes are disabled;
 - optional Git locks and replace-object rewriting are disabled;
+- path arguments use Git's global literal-pathspec mode;
 - diff operations pass `--no-ext-diff` and `--no-textconv`.
 
 If a required object is not already available locally, the operation fails instead of contacting a remote. The extension does not activate VS Code's built-in Git extension. If that extension is already active, RefHaven reads its repository list only; all comparison data still comes from the restricted local Git process.
 
-RefHaven performs no repository mutation. Stashes can be listed and inspected, but creating, applying, popping, or dropping them is intentionally outside scope: those Git operations can invoke repository-configured filters or merge drivers that cannot be sandboxed reliably across Windows, Linux, and macOS.
+The only repository mutation currently implemented is the explicit
+**Stash This File...** workflow. RefHaven builds a standard two-parent stash
+from temporary index state, updates `refs/stash` with an expected-old-value
+check, and restores only the selected tracked path or rename pair to `HEAD`.
+Unrelated index and worktree state is not included or reset. Untracked files,
+unmerged paths, repository metadata, and active `filter` attributes are
+rejected. Every mutating plumbing command overrides `core.hooksPath` with a
+private empty temporary path, preventing repository or global Git hooks from
+running. The temporary index stores Git object IDs and paths, not file
+contents, and is deleted after the operation.
+
+Apply, pop, drop, multi-file stash, include-untracked, and keep-index variants
+remain outside scope. RefHaven also makes the mutation non-cancellable after
+it starts: terminating Git while it is updating objects, refs, or the real
+index would be less safe than allowing the bounded local operation to finish.
 
 For the same reason, the Branches and Worktrees views are read-only. They can
 copy metadata, create RefHaven comparison records, and ask VS Code to open an
@@ -48,6 +63,13 @@ The guarantee above covers RefHaven and the Git processes it creates. The follow
 - operating-system clipboard history or cloud clipboard synchronization;
 - repositories or object stores located on network-mounted filesystems;
 - development-time package installation and Extension Host test downloads.
+
+Local Git configuration remains trusted for identity, attributes, object
+format, line-ending, and working-tree encoding semantics. RefHaven blocks
+network transports, hooks, content filters, external diff/textconv,
+fsmonitor, prompts, and inherited process redirection for its own stash
+sequence; it cannot prevent another extension, terminal, or concurrent local
+process from running a different Git command.
 
 For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; RefHaven itself neither enables nor calls remote Git operations.
 

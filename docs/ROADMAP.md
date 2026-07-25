@@ -153,37 +153,28 @@ first repository mutation and requires its own recovery and security gates.
 Approved-GitLab links remain assigned to Batch 9 so local hover availability
 never depends on network access.
 
-## Next priorities
+## Completed — Batch 8: Safe stash workflows
 
-### Batch 8 — Safe stash workflows
-
-Git supports path-limited stashing, so the first mutation workflow will be
-**Stash This File** from the Explorer and editor context menus.
-
-- Use argument-array Git execution with an explicit validated pathspec; never
-  interpolate paths into a shell command.
-- Re-resolve and canonicalise the selected file immediately before execution,
-  require it to belong to the selected repository, and reject traversal,
-  repository metadata paths, and stale multi-root context.
-- Make the mutation explicit and user-initiated, report progress, refresh SCM
-  and RefHaven views after success, and present actionable failures.
-- Define and test the exact treatment of staged plus unstaged changes. The
-  initial version excludes untracked files unless the user selects a separate,
-  explicitly labelled action in a later iteration.
-- Preserve unrelated working-tree and index changes.
-- Cover modified, staged, partially staged, deleted, renamed, Unicode,
-  whitespace, long-path, worktree, multi-root, cancellation, and Git-failure
-  scenarios with real-repository integration tests.
-- Audit whether any repository-configured filters or helpers can run for the
-  chosen Git sequence. Document the remaining trusted-local-configuration
-  boundary rather than claiming sandboxing that RefHaven cannot provide.
-- Add read-only stash-file actions: Open at Stash Revision, Compare with HEAD,
-  Compare with Working Tree, File History, and find other stashes containing
-  the file.
+- Added **Stash This File...** to editor, Explorer, Source Control, and the
+  native file-actions quick menu.
+- Preserves selected staged and unstaged state, including partial staging,
+  deletion, and rename, while leaving unrelated worktree/index state intact.
+- Uses literal validated paths, temporary index/worktree trees, standard
+  two-parent stash commits, and compare-and-swap `refs/stash` updates.
+- Rejects untracked, conflicted, metadata, stale-repository, and active-filter
+  inputs; disables Git hooks for every mutating plumbing command.
+- Refreshes RefHaven and built-in Source Control after the non-cancellable
+  mutation succeeds.
+- Added Open at Stash Revision, Compare with HEAD, Compare with Working Tree,
+  File History, and cancellable search across the 50 most recent other stashes.
+- Added real-repository tests for staged/partial/deleted/renamed/unusual paths,
+  long paths, worktrees, filters, hooks, failure cases, and `apply --index`
+  compatibility.
 
 Apply, pop, drop, multi-file stash, include-untracked, and keep-index variants
-remain deferred until the single-file workflow has proven reliable and its
-semantics are clear in the UI.
+remain deliberately deferred.
+
+## Next priorities
 
 ### Batch 9 — Approved GitLab integration
 

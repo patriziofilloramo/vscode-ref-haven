@@ -37,6 +37,10 @@ export function registerCommands(
     [COMMAND_IDS.changeFileAnnotations]: (resource) =>
       fileActionsController.changeAnnotations(resource),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
+    [COMMAND_IDS.compareStashFileWithHead]: (node) =>
+      fileActionsController.compareStashFileWithHead(node),
+    [COMMAND_IDS.compareStashFileWithWorkingTree]: (node) =>
+      fileActionsController.compareStashFileWithWorkingTree(node),
     [COMMAND_IDS.compareFileWithRevision]: (resource, sha, filePath, label) =>
       typeof resource === "string" && typeof sha === "string" && typeof filePath === "string"
         ? fileActionsController.compareFileWithRevisionAt(resource, sha, filePath, label)
@@ -62,6 +66,8 @@ export function registerCommands(
       stashController.copyStashMessage(requireStash(node).stash),
     [COMMAND_IDS.copyWorktreePath]: (node) =>
       repositoryNavigationController.copyWorktreePath(requireWorktree(node)),
+    [COMMAND_IDS.findOtherStashesContainingFile]: (node) =>
+      fileActionsController.findOtherStashesContainingFile(node),
     [COMMAND_IDS.newComparison]: () => controller.newComparison(),
     [COMMAND_IDS.openChangedFileAtRevision]: (node) =>
       fileActionsController.openFileAtRevision(node),
@@ -80,6 +86,7 @@ export function registerCommands(
     [COMMAND_IDS.openFileHistoryDiff]: (node) =>
       fileHistoryController.openFileDiff(requireFileHistoryNode(node)),
     [COMMAND_IDS.openLineDiff]: (scope, file) => fileActionsController.openLineDiff(scope, file),
+    [COMMAND_IDS.openStashFileAtRevision]: (node) => fileActionsController.openFileAtRevision(node),
     [COMMAND_IDS.openFileDiff]: (scope, file) =>
       controller.openFileDiff(
         scope as Parameters<ComparisonController["openFileDiff"]>[0],
@@ -112,6 +119,7 @@ export function registerCommands(
         ? fileActionsController.showLineHistoryAt(resource, filePath, lineNumber)
         : fileActionsController.showLineHistory(resource),
     [COMMAND_IDS.showRefHavenMenu]: (resource) => fileActionsController.showMenu(resource),
+    [COMMAND_IDS.stashFile]: (resource) => fileActionsController.stashFile(resource),
     [COMMAND_IDS.swapComparison]: (node) => controller.swapComparison(requireComparison(node)),
     [COMMAND_IDS.toggleInlineBlame]: () => blameController.toggleInlineBlame(),
     [COMMAND_IDS.unpinComparison]: (node) => controller.setPinned(requireComparison(node), false),

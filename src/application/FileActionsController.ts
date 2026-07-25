@@ -3,7 +3,9 @@ import * as vscode from "vscode";
 import type { FileChange } from "../domain/comparisonResult";
 import type { FileDiffScope } from "../domain/fileDiffScope";
 import {
+  listChangedFilesForPath,
   listComparisonRefs,
+  listStashes,
   listWorkingTreeFileChanges,
   readCurrentBranch,
   resolveRef,
@@ -17,20 +19,30 @@ import {
   type FileContextTarget,
 } from "../ui/commands/fileContext";
 import { pickBranch } from "../ui/pickers/comparisonPickers";
+import type { FileNode } from "../ui/tree/changeNodes";
 import type { ComparisonController } from "./ComparisonController";
 import type { FileAnnotationsController } from "./FileAnnotationsController";
 import type { FileHistoryController } from "./FileHistoryController";
 import type { Logger } from "./Logger";
+import type { StashController } from "./StashController";
 
 interface FileActionItem extends vscode.QuickPickItem {
   readonly run: () => Thenable<unknown>;
 }
+
+type StashFileNode = FileNode & {
+  readonly scope: FileDiffScope & {
+    readonly fromSha: string;
+    readonly toSha: string;
+  };
+};
 
 export class FileActionsController {
   public constructor(
     private readonly comparisonController: ComparisonController,
     private readonly fileAnnotationsController: FileAnnotationsController,
     private readonly fileHistoryController: FileHistoryController,
+    private readonly stashController: StashController,
     private readonly logger: Logger,
   ) {}
 
@@ -68,6 +80,12 @@ export class FileActionsController {
             vscode.commands.executeCommand(COMMAND_IDS.compareFileWithRevision, target.uri),
         },
         {
+          detail: "Tracked staged and unstaged changes for this file only",
+          label: "$(git-stash) Stash This File...",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.stashFile, commandArgument),
+        },
+        {
           detail: "Blame, heatmap, changes, or off",
           label: "$(symbol-color) Change File Annotations...",
           run: (): Thenable<unknown> =>
@@ -92,6 +110,158 @@ export class FileActionsController {
   public async showFileHistory(candidate?: unknown): Promise<void> {
     const target = await this.requireTarget(candidate);
     await this.fileHistoryController.showFileHistory(target.repositoryRoot, target.filePath);
+  }
+
+  public async stashFile(candidate?: unknown): Promise<void> {
+    const selectedTarget = await this.requireTarget(candidate);
+    const message = await vscode.window.showInputBox({
+      ignoreFocusOut: true,
+      placeHolder: "Stash message",
+      prompt:
+        "Stash tracked staged and unstaged changes for this file only. Untracked files are excluded.",
+      title: "RefHaven: Stash This File",
+      value: `RefHaven: ${selectedTarget.filePath}`,
+      validateInput: (value) => {
+        const length = value.trim().length;
+        return length === 0 || length > 500
+          ? "Enter a stash message between 1 and 500 characters."
+          : undefined;
+      },
+    });
+    if (message === undefined) return;
+
+    const target = await this.requireTarget(candidate);
+    if (
+      target.repositoryRoot !== selectedTarget.repositoryRoot ||
+      target.filePath !== selectedTarget.filePath
+    ) {
+      throw new Error("The selected file changed while preparing the stash.");
+    }
+    await this.stashController.stashFile(target.repositoryRoot, target.filePath, message);
+  }
+
+  public async compareStashFileWithHead(candidate: unknown): Promise<void> {
+    const node = await this.requireStashFileNode(candidate);
+    const headSha = await resolveRef(node.scope.repositoryRootPath, "HEAD");
+    const stashSha = await resolveRef(node.scope.repositoryRootPath, node.scope.toSha);
+    const file = await this.loadRevisionFileChange(
+      node.scope.repositoryRootPath,
+      headSha,
+      stashSha,
+      node.file,
+    );
+    await this.comparisonController.openFileDiff(
+      {
+        fromSha: headSha,
+        label: `HEAD ↔ ${node.scope.label}`,
+        repositoryRootPath: node.scope.repositoryRootPath,
+        toSha: stashSha,
+      },
+      file,
+    );
+  }
+
+  public async compareStashFileWithWorkingTree(candidate: unknown): Promise<void> {
+    const node = await this.requireStashFileNode(candidate);
+    const stashSha = await resolveRef(node.scope.repositoryRootPath, node.scope.toSha);
+    const paths = stashFilePaths(node.file);
+    let file: FileChange | undefined;
+    for (const filePath of paths) {
+      const changes = await listWorkingTreeFileChanges(
+        node.scope.repositoryRootPath,
+        stashSha,
+        filePath,
+      );
+      file = findMatchingFile(changes, paths);
+      if (file) break;
+    }
+    await this.comparisonController.openFileDiff(
+      {
+        fromSha: stashSha,
+        label: `${node.scope.label} ↔ Working Tree`,
+        repositoryRootPath: node.scope.repositoryRootPath,
+        toSha: null,
+      },
+      file ?? defaultModifiedFile(node.file.newPath),
+    );
+  }
+
+  public async findOtherStashesContainingFile(candidate: unknown): Promise<void> {
+    const node = await this.requireStashFileNode(candidate);
+    const stashes = (await listStashes(node.scope.repositoryRootPath))
+      .filter(({ sha }) => sha !== node.scope.toSha)
+      .slice(0, 50);
+    const paths = stashFilePaths(node.file);
+    const matches = await vscode.window.withProgress(
+      {
+        cancellable: true,
+        location: vscode.ProgressLocation.Notification,
+        title: `RefHaven: Searching recent stashes for ${node.file.newPath}`,
+      },
+      async (_progress, token) => {
+        const abortController = new AbortController();
+        const cancellation = token.onCancellationRequested(() => abortController.abort());
+        try {
+          const results = await Promise.all(
+            stashes.map(async (stash) => {
+              for (const filePath of paths) {
+                const changes = await listChangedFilesForPath(
+                  node.scope.repositoryRootPath,
+                  stash.parentSha,
+                  stash.sha,
+                  filePath,
+                  abortController.signal,
+                );
+                const file = findMatchingFile(changes, paths);
+                if (file) return { file, stash };
+              }
+              return null;
+            }),
+          );
+          return results.filter(
+            (match): match is NonNullable<(typeof results)[number]> => match !== null,
+          );
+        } catch (error) {
+          if (token.isCancellationRequested) return null;
+          throw error;
+        } finally {
+          cancellation.dispose();
+        }
+      },
+    );
+    if (matches === null) return;
+    if (matches.length === 0) {
+      void vscode.window.showInformationMessage(
+        `No other recent stash contains ${node.file.newPath}.`,
+      );
+      return;
+    }
+    const selected = await vscode.window.showQuickPick(
+      matches.map((match) => ({
+        description: match.stash.selector,
+        detail: match.stash.branchName
+          ? `${match.stash.branchName} · ${new Date(match.stash.authorDate).toLocaleString()}`
+          : new Date(match.stash.authorDate).toLocaleString(),
+        label: match.stash.message,
+        match,
+      })),
+      {
+        matchOnDescription: true,
+        matchOnDetail: true,
+        placeHolder: node.file.newPath,
+        title: "RefHaven: Other Stashes Containing File",
+      },
+    );
+    if (!selected) return;
+    await this.comparisonController.openFileDiff(
+      {
+        fromSha: selected.match.stash.parentSha,
+        label: selected.match.stash.selector,
+        repositoryRootPath: node.scope.repositoryRootPath,
+        toSha: selected.match.stash.sha,
+      },
+      selected.match.file,
+    );
   }
 
   public async showFileHistoryAt(repositoryRoot: unknown, filePath: unknown): Promise<void> {
@@ -212,6 +382,30 @@ export class FileActionsController {
     this.logger.info("Compared file with revision", { operation: "compareFileWithRevision" });
   }
 
+  private async loadRevisionFileChange(
+    repositoryRoot: string,
+    fromSha: string,
+    toSha: string,
+    selectedFile: FileChange,
+  ): Promise<FileChange> {
+    const paths = stashFilePaths(selectedFile);
+    for (const filePath of paths) {
+      const changes = await listChangedFilesForPath(repositoryRoot, fromSha, toSha, filePath);
+      const file = findMatchingFile(changes, paths);
+      if (file) return file;
+    }
+    return defaultModifiedFile(selectedFile.newPath);
+  }
+
+  private async requireStashFileNode(candidate: unknown): Promise<StashFileNode> {
+    const node = asFileNode(candidate);
+    if (!node?.scope.fromSha || !node.scope.toSha || !/^stash@\{\d+\}$/u.test(node.scope.label)) {
+      throw new Error("Select a changed file in the Stashes view first.");
+    }
+    await this.requireKnownTarget(node.scope.repositoryRootPath, node.file.newPath);
+    return node as StashFileNode;
+  }
+
   private async requireTarget(candidate?: unknown): Promise<FileContextTarget> {
     const target = await resolveFileContextTarget(candidate);
     if (!target) throw new Error("Select a file inside a Git repository first.");
@@ -230,4 +424,20 @@ export class FileActionsController {
 
 function defaultModifiedFile(filePath: string): FileChange {
   return { newPath: filePath, status: "modified" };
+}
+
+function stashFilePaths(file: FileChange): readonly string[] {
+  return file.oldPath && file.oldPath !== file.newPath
+    ? [file.newPath, file.oldPath]
+    : [file.newPath];
+}
+
+function findMatchingFile(
+  changes: readonly FileChange[],
+  filePaths: readonly string[],
+): FileChange | undefined {
+  const paths = new Set(filePaths);
+  return changes.find(
+    ({ newPath, oldPath }) => paths.has(newPath) || (oldPath && paths.has(oldPath)),
+  );
 }

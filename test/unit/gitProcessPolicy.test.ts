@@ -64,6 +64,7 @@ suite("local-only Git process policy", () => {
 
   test("places command-scoped restrictions before the Git subcommand", () => {
     assert.deepEqual(buildLocalOnlyGitArguments(["show", "abc:file.txt"]), [
+      "--literal-pathspecs",
       "-c",
       "protocol.allow=never",
       "-c",

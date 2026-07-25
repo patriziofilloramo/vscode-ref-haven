@@ -106,6 +106,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     controller,
     fileAnnotationsController,
     fileHistoryController,
+    stashController,
     logger,
   );
   const repositoryWatcher = new RepositoryWatcher(() => {
