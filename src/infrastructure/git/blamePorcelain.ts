@@ -1,6 +1,6 @@
 import type { FileBlameLine, LineBlame } from "../../domain/blame";
 
-const HEADER_PATTERN = /^([0-9a-f]{40,64}) \d+ (\d+)(?: \d+)?$/u;
+const HEADER_PATTERN = /^([0-9a-f]{40,64}) (\d+) (\d+)(?: \d+)?$/u;
 
 export class GitBlameParseError extends Error {
   public constructor(message: string) {
@@ -28,10 +28,20 @@ export function parseBlameFilePorcelain(stdout: string): FileBlameLine[] {
     if (header === undefined || header.length === 0) break;
     const match = HEADER_PATTERN.exec(header);
     const sha = match?.[1];
-    const finalLineText = match?.[2];
-    if (!sha || !finalLineText) throw new GitBlameParseError("Malformed Git blame header.");
+    const originalLineText = match?.[2];
+    const finalLineText = match?.[3];
+    if (!sha || !originalLineText || !finalLineText) {
+      throw new GitBlameParseError("Malformed Git blame header.");
+    }
+    const originalLineNumber = Number.parseInt(originalLineText, 10);
     const lineNumber = Number.parseInt(finalLineText, 10);
-    if (!Number.isSafeInteger(lineNumber) || lineNumber < 1 || seenLines.has(lineNumber)) {
+    if (
+      !Number.isSafeInteger(originalLineNumber) ||
+      originalLineNumber < 1 ||
+      !Number.isSafeInteger(lineNumber) ||
+      lineNumber < 1 ||
+      seenLines.has(lineNumber)
+    ) {
       throw new GitBlameParseError("Invalid final line number in Git blame output.");
     }
     index += 1;
@@ -53,14 +63,22 @@ export function parseBlameFilePorcelain(stdout: string): FileBlameLine[] {
     }
     if (!foundContent) throw new GitBlameParseError("Git blame output is missing line content.");
 
-    records.push({ blame: parseMetadata(sha, metadata), lineNumber });
+    records.push({
+      blame: parseMetadata(sha, originalLineNumber, lineNumber, metadata),
+      lineNumber,
+    });
     seenLines.add(lineNumber);
   }
 
   return records.sort((left, right) => left.lineNumber - right.lineNumber);
 }
 
-function parseMetadata(sha: string, metadata: ReadonlyMap<string, string>): LineBlame {
+function parseMetadata(
+  sha: string,
+  originalLineNumber: number,
+  finalLineNumber: number,
+  metadata: ReadonlyMap<string, string>,
+): LineBlame {
   const authorName = metadata.get("author");
   const authorTime = metadata.get("author-time");
   const path = metadata.get("filename");
@@ -73,12 +91,36 @@ function parseMetadata(sha: string, metadata: ReadonlyMap<string, string>): Line
   }
 
   const isCommitted = !/^0+$/u.test(sha);
+  const previous = parsePrevious(metadata.get("previous"));
+  const authorMail = metadata.get("author-mail");
+  const authorTimeZone = metadata.get("author-tz");
   return {
     authorDate: authorDateSeconds * 1000,
+    ...(authorMail ? { authorEmail: authorMail.replace(/^<|>$/gu, "") } : {}),
     authorName,
+    ...(authorTimeZone ? { authorTimeZone } : {}),
+    finalLineNumber,
     isCommitted,
+    originalLineNumber,
     path,
+    ...previous,
     sha,
     summary: isCommitted ? (metadata.get("summary") ?? "") : "",
   };
+}
+
+function parsePrevious(value: string | undefined): {
+  readonly previousPath?: string;
+  readonly previousSha?: string;
+} {
+  if (!value) return {};
+  const separator = value.indexOf(" ");
+  if (separator < 1 || separator === value.length - 1) {
+    throw new GitBlameParseError("Git blame output contains an invalid previous revision.");
+  }
+  const previousSha = value.slice(0, separator);
+  if (!/^[0-9a-f]{40,64}$/u.test(previousSha)) {
+    throw new GitBlameParseError("Git blame output contains an invalid previous revision.");
+  }
+  return { previousPath: value.slice(separator + 1), previousSha };
 }

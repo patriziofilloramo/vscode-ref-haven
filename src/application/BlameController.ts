@@ -104,20 +104,18 @@ export class BlameController implements vscode.Disposable {
       return;
     }
 
-    const commitNode = { commit: blameCommitInfo(current.blame), kind: "commit" };
+    const commitNode = {
+      commit: blameCommitInfo(current.blame),
+      kind: "commit",
+      repositoryRoot: current.repositoryRootPath,
+    };
     const selected = await vscode.window.showQuickPick(
       [
         {
           action: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.copyCommitSha, commitNode),
+            vscode.commands.executeCommand(COMMAND_IDS.showCommitDetails, commitNode),
           description: shortSha(current.blame.sha),
-          label: "$(copy) Copy SHA",
-        },
-        {
-          action: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.copyCommitMessage, commitNode),
-          description: current.blame.summary,
-          label: "$(copy) Copy Commit Message",
+          label: "$(inspect) Show Commit Details",
         },
         {
           action: (): Thenable<unknown> =>
@@ -129,6 +127,42 @@ export class BlameController implements vscode.Disposable {
             ),
           description: shortSha(current.blame.sha),
           label: "$(go-to-file) Open File at This Revision",
+        },
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.compareFileWithRevision),
+          description: current.relativePath,
+          label: "$(compare-changes) Compare File with Revision...",
+        },
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.showFileHistory),
+          description: current.relativePath,
+          label: "$(history) Show File History",
+        },
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.showLineHistory),
+          description: current.relativePath,
+          label: "$(list-selection) Show Line History",
+        },
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.changeFileAnnotations),
+          description: current.relativePath,
+          label: "$(symbol-color) Change File Annotations...",
+        },
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.copyCommitSha, commitNode),
+          description: shortSha(current.blame.sha),
+          label: "$(copy) Copy SHA",
+        },
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.copyCommitMessage, commitNode),
+          description: current.blame.summary,
+          label: "$(copy) Copy Commit Message",
         },
       ],
       { placeHolder: current.blame.summary, title: "RefHaven: Line Blame" },
@@ -211,11 +245,10 @@ export class BlameController implements vscode.Disposable {
       this.decoratedEditor.setDecorations(this.decorationType, []);
     }
     if (inlineEnabled && line < document.lineCount) {
-      const lineEnd = document.lineAt(line).range.end;
+      const lineRange = document.lineAt(line).range;
       editor.setDecorations(this.decorationType, [
         {
-          hoverMessage: hover,
-          range: new vscode.Range(lineEnd, lineEnd),
+          range: lineRange,
           renderOptions: {
             after: { contentText: inlineBlameText(blame, userName, now) },
           },

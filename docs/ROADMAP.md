@@ -122,45 +122,38 @@ feature so that the documented guarantees always match the shipped code.
 - Off by default, cancellable and debounced, with a 5,000-line responsiveness
   limit and no persistence of blame, diff, or selected-reference results.
 
+### Batch 6 — Interaction surface parity (completed 2026-07-16)
+
+- One native RefHaven submenu shared by Explorer and editor context menus.
+- File History, Line History, annotations, Open at Revision, and Compare File
+  with Revision available where users naturally look for them.
+- Compact editor-title quick menu and richer status-bar blame actions.
+- Revision and history actions exposed consistently on changed-file nodes.
+- Canonical repository-relative path resolution for URI and tree-node command
+  arguments, with path-limited Git comparison against the working tree.
+- Native UI only, zero new dependencies, keyboard-accessible commands, and
+  manifest/Extension Host coverage.
+
+`Stash This File` remains intentionally assigned to Batch 8 because it is the
+first repository mutation and requires its own recovery and security gates.
+
+### Batch 7 — Rich local line hover (completed 2026-07-16)
+
+- Native hover across the complete line, independent of the inline annotation.
+- Full local commit identity, author/email, exact/relative date, Git timezone,
+  original path/line, file count, and per-file statistics.
+- Show Commit Details, Diff Previous, Diff Working Tree, Open Revision, File
+  History, Line History, and copy actions.
+- Lazy cancellable loading with known-workspace repository validation, a
+  64-entry document-version/line cache, and watcher-driven invalidation.
+- Compact local previous-revision patch with a 64 KiB Git ceiling and a
+  24-line/4,000-character presentation limit.
+- Escaped trusted Markdown with a fixed command allowlist and no persistence.
+
+Approved-GitLab links remain assigned to Batch 9 so local hover availability
+never depends on network access.
+
 ## Next priorities
-
-### Batch 6 — Interaction surface parity
-
-Expose the capabilities already present in the engine where users naturally
-look for them, before adding another major subsystem.
-
-- Add `explorer/context` actions for File History, annotations, comparisons,
-  commit search for the selected path, and Stash This File.
-- Expand `editor/context` with File History, Commit Details, Diff with Previous
-  Revision, Open at Revision, and Stash This File.
-- Add a compact RefHaven menu to the editor title and enrich the status-bar
-  quick pick with the same context-sensitive actions.
-- Add revision, history, and comparison actions consistently to file nodes in
-  Comparisons, Stashes, File History, and Commit Details.
-- Add one context-sensitive RefHaven quick menu instead of another permanent
-  view.
-- Keep every action keyboard-accessible and use native VS Code menus, quick
-  picks, progress, notifications, and diff editors.
-- Add contribution-manifest and Extension Host tests that prove actions appear
-  only for valid files, repositories, selections, and trust states.
-
-### Batch 7 — Rich local line hover
-
-Bring the daily line-inspection experience substantially closer to GitLens
-without remote dependencies or eager background work.
-
-- Make blame information available when hovering the line, not only the
-  zero-width end-of-line annotation.
-- Show complete commit identity, author and email, exact and relative dates,
-  original path/line information, parent commit, and local change statistics.
-- Add Show Commit Details, File History, Line History, Diff with Previous
-  Revision, Diff with Working Tree, Open at Revision, and copy actions.
-- Load the detailed commit and diff information lazily, with cancellation,
-  generation checks, bounded caching, and no persistence.
-- Add an optional compact previous-revision hunk preview only if responsiveness
-  remains within the editor performance budget.
-- Add approved-GitLab links later without making the local hover dependent on
-  network availability.
 
 ### Batch 8 — Safe stash workflows
 

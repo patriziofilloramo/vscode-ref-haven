@@ -6,6 +6,12 @@ interface CommandContribution {
   readonly command: string;
 }
 
+interface MenuContribution {
+  readonly command?: string;
+  readonly submenu?: string;
+  readonly when?: string;
+}
+
 interface PackageManifest {
   readonly activationEvents: readonly string[];
   readonly contributes: {
@@ -18,6 +24,8 @@ interface PackageManifest {
         >
       >;
     };
+    readonly menus: Readonly<Record<string, readonly MenuContribution[]>>;
+    readonly submenus: readonly { readonly id: string; readonly label: string }[];
     readonly views: {
       readonly scm: readonly { readonly id: string; readonly name: string }[];
     };
@@ -29,6 +37,7 @@ interface PackageManifest {
   readonly files: readonly string[];
   readonly name: string;
   readonly publisher: string;
+  readonly version: string;
 }
 
 function loadManifest(): PackageManifest {
@@ -43,6 +52,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "local-development");
+    assert.equal(manifest.version, "0.3.0");
     assert.match(manifest.description, /entirely local/u);
   });
 
@@ -74,6 +84,7 @@ suite("extension manifest", () => {
       "refhaven.closeComparison",
       "refhaven.compareBranchWithCurrent",
       "refhaven.compareCurrentBranch",
+      "refhaven.compareFileWithRevision",
       "refhaven.copyBranchName",
       "refhaven.copyCommitMessage",
       "refhaven.copyCommitSha",
@@ -83,10 +94,12 @@ suite("extension manifest", () => {
       "refhaven.copyStashMessage",
       "refhaven.copyWorktreePath",
       "refhaven.newComparison",
+      "refhaven.openChangedFileAtRevision",
       "refhaven.openFile",
       "refhaven.openFileAtRevision",
       "refhaven.openFileHistoryAtRevision",
       "refhaven.openFileHistoryDiff",
+      "refhaven.openLineDiff",
       "refhaven.openWorktree",
       "refhaven.pinComparison",
       "refhaven.refreshAll",
@@ -96,8 +109,10 @@ suite("extension manifest", () => {
       "refhaven.refreshStashes",
       "refhaven.searchCommits",
       "refhaven.showCommitDetails",
+      "refhaven.showFileHistory",
       "refhaven.showLineBlameActions",
       "refhaven.showLineHistory",
+      "refhaven.showRefHavenMenu",
       "refhaven.swapComparison",
       "refhaven.toggleInlineBlame",
       "refhaven.unpinComparison",
@@ -105,6 +120,38 @@ suite("extension manifest", () => {
       "refhaven.viewFilesAsTree",
     ]);
     assert.ok(commands.every((command) => command.startsWith("refhaven.")));
+  });
+
+  test("exposes one consistent native file-actions menu", () => {
+    const manifest = loadManifest();
+
+    assert.deepEqual(manifest.contributes.submenus, [
+      { id: "refhaven.fileActions", label: "RefHaven" },
+    ]);
+    assert.ok(
+      manifest.contributes.menus["editor/context"]?.some(
+        ({ submenu }) => submenu === "refhaven.fileActions",
+      ),
+    );
+    assert.ok(
+      manifest.contributes.menus["explorer/context"]?.some(
+        ({ submenu }) => submenu === "refhaven.fileActions",
+      ),
+    );
+    assert.ok(
+      manifest.contributes.menus["editor/title"]?.some(
+        ({ command }) => command === "refhaven.showRefHavenMenu",
+      ),
+    );
+    const fileActions =
+      manifest.contributes.menus["refhaven.fileActions"]?.map(({ command }) => command) ?? [];
+    assert.deepEqual(fileActions, [
+      "refhaven.showFileHistory",
+      "refhaven.showLineHistory",
+      "refhaven.openFileAtRevision",
+      "refhaven.compareFileWithRevision",
+      "refhaven.changeFileAnnotations",
+    ]);
   });
 
   test("packages only compiled runtime files", () => {
@@ -134,6 +181,11 @@ suite("extension manifest", () => {
   test("keeps whole-file annotations opt-in", () => {
     const setting = manifestSetting(loadManifest(), "refhaven.fileAnnotations.mode");
     assert.equal(setting.default, "off");
+  });
+
+  test("enables rich local line hover by default", () => {
+    const setting = manifestSetting(loadManifest(), "refhaven.lineHover.enabled");
+    assert.equal(setting.default, true);
   });
 });
 

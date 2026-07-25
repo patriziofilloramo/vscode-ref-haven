@@ -5,7 +5,11 @@ import * as vscode from "vscode";
 import type { Logger } from "./Logger";
 import type { ComparisonController } from "./ComparisonController";
 import { findRepositoryRoot, listLineHistory } from "../infrastructure/git/GitCli";
-import type { FileHistoryNode, FileHistoryTreeProvider } from "../ui/tree/FileHistoryTreeProvider";
+import {
+  FILE_HISTORY_FOCUS_COMMAND,
+  type FileHistoryNode,
+  type FileHistoryTreeProvider,
+} from "../ui/tree/FileHistoryTreeProvider";
 import { formatRelativeTime } from "../ui/format";
 
 export class FileHistoryController implements vscode.Disposable {
@@ -54,6 +58,15 @@ export class FileHistoryController implements vscode.Disposable {
     const filePath = relative(repositoryRoot, editor.document.uri.fsPath).replaceAll("\\", "/");
     const startLine = Math.min(editor.selection.start.line, editor.selection.end.line) + 1;
     const endLine = Math.max(editor.selection.start.line, editor.selection.end.line) + 1;
+    await this.showLineHistoryAt(repositoryRoot, filePath, startLine, endLine);
+  }
+
+  public async showLineHistoryAt(
+    repositoryRoot: string,
+    filePath: string,
+    startLine: number,
+    endLine = startLine,
+  ): Promise<void> {
     const commits = await listLineHistory(repositoryRoot, filePath, startLine, endLine);
     if (commits.length === 0) {
       void vscode.window.showInformationMessage("No commits were found for the selected lines.");
@@ -77,6 +90,19 @@ export class FileHistoryController implements vscode.Disposable {
       selected.commit.sha,
       filePath,
     );
+  }
+
+  public async showFileHistory(
+    repositoryRoot: string,
+    filePath: string,
+    force = true,
+  ): Promise<void> {
+    this.treeProvider.setTarget({ filePath, repositoryRoot });
+    if (force) this.treeProvider.refresh();
+    this.treeView.description = basename(filePath);
+    this.treeView.message = "";
+    await vscode.commands.executeCommand(FILE_HISTORY_FOCUS_COMMAND);
+    this.logger.info("Opened file history", { operation: "showFileHistory" });
   }
 
   public openFileDiff(node: FileHistoryNode): Promise<void> {

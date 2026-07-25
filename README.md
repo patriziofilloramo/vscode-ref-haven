@@ -34,8 +34,12 @@ webviews), has no telemetry, and enforces local-only Git execution.
 
 - Dimmed inline blame at the end of the current line — `You, 2 hours ago ·
 fix: prevent duplicates` — including in unsaved buffers.
-- Hover for the full commit with **Copy SHA**, **Copy Message**, and **Open
-  File at This Revision** actions; the same info lives in the status bar.
+- Hover anywhere on a file line for author/email, exact and relative dates,
+  full SHA, original path/line, commit/file statistics, and a compact previous
+  revision diff.
+- Hover actions include commit details, previous/working-tree diffs, file and
+  line history, open-at-revision, and copy actions; the status bar remains a
+  compact entry point to the same workflows.
 - Toggle via the `RefHaven: Toggle Inline Blame` command or settings.
 
 ### File annotations
@@ -70,9 +74,17 @@ fix: prevent duplicates` — including in unsaved buffers.
 
 ### Everywhere
 
-- Right-click any file for **Open File**, **Copy Path**, **Copy Relative
-  Path**; any commit for **Copy SHA** / **Copy Commit Message**.
+- The Explorer and editor context menus share one native **RefHaven** submenu
+  for file history, line history, annotations, open-at-revision, and
+  compare-with-revision.
+- The editor title exposes a compact **RefHaven: Show File Actions** quick
+  menu; the line-blame status entry exposes the same daily file workflows.
+- Changed-file nodes support **Open File**, **Open File at Compared Revision**,
+  **Show File History**, **Copy Path**, and **Copy Relative Path**; commits
+  support **Copy SHA** / **Copy Commit Message**.
 - **Open File at Revision...** opens the active file as it was on any branch.
+- **Compare File with Revision...** opens a path-limited, native diff between
+  a chosen local reference and the working-tree file.
 - Views refresh automatically after commits, branch switches, fetches, and
   stash operations.
 
@@ -88,6 +100,8 @@ most common entry points:
 | `Change Comparison Mode...`      | Switch between three-dot and two-dot diffs       |
 | `Search Commits...`              | Search commits already available locally         |
 | `Open File at Revision...`       | Open the active file at a chosen branch revision |
+| `Compare File with Revision...`  | Diff the active file against a local reference   |
+| `Show File Actions`              | Open the context-sensitive native file menu      |
 | `Toggle Inline Blame`            | Show or hide current-line blame                  |
 | `Change File Annotations...`     | Blame, heatmap, changes, or off                  |
 
@@ -97,6 +111,7 @@ most common entry points:
 | --------------------------------- | ------- | ------------------------------------- |
 | `refhaven.inlineBlame.enabled`    | `true`  | Inline blame text on the current line |
 | `refhaven.statusBarBlame.enabled` | `true`  | Blame entry in the status bar         |
+| `refhaven.lineHover.enabled`      | `true`  | Rich local hover for any file line    |
 | `refhaven.fileAnnotations.mode`   | `off`   | Whole-file blame or heatmap mode      |
 | `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
 

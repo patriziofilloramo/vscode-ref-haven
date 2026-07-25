@@ -15,6 +15,7 @@ function porcelain(sha: string, overrides: Readonly<Record<string, string | null
     "author-mail": "<patrizio@example.invalid>",
     "author-time": "1700000000",
     "author-tz": "+0100",
+    previous: `${"b".repeat(40)} src/previous example.ts`,
     summary: "feat: add blame support",
     filename: "src/example.ts",
     ...overrides,
@@ -37,9 +38,15 @@ suite("Git blame porcelain parser", () => {
 
     assert.deepEqual(blame, {
       authorDate: 1_700_000_000_000,
+      authorEmail: "patrizio@example.invalid",
       authorName: "Patrizio Filloramo",
+      authorTimeZone: "+0100",
+      finalLineNumber: 3,
       isCommitted: true,
+      originalLineNumber: 3,
       path: "src/example.ts",
+      previousPath: "src/previous example.ts",
+      previousSha: "b".repeat(40),
       sha: SHA,
       summary: "feat: add blame support",
     });
@@ -76,6 +83,10 @@ suite("Git blame porcelain parser", () => {
     );
     assert.throws(
       () => parseBlamePorcelain(porcelain(SHA, { "author-time": "yesterday" })),
+      GitBlameParseError,
+    );
+    assert.throws(
+      () => parseBlamePorcelain(porcelain(SHA, { previous: "not-a-revision path" })),
       GitBlameParseError,
     );
   });

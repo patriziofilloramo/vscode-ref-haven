@@ -162,6 +162,20 @@ Coordinates store, engine, commands, and view updates. Creating a comparison per
 
 Only a result whose captured generation equals the state's current generation may be applied. Closing a comparison cancels its work before removing it. Errors update runtime state but do not delete persisted configuration.
 
+### FileActionsController
+
+The file-actions controller is the single orchestration point for Explorer,
+editor, editor-title, status-bar, and changed-file-node actions. It resolves
+command arguments through `ui/commands/fileContext.ts`, canonicalises the
+repository-relative path, activates a working-tree editor only when required,
+and delegates history, annotations, revision documents, and native diffs to
+their owning controllers.
+
+Compare File with Revision resolves the selected reference to an immutable SHA
+and asks Git only for the selected path. Added and deleted sides reuse the
+empty revision document; unchanged files still open a valid native diff
+without a repository-wide calculation.
+
 ### Refresh scheduler and cache
 
 The scheduler enforces two concurrent Git processes per repository and four globally. Queued work is abortable, and `AbortSignal` is passed to running child processes. Repository events invalidate active results; expansion then resolves refs again. There is no background polling.
@@ -203,7 +217,21 @@ worktree mutation is intentionally absent.
 
 ### BlameController
 
-Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders a dimmed end-of-line decoration and a status-bar item; both carry a trusted-markdown hover whose fixed command links reuse existing copy/open commands. All Git-controlled Markdown is escaped before trust is enabled.
+Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders a dimmed end-of-line decoration and a status-bar item with a compact trusted-markdown tooltip whose fixed command links reuse existing copy/open commands. All Git-controlled Markdown is escaped before trust is enabled.
+
+### LineHoverController and provider
+
+The native `HoverProvider` makes blame details available across the complete
+line range independently of the current-line decoration. The application
+controller lazily resolves blame, full commit metadata, first-parent file
+changes, and a bounded local patch. It caches only successful results by
+document version and line, with 64-entry LRU eviction; repository watcher
+events clear targets, Git usernames, and hover results.
+
+The UI provider bridges VS Code cancellation to `AbortSignal`, renders escaped
+trusted Markdown with an explicit command allowlist, limits patch presentation
+to 24 lines/4,000 characters, and returns no hover after cancellation or a
+safe local Git failure.
 
 ### FileAnnotationsController
 

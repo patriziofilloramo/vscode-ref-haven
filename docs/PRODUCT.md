@@ -77,8 +77,8 @@ The product has since grown toward a GitLens-style feature set while keeping the
 - **Commit drill-down:** commits in the Ahead/Behind sections expand to the files they changed and open per-commit diffs (first parent; root commits diff against the empty tree).
 - **Comparison mode switching:** each saved comparison can switch between `branchChanges` (three-dot) and `tipToTip` (two-dot) diffs via _Change Comparison Mode..._; tip-to-tip comparisons are labelled in the tree. When a three-dot comparison legitimately has no files — the target has no commits of its own, or both refs point at the same commit — the Files section states the reason and its tooltip suggests swapping the direction or switching mode.
 - **Read-only stash inspection:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees, native diffs, and copy-message. Mutation is excluded to prevent execution of repository-configured filters or merge drivers.
-- **File and commit context actions:** Open File, Copy Path, Copy Relative Path, Copy Commit SHA, and Copy Commit Message from any file or commit node.
-- **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `refhaven.inlineBlame.enabled` and `refhaven.statusBarBlame.enabled`.
+- **Native file-action surfaces:** the Explorer and editor share a RefHaven submenu for file/line history, annotations, open-at-revision, and compare-with-revision. The editor title and status-bar blame provide compact quick picks, while changed-file nodes expose revision, history, open, and copy actions consistently.
+- **Line blame and hover:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, full commit identity, local commit statistics, a bounded previous-revision patch, and native actions for details, diffs, history, revision opening, and copy.
 - **File annotations:** opt-in whole-file gutter blame, a five-bucket commit-age heatmap, and saved-working-tree change ranges relative to a locally resolved reference. Computation is cancellable, bounded to 5,000 editor lines, and never persisted.
 - **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
 - **Line history:** a selection-aware quickpick backed by `git log -L`, opening the selected historical revision locally.
@@ -103,6 +103,17 @@ The main flows are:
 Reference pickers group special refs, local branches, remote-tracking refs, and tags. They display short names while retaining full names; typed revisions must resolve locally and are canonicalized to a SHA before persistence. Commit section labels state direction explicitly, for example `Commits only in feature/oauth`; the initial page size is 50.
 
 Inline actions are Refresh, Swap, Edit, Pin/Unpin, and Close. The context menu additionally supports changing mode, copying a summary, closing all unpinned comparisons, and closing comparisons for a repository.
+
+File actions resolve the selected URI or changed-file node to a canonical
+repository-relative Git path immediately before use. Comparing a file with a
+reference performs a path-limited local diff and opens the shared native
+revision pipeline; it does not calculate or retain an entire repository diff.
+
+Rich line hovers are computed only when VS Code requests them. Results are
+cached by document version and line in a 64-entry in-memory LRU, cleared on
+repository refresh, and never persisted. Patch loading has a 64 KiB Git output
+ceiling and the rendered preview is further limited to 24 lines and 4,000
+characters.
 
 ## Refresh behaviour
 

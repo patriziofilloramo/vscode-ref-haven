@@ -7,6 +7,7 @@ import { escapeMarkdown } from "../markdown";
 import { COMMAND_IDS } from "../commands/commandIds";
 
 export const FILE_HISTORY_VIEW_ID = "refhaven.fileHistory";
+export const FILE_HISTORY_FOCUS_COMMAND = `${FILE_HISTORY_VIEW_ID}.focus`;
 
 export interface FileHistoryNode {
   readonly entry: FileHistoryEntry;

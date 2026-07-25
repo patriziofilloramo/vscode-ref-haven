@@ -4,7 +4,7 @@ import type { BlameController } from "../../application/BlameController";
 import type { CommitDetailsController } from "../../application/CommitDetailsController";
 import type { ComparisonController } from "../../application/ComparisonController";
 import type { FileHistoryController } from "../../application/FileHistoryController";
-import type { FileAnnotationsController } from "../../application/FileAnnotationsController";
+import type { FileActionsController } from "../../application/FileActionsController";
 import type { Logger } from "../../application/Logger";
 import type { RepositoryNavigationController } from "../../application/RepositoryNavigationController";
 import type { StashController } from "../../application/StashController";
@@ -25,7 +25,7 @@ export function registerCommands(
   logger: Logger,
   controller: ComparisonController,
   repositoryNavigationController: RepositoryNavigationController,
-  fileAnnotationsController: FileAnnotationsController,
+  fileActionsController: FileActionsController,
   commitDetailsController: CommitDetailsController,
   fileHistoryController: FileHistoryController,
   stashController: StashController,
@@ -34,8 +34,13 @@ export function registerCommands(
   const handlers: Readonly<Record<CommandId, CommandHandler>> = {
     [COMMAND_IDS.changeComparisonMode]: (node) =>
       controller.changeComparisonMode(requireComparison(node)),
-    [COMMAND_IDS.changeFileAnnotations]: () => fileAnnotationsController.changeAnnotations(),
+    [COMMAND_IDS.changeFileAnnotations]: (resource) =>
+      fileActionsController.changeAnnotations(resource),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
+    [COMMAND_IDS.compareFileWithRevision]: (resource, sha, filePath, label) =>
+      typeof resource === "string" && typeof sha === "string" && typeof filePath === "string"
+        ? fileActionsController.compareFileWithRevisionAt(resource, sha, filePath, label)
+        : fileActionsController.compareFileWithRevision(resource),
     [COMMAND_IDS.compareCurrentBranch]: () => controller.compareCurrentBranch(),
     [COMMAND_IDS.compareBranchWithCurrent]: (node) =>
       repositoryNavigationController.compareBranchWithCurrent(requireBranch(node)),
@@ -58,16 +63,23 @@ export function registerCommands(
     [COMMAND_IDS.copyWorktreePath]: (node) =>
       repositoryNavigationController.copyWorktreePath(requireWorktree(node)),
     [COMMAND_IDS.newComparison]: () => controller.newComparison(),
+    [COMMAND_IDS.openChangedFileAtRevision]: (node) =>
+      fileActionsController.openFileAtRevision(node),
     [COMMAND_IDS.openFile]: (node) => {
       const file = requireFile(node);
       return controller.openWorkingTreeFile(file.scope, file.file);
     },
     [COMMAND_IDS.openFileAtRevision]: (repositoryRootPath, sha, filePath) =>
-      controller.openFileAtRevision(repositoryRootPath, sha, filePath),
+      typeof repositoryRootPath === "string" &&
+      typeof sha === "string" &&
+      typeof filePath === "string"
+        ? controller.openFileAtRevision(repositoryRootPath, sha, filePath)
+        : fileActionsController.openFileAtRevision(repositoryRootPath),
     [COMMAND_IDS.openFileHistoryAtRevision]: (node) =>
       fileHistoryController.openFileAtRevision(requireFileHistoryNode(node)),
     [COMMAND_IDS.openFileHistoryDiff]: (node) =>
       fileHistoryController.openFileDiff(requireFileHistoryNode(node)),
+    [COMMAND_IDS.openLineDiff]: (scope, file) => fileActionsController.openLineDiff(scope, file),
     [COMMAND_IDS.openFileDiff]: (scope, file) =>
       controller.openFileDiff(
         scope as Parameters<ComparisonController["openFileDiff"]>[0],
@@ -90,8 +102,16 @@ export function registerCommands(
       const selection = requireCommitSelection(node);
       return commitDetailsController.show(selection.repositoryRoot, selection.commit);
     },
+    [COMMAND_IDS.showFileHistory]: (resource, filePath) =>
+      typeof resource === "string" && typeof filePath === "string"
+        ? fileActionsController.showFileHistoryAt(resource, filePath)
+        : fileActionsController.showFileHistory(resource),
     [COMMAND_IDS.showLineBlameActions]: () => blameController.showLineBlameActions(),
-    [COMMAND_IDS.showLineHistory]: () => fileHistoryController.showLineHistory(),
+    [COMMAND_IDS.showLineHistory]: (resource, filePath, lineNumber) =>
+      typeof resource === "string" && typeof filePath === "string"
+        ? fileActionsController.showLineHistoryAt(resource, filePath, lineNumber)
+        : fileActionsController.showLineHistory(resource),
+    [COMMAND_IDS.showRefHavenMenu]: (resource) => fileActionsController.showMenu(resource),
     [COMMAND_IDS.swapComparison]: (node) => controller.swapComparison(requireComparison(node)),
     [COMMAND_IDS.toggleInlineBlame]: () => blameController.toggleInlineBlame(),
     [COMMAND_IDS.unpinComparison]: (node) => controller.setPinned(requireComparison(node), false),

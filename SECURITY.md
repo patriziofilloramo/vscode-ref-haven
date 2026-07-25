@@ -31,6 +31,12 @@ local Git enumeration before use.
 
 Only comparison specifications are persisted, in VS Code `workspaceState`. Computed history, diffs, blame and annotation results, selected changes-annotation references, and file contents are not persisted. The non-sensitive whole-file annotation mode (`off`, `blame`, or `heatmap`) may be saved as a VS Code user setting. Revision content is loaded on demand into a bounded in-memory cache and revision URIs are authenticated with a session-only HMAC.
 
+Rich line hovers load commit metadata and a path-limited patch only after the
+user hovers a line. Successful hover results use a 64-entry in-memory cache
+keyed by document version and line and are cleared on repository refresh. Git
+patch output is capped at 64 KiB and the displayed preview is capped again;
+neither hover metadata nor patch content is persisted or logged.
+
 Logs exclude file contents and redact credential-, secret-, environment-, token-, and remote-related metadata. Copy commands write only the explicitly selected value to the operating-system clipboard.
 
 ## Trust boundaries

@@ -28,6 +28,7 @@ import { buildRepositoryIdentities } from "./repositoryDiscovery";
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_OUTPUT_BYTES = 5 * 1024 * 1024;
+const MAX_HOVER_DIFF_BYTES = 64 * 1024;
 const MAX_GIT_INPUT_BYTES = 5 * 1024 * 1024;
 const DEFAULT_GIT_TIMEOUT_SECONDS = 30;
 const MAX_GIT_TIMEOUT_SECONDS = 300;
@@ -231,6 +232,31 @@ export async function listWorkingTreeChanges(
       signal,
     ),
   ]).catch((error: unknown) => failGitOperation(error, "Git could not compare the working tree."));
+  return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
+}
+
+export async function listWorkingTreeFileChanges(
+  repositoryRoot: string,
+  fromSha: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<FileChange[]> {
+  assertRepositoryRelativeGitPath(filePath);
+  const baseArgs = ["diff", "--no-ext-diff", "--no-textconv"];
+  const [nameStatusOutput, numstatOutput] = await Promise.all([
+    runGit(
+      repositoryRoot,
+      [...baseArgs, "--name-status", "-z", "--find-renames", fromSha, "--", filePath],
+      signal,
+    ),
+    runGit(
+      repositoryRoot,
+      [...baseArgs, "--numstat", "-z", "--find-renames", fromSha, "--", filePath],
+      signal,
+    ),
+  ]).catch((error: unknown) =>
+    failGitOperation(error, "Git could not compare this file with the working tree."),
+  );
   return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
 }
 
@@ -544,6 +570,39 @@ export async function readFileAtRevision(
   }
 }
 
+export async function readCommitDiffPreview(
+  repositoryRoot: string,
+  fromSha: string | null,
+  toSha: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  assertRepositoryRelativeGitPath(filePath);
+  const args =
+    fromSha === null
+      ? [
+          "show",
+          "--format=",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--unified=2",
+          toSha,
+          "--",
+          filePath,
+        ]
+      : ["diff", "--no-ext-diff", "--no-textconv", "--unified=2", fromSha, toSha, "--", filePath];
+  try {
+    const output = await runGit(repositoryRoot, args, signal, MAX_HOVER_DIFF_BYTES);
+    return output.trim().length > 0 ? output.trimEnd() : null;
+  } catch (error) {
+    const normalized = normalizeGitError(error);
+    if (normalized instanceof GitOperationError) {
+      if (normalized.code === "commandCancelled") throw normalized;
+    }
+    return null;
+  }
+}
+
 export async function resolveGitMetadataPaths(
   repositoryRoot: string,
   signal?: AbortSignal,
@@ -562,7 +621,12 @@ export async function resolveGitMetadataPaths(
   ];
 }
 
-async function runGit(cwd: string, args: readonly string[], signal?: AbortSignal): Promise<string> {
+async function runGit(
+  cwd: string,
+  args: readonly string[],
+  signal?: AbortSignal,
+  maxOutputBytes = MAX_GIT_OUTPUT_BYTES,
+): Promise<string> {
   return scheduler.run(
     pathIdentityKey(cwd),
     async () => {
@@ -570,7 +634,7 @@ async function runGit(cwd: string, args: readonly string[], signal?: AbortSignal
         const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
           cwd,
           env: buildLocalOnlyGitEnvironment(process.env),
-          maxBuffer: MAX_GIT_OUTPUT_BYTES,
+          maxBuffer: maxOutputBytes,
           signal,
           timeout: gitTimeoutMs(),
           windowsHide: true,

@@ -276,6 +276,31 @@ export class ComparisonController {
     await vscode.commands.executeCommand("vscode.open", uri);
   }
 
+  public async openChangedFileAtRevision(scope: FileDiffScope, file: FileChange): Promise<void> {
+    if (!isFileDiffScope(scope) || !isFileChange(file)) {
+      throw new Error("RefHaven file selection is invalid.");
+    }
+
+    if (file.status !== "deleted" && scope.toSha === null) {
+      await this.openWorkingTreeFile(scope, file);
+      return;
+    }
+
+    const sha = file.status === "deleted" ? scope.fromSha : scope.toSha;
+    const filePath = file.status === "deleted" ? (file.oldPath ?? file.newPath) : file.newPath;
+    if (sha === null) {
+      void vscode.window.showInformationMessage(
+        "This side of the comparison has no file revision.",
+      );
+      return;
+    }
+    const uri = this.revisionProvider.createRevisionUri(scope.repositoryRootPath, sha, filePath);
+    await vscode.window.showTextDocument(uri, { preview: true });
+    this.logger.info("Opened compared file revision", {
+      operation: "openChangedFileAtRevision",
+    });
+  }
+
   public async copyFilePath(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");

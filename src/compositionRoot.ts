@@ -6,6 +6,8 @@ import { ComparisonController } from "./application/ComparisonController";
 import { ComparisonStore } from "./application/ComparisonStore";
 import { FileHistoryController } from "./application/FileHistoryController";
 import { FileAnnotationsController } from "./application/FileAnnotationsController";
+import { FileActionsController } from "./application/FileActionsController";
+import { LineHoverController } from "./application/LineHoverController";
 import { RepositoryWatcher } from "./application/RepositoryWatcher";
 import { RepositoryNavigationController } from "./application/RepositoryNavigationController";
 import { StashController } from "./application/StashController";
@@ -19,6 +21,7 @@ import {
 } from "./infrastructure/git/GitCli";
 import { OutputChannelLogger } from "./infrastructure/logging/OutputChannelLogger";
 import { registerCommands } from "./ui/commands/registerCommands";
+import { LineHoverProvider } from "./ui/blame/LineHoverProvider";
 import {
   GitRevisionContentProvider,
   REVISION_DOCUMENT_SCHEME,
@@ -96,7 +99,15 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     logger,
   );
   const blameController = new BlameController(logger);
+  const lineHoverController = new LineHoverController(logger);
+  const lineHoverProvider = new LineHoverProvider(lineHoverController, logger);
   const fileAnnotationsController = new FileAnnotationsController(logger);
+  const fileActionsController = new FileActionsController(
+    controller,
+    fileAnnotationsController,
+    fileHistoryController,
+    logger,
+  );
   const repositoryWatcher = new RepositoryWatcher(() => {
     controller.refreshAll();
     void repositoryNavigationController.refresh().catch((error: unknown) => {
@@ -112,6 +123,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
       });
     });
     blameController.refresh();
+    lineHoverController.refresh();
     fileAnnotationsController.refresh();
     void fileHistoryController.refresh(true).catch((error: unknown) => {
       logger.error("Automatic file history refresh failed", {
@@ -172,6 +184,10 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const decorationProviderRegistration = vscode.window.registerFileDecorationProvider(
     new ChangeDecorationProvider(),
   );
+  const lineHoverProviderRegistration = vscode.languages.registerHoverProvider(
+    { scheme: "file" },
+    lineHoverProvider,
+  );
   treeProvider.setComparisonLoader((comparison, signal) =>
     controller.calculateComparison(comparison, signal),
   );
@@ -196,6 +212,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     revisionProviderRegistration,
     revisionProvider,
     decorationProviderRegistration,
+    lineHoverProviderRegistration,
     branchesTreeProvider,
     commitDetailsTreeProvider,
     treeProvider,
@@ -241,7 +258,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     logger,
     controller,
     repositoryNavigationController,
-    fileAnnotationsController,
+    fileActionsController,
     commitDetailsController,
     fileHistoryController,
     stashController,

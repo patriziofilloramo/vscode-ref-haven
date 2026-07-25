@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection — entirely local.",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "publisher": "local-development",
   "license": "UNLICENSED",
   "private": true,
@@ -74,6 +74,12 @@
         "icon": "$(symbol-color)"
       },
       {
+        "command": "refhaven.compareFileWithRevision",
+        "title": "Compare File with Revision...",
+        "category": "RefHaven",
+        "icon": "$(compare-changes)"
+      },
+      {
         "command": "refhaven.pinComparison",
         "title": "Pin Comparison",
         "category": "RefHaven",
@@ -123,6 +129,12 @@
         "title": "Open File",
         "category": "RefHaven",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "refhaven.openChangedFileAtRevision",
+        "title": "Open File at Compared Revision",
+        "category": "RefHaven",
+        "icon": "$(history)"
       },
       {
         "command": "refhaven.copyFilePath",
@@ -185,6 +197,12 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "refhaven.openLineDiff",
+        "title": "Open Line Commit Diff",
+        "category": "RefHaven",
+        "icon": "$(compare-changes)"
+      },
+      {
         "command": "refhaven.searchCommits",
         "title": "Search Commits",
         "category": "RefHaven",
@@ -195,6 +213,18 @@
         "title": "Show Commit Details",
         "category": "RefHaven",
         "icon": "$(inspect)"
+      },
+      {
+        "command": "refhaven.showFileHistory",
+        "title": "Show File History",
+        "category": "RefHaven",
+        "icon": "$(history)"
+      },
+      {
+        "command": "refhaven.showRefHavenMenu",
+        "title": "Show File Actions",
+        "category": "RefHaven",
+        "icon": "$(git-compare)"
       },
       {
         "command": "refhaven.refreshRepositoryNavigation",
@@ -227,6 +257,11 @@
           "default": true,
           "description": "Show blame for the current line in the status bar."
         },
+        "refhaven.lineHover.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show rich local commit and diff details when hovering a file line."
+        },
         "refhaven.fileAnnotations.mode": {
           "type": "string",
           "enum": [
@@ -251,6 +286,12 @@
         }
       }
     },
+    "submenus": [
+      {
+        "id": "refhaven.fileActions",
+        "label": "RefHaven"
+      }
+    ],
     "views": {
       "scm": [
         {
@@ -386,6 +427,14 @@
         {
           "command": "refhaven.copyWorktreePath",
           "when": "false"
+        },
+        {
+          "command": "refhaven.openChangedFileAtRevision",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openLineDiff",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -497,6 +546,16 @@
           "group": "1_open@1"
         },
         {
+          "command": "refhaven.openChangedFileAtRevision",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.commitDetails) && viewItem =~ /^refhaven\\.file/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "refhaven.showFileHistory",
+          "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.commitDetails) && viewItem =~ /^refhaven\\.file/",
+          "group": "1_open@3"
+        },
+        {
           "command": "refhaven.copyFilePath",
           "when": "(view == refhaven.comparisons || view == refhaven.stashes || view == refhaven.commitDetails) && viewItem =~ /^refhaven\\.file/",
           "group": "2_copy@1"
@@ -569,14 +628,50 @@
       ],
       "editor/context": [
         {
-          "command": "refhaven.changeFileAnnotations",
+          "submenu": "refhaven.fileActions",
           "when": "resourceScheme == file",
           "group": "navigation@19"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "refhaven.showRefHavenMenu",
+          "when": "resourceScheme == file",
+          "group": "navigation@20"
+        }
+      ],
+      "explorer/context": [
+        {
+          "submenu": "refhaven.fileActions",
+          "when": "resourceScheme == file",
+          "group": "navigation@19"
+        }
+      ],
+      "refhaven.fileActions": [
+        {
+          "command": "refhaven.showFileHistory",
+          "when": "resourceScheme == file",
+          "group": "1_history@1"
         },
         {
           "command": "refhaven.showLineHistory",
+          "when": "resourceScheme == file && editorTextFocus",
+          "group": "1_history@2"
+        },
+        {
+          "command": "refhaven.openFileAtRevision",
           "when": "resourceScheme == file",
-          "group": "navigation@20"
+          "group": "2_revision@1"
+        },
+        {
+          "command": "refhaven.compareFileWithRevision",
+          "when": "resourceScheme == file",
+          "group": "2_revision@2"
+        },
+        {
+          "command": "refhaven.changeFileAnnotations",
+          "when": "resourceScheme == file",
+          "group": "3_annotations@1"
         }
       ]
     }

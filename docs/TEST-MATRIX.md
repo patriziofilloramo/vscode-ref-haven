@@ -40,6 +40,13 @@ fixtures and real worktree enumeration in the Extension Host.
 Annotation coverage includes repeated line-porcelain parsing, duplicate-line
 rejection, heatmap age buckets, zero-context diff hunks, unsaved-buffer blame,
 and real changed-line range calculation.
+Interaction-surface coverage includes exact command and submenu contributions,
+Extension Host command registration, canonical URI/tree-node file resolution,
+and a real path-limited working-tree comparison that excludes changes in other
+files.
+Rich-hover coverage includes extended blame-porcelain metadata, malicious
+Markdown/backtick fixtures, command allowlists, bounded patch rendering, real
+local patch loading, and `vscode.executeHoverProvider` over a complete line.
 
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -116,6 +123,8 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
 
 - extension activation stays independent of comparison calculation;
 - all declared commands are registered;
+- Explorer/editor RefHaven file actions and the editor-title quick menu are
+  contributed with file-only context clauses;
 - `refhaven.comparisons` is contributed to Source Control;
 - New Comparison works by keyboard through repository/base/target/mode picks;
 - Compare Current Branch With uses current branch as target and defaults to branchChanges;
@@ -139,6 +148,9 @@ Before delivering `refhaven-x.y.z.vsix`:
 7. Open modified, added, deleted, and renamed diffs; verify immutable SHA sides.
 8. Verify binary handling does not show a text diff.
 9. Exercise keyboard-only creation and actions in light and dark themes.
-10. Capture the required screenshot with at least three persistent comparisons.
+10. From Explorer, editor, editor title, status-bar blame, and a changed-file
+    node, verify the same file history/revision actions target the intended
+    repository and path.
+11. Capture the required screenshot with at least three persistent comparisons.
 
 The release report records extension/version, commit SHA, VS Code and Git versions, operating systems, CI links, manual outcomes, known limitations, benchmark hardware/dataset, activation time, large-comparison responsiveness, and the final VSIX checksum.

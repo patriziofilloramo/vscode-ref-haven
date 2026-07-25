@@ -13,10 +13,13 @@ import {
   listChangedLineRanges,
   listFileHistory,
   listLineHistory,
+  listWorkingTreeFileChanges,
   listWorktrees,
+  readCommitDiffPreview,
   readCommitDetails,
   searchCommits,
 } from "../../src/infrastructure/git/GitCli";
+import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
 const EXTENSION_ID = "local-development.refhaven";
@@ -155,6 +158,45 @@ suite("native branch diff", () => {
     } finally {
       writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
     }
+  });
+
+  test("limits a working-tree comparison to the selected file", async () => {
+    writeFileSync(join(repositoryRoot, "modified.txt"), "working tree\n", "utf8");
+    writeFileSync(join(repositoryRoot, "added.txt"), "also changed\n", "utf8");
+    try {
+      const changes = await listWorkingTreeFileChanges(
+        repositoryRoot,
+        git("rev-parse", "HEAD"),
+        "modified.txt",
+      );
+      assert.deepEqual(
+        changes.map(({ newPath, status }) => ({ newPath, status })),
+        [{ newPath: "modified.txt", status: "modified" }],
+      );
+    } finally {
+      writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+      writeFileSync(join(repositoryRoot, "added.txt"), "added\n", "utf8");
+    }
+  });
+
+  test("rejects command file contexts from repositories outside the workspace", async () => {
+    const target = await resolveFileContextTarget(
+      vscode.Uri.file(join(repositoryRoot, "modified.txt")),
+    );
+    assert.equal(target, null);
+  });
+
+  test("loads a bounded local commit diff preview", async () => {
+    const preview = await readCommitDiffPreview(
+      repositoryRoot,
+      git("rev-parse", "HEAD^"),
+      git("rev-parse", "HEAD"),
+      "modified.txt",
+    );
+
+    assert.ok(preview);
+    assert.match(preview, /-before/u);
+    assert.match(preview, /\+after/u);
   });
 
   test("searches local commits and loads full commit details", async () => {
