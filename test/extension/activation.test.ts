@@ -6,7 +6,7 @@ import * as vscode from "vscode";
 
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
 
-const EXTENSION_ID = "local-development.refhaven";
+const EXTENSION_ID = "patriziofilloramo.refhaven";
 
 suite("RefHaven extension", () => {
   test("activates and registers its public commands", async () => {

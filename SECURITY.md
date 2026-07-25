@@ -1,15 +1,23 @@
 # Security and controlled remote handoff
 
+A shareable, verifiable data-security attestation (EN/DE/IT) — the data
+boundary, the build-enforced guarantees, and how to check them yourself — is
+in [`docs/security-attestation.html`](docs/security-attestation.html).
+
 ## Reporting a vulnerability
 
-RefHaven is currently distributed internally. Report suspected vulnerabilities
-through the organisation's existing internal security channel.
+Report suspected vulnerabilities privately through GitHub's private
+vulnerability reporting on this repository: open the **Security** tab and
+choose **Report a vulnerability**. Reports stay private between you and the
+maintainer until a fix is published.
 
-<!-- PUBLICATION_INPUT_REQUIRED: security-contact -->
+Please do not open a public issue for a suspected vulnerability. A minimal
+reproduction is enough — never include repository contents, credentials, or
+other sensitive data in a report.
 
-Before a public release, replace this section with the approved public
-security-reporting address or private advisory process and its expected
-response policy. Do not publish a personal or inferred contact.
+You can expect an acknowledgement within seven days. Confirmed issues are
+fixed in a patch release, and the advisory is published once a fixed version
+is available. RefHaven has no bug-bounty programme.
 
 ## Security objective
 

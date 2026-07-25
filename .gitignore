@@ -1,5 +1,6 @@
 /.test-out/
 /.vscode-test/
+/build/
 /dist/
 /node_modules/
 /*.vsix

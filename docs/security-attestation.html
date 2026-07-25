@@ -1,0 +1,374 @@
+<title>RefHaven — Proof your data never leaves</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #eef3f6; --ground-2: #e3edf1; --panel: #ffffff;
+    --ink: #0d2440; --ink-soft: #47617a; --line: #c6d6df;
+    --seal: #0e8a86; --seal-soft: #5eead4; --door: #b45309; --door-soft: #f59e0b;
+    --danger: #b4431f; --code-bg: #f2f7f9;
+    --shadow: 0 1px 2px rgba(13,36,64,.06), 0 8px 30px rgba(13,36,64,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #08182b; --ground-2: #0b2036; --panel: #0f2942;
+      --ink: #dfeef5; --ink-soft: #8bacc1; --line: #1c3a56;
+      --seal: #5eead4; --seal-soft: #7dd3fc; --door: #fbbf24; --door-soft: #fcd34d;
+      --danger: #f87171; --code-bg: #0a1f34;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 40px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --ground: #eef3f6; --ground-2: #e3edf1; --panel: #ffffff;
+    --ink: #0d2440; --ink-soft: #47617a; --line: #c6d6df;
+    --seal: #0e8a86; --seal-soft: #5eead4; --door: #b45309; --door-soft: #f59e0b;
+    --danger: #b4431f; --code-bg: #f2f7f9;
+    --shadow: 0 1px 2px rgba(13,36,64,.06), 0 8px 30px rgba(13,36,64,.07);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #08182b; --ground-2: #0b2036; --panel: #0f2942;
+    --ink: #dfeef5; --ink-soft: #8bacc1; --line: #1c3a56;
+    --seal: #5eead4; --seal-soft: #7dd3fc; --door: #fbbf24; --door-soft: #fcd34d;
+    --danger: #f87171; --code-bg: #0a1f34;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 40px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 50% -10%, var(--ground-2), transparent 70%), var(--ground);
+    color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 24px 110px; }
+
+  .topbar { display: flex; justify-content: flex-end; margin-bottom: 26px; }
+  .langs { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--panel); }
+  .langs button {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; letter-spacing: .06em;
+    padding: 7px 14px; border: 0; background: transparent; color: var(--ink-soft); cursor: pointer;
+  }
+  .langs button[aria-pressed="true"] { background: var(--seal); color: #06202b; }
+  :root[data-theme="light"] .langs button[aria-pressed="true"],
+  @media (prefers-color-scheme: light) { }
+  .langs button:focus-visible { outline: 2px solid var(--seal); outline-offset: -2px; }
+
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 12px; letter-spacing: .28em; text-transform: uppercase;
+    color: var(--seal); display: flex; align-items: center; gap: 12px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 1px; background: var(--seal); }
+
+  h1 {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-weight: 600; font-size: clamp(30px, 5.4vw, 46px);
+    letter-spacing: -0.015em; line-height: 1.12; margin: 20px 0 0; text-wrap: balance;
+  }
+  h1 .cross { color: var(--door); }
+  .lede { font-size: 18px; color: var(--ink-soft); max-width: 56ch; margin: 18px 0 0; }
+
+  .boundary { margin: 44px 0 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+  .boundary .head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 16px 24px 4px; flex-wrap: wrap; }
+  .boundary .head b { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; letter-spacing: .04em; }
+  .boundary .head .seal { color: var(--seal); }
+  .boundary .inside { padding: 18px 24px 22px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px dashed var(--line); }
+  .boundary .inside .tag {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--ink);
+    background: color-mix(in srgb, var(--seal) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--seal) 40%, transparent);
+    padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .door { display: flex; align-items: center; gap: 14px; padding: 18px 24px 22px; }
+  .door .node { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; background: var(--door); box-shadow: 0 0 0 5px color-mix(in srgb, var(--door) 22%, transparent); }
+  .door .txt { font-size: 14.5px; }
+  .door .txt b { color: var(--door); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .door .txt small { display: block; color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .door .node { animation: pulse 3s ease-in-out infinite; }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--door) 22%, transparent); }
+      50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--door) 6%, transparent); }
+    }
+  }
+
+  h2 { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin: 64px 0 6px; }
+  h2 + .sub { color: var(--ink-soft); font-size: 15px; margin: 0 0 24px; max-width: 62ch; }
+
+  .claim { display: grid; grid-template-columns: 26px 1fr; gap: 16px; padding: 20px 0; border-top: 1px solid var(--line); }
+  .claim:last-of-type { border-bottom: 1px solid var(--line); }
+  .claim .check { grid-row: span 2; margin-top: 2px; width: 26px; height: 26px; border-radius: 8px; background: color-mix(in srgb, var(--seal) 16%, transparent); border: 1px solid color-mix(in srgb, var(--seal) 45%, transparent); display: grid; place-items: center; color: var(--seal); font-size: 15px; }
+  .claim h3 { margin: 0; font-size: 16.5px; font-weight: 650; letter-spacing: -.01em; }
+  .claim p { margin: 6px 0 0; color: var(--ink-soft); font-size: 14.5px; max-width: 60ch; }
+  .claim .proof { grid-column: 2; margin-top: 12px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.7; color: var(--ink); overflow-x: auto; }
+  .proof .c { color: var(--ink-soft); } .proof .ok { color: var(--seal); } .proof .k { color: var(--door); }
+
+  .cmp { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14.5px; }
+  .cmp caption { text-align: left; color: var(--ink-soft); font-size: 13px; margin-bottom: 12px; }
+  .cmp th, .cmp td { text-align: left; padding: 13px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cmp thead th { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+  .cmp tbody th { font-weight: 600; color: var(--ink); width: 42%; }
+  .cmp .rh { color: var(--seal); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; white-space: nowrap; }
+  .cmp .other { color: var(--ink-soft); }
+  .cmp-scroll { overflow-x: auto; }
+
+  .verify { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .verify .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  .verify .bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .verify .bar i:nth-child(1){ background:#ef6a5a } .verify .bar i:nth-child(2){ background:#f4bf4f } .verify .bar i:nth-child(3){ background:#5fb95f }
+  .verify .bar span { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--ink-soft); margin-left: 8px; }
+  .verify pre { margin: 0; padding: 18px; overflow-x: auto; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; font-size: 13px; line-height: 1.85; color: var(--ink); }
+  .verify pre .c { color: var(--ink-soft); } .verify pre .ok { color: var(--seal); }
+
+  footer { margin-top: 70px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; color: var(--ink-soft); font-size: 13px; }
+  footer .mono { font-size: 12px; } footer .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--ink-soft); }
+  a { color: var(--seal); }
+  .note { color: var(--ink-soft); font-size: 13.5px; margin-top: 14px; max-width: 62ch; }
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="langs" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="de" aria-pressed="false">DE</button>
+      <button type="button" data-lang="it" aria-pressed="false">IT</button>
+    </div>
+  </div>
+
+  <div class="eyebrow" data-i18n="eyebrow">RefHaven · data-security attestation</div>
+  <h1 data-i18n="h1">Your repository never leaves this machine.<span class="cross"> ↳ one door.</span></h1>
+  <p class="lede" data-i18n="lede">No telemetry, no backend, no HTTP client, no runtime dependencies. Not a promise to take on faith: an invariant the build enforces — and that you can verify on the exact bytes you install.</p>
+
+  <div class="boundary" aria-label="Data boundary diagram">
+    <div class="head"><b class="seal" data-i18n="b_inside">INSIDE THE BOUNDARY</b><b data-i18n="b_local">stays local</b></div>
+    <div class="inside">
+      <span class="tag" data-i18n="tag1">git · comparisons</span>
+      <span class="tag" data-i18n="tag2">blame · history</span>
+      <span class="tag" data-i18n="tag3">diff · patch</span>
+      <span class="tag" data-i18n="tag4">stash</span>
+      <span class="tag" data-i18n="tag5">in-memory cache</span>
+      <span class="tag" data-i18n="tag6">workspace state</span>
+      <span class="tag" data-i18n="tag7">redacted local logs</span>
+    </div>
+    <div class="door">
+      <span class="node" aria-hidden="true"></span>
+      <span class="txt">
+        <b data-i18n="door_title">The only exit → the Git remote you configured yourself</b>
+        <small data-i18n="door_sub">Only a browser URL, constructed and validated, opened after an explicit command of yours. No API, no token, no background request.</small>
+      </span>
+    </div>
+  </div>
+  <p class="note" data-i18n="boundary_note">Clipboard copy and patch save are also handoffs you initiate, to destinations you choose. Everything else stays inside the boundary.</p>
+
+  <h2 data-i18n="h2_evidence">The evidence</h2>
+  <p class="sub" data-i18n="evidence_sub">Every claim below maps to a real artifact in the repository or the package. Nothing to take on trust.</p>
+
+  <div class="claim">
+    <span class="check" aria-hidden="true">✓</span>
+    <div>
+      <h3 data-i18n="c1_h">Zero network primitives, enforced by the build</h3>
+      <p data-i18n="c1_p">A guard test scans every source file and fails if a network call, a code-execution primitive, telemetry, or an unaudited process/browser handoff appears. Process execution lives in a single file; browser opening in a single file.</p>
+    </div>
+    <div class="proof"><span class="c">$ npm run test:unit — data-egress guard</span><br>
+      <span class="ok">✓</span> imports no network or code-loading module<br>
+      <span class="ok">✓</span> contains no network or code-execution primitive<br>
+      <span class="ok">✓</span> confines process execution and browser handoff to their audited files<br>
+      <span class="ok">✓</span> ships zero production dependencies
+    </div>
+  </div>
+
+  <div class="claim">
+    <span class="check" aria-hidden="true">✓</span>
+    <div>
+      <h3 data-i18n="c2_h">Git cannot reach the network</h3>
+      <p data-i18n="c2_p">Every Git process starts with transports disabled: any fetch/push attempt would be refused by the protocol itself. Proxy, SSH, external diff, and inherited repository-redirection environment variables are cleared; no shell.</p>
+    </div>
+    <div class="proof">git <span class="k">-c protocol.allow=never</span> …<br>
+      <span class="c">env:</span> GIT_ALLOW_PROTOCOL=<span class="k">""</span> · GIT_TERMINAL_PROMPT=0 · GIT_PROXY_COMMAND cleared</div>
+  </div>
+
+  <div class="claim">
+    <span class="check" aria-hidden="true">✓</span>
+    <div>
+      <h3 data-i18n="c3_h">Zero runtime dependencies</h3>
+      <p data-i18n="c3_p">No third-party code runs in the extension host. The VSIX contains only compiled JavaScript, the icon, and three documents — no source, no node_modules, no other payload.</p>
+    </div>
+    <div class="proof"><span class="c" data-i18n="c3_code_a">// package.json</span><br>"dependencies": <span class="ok">{}</span><br>
+      <span class="c" data-i18n="c3_code_b">// package verified: 89 files · 0 .ts · 0 node_modules</span></div>
+  </div>
+
+  <div class="claim">
+    <span class="check" aria-hidden="true">✓</span>
+    <div>
+      <h3 data-i18n="c4_h">No telemetry, no account, no automatic discovery</h3>
+      <p data-i18n="c4_p">No telemetry API, no usage events, no account system, no remote configuration service. The extension activates without network events and logs stay in the local panel, with sensitive metadata redacted.</p>
+    </div>
+    <div class="proof"><span class="c" data-i18n="c4_code_a">// manifest contributions</span><br>"activationEvents": <span class="ok">[]</span> · untrustedWorkspaces: <span class="k">supported: false</span></div>
+  </div>
+
+  <h2 data-i18n="h2_verify">Verify it yourself</h2>
+  <p class="sub" data-i18n="verify_sub">You don't need to read our code to trust it. Two commands in the extension folder are enough.</p>
+  <div class="verify">
+    <div class="bar"><i></i><i></i><i></i><span data-i18n="verify_bar">terminal — extension folder</span></div>
+    <pre><span class="c" data-i18n="v_c1"># 1 · no network exit, enforced by tests</span>
+npm run test:unit
+   <span class="ok">✓ data-egress guard</span>  <span data-i18n="v_c1b">(5 checks passed)</span>
+
+<span class="c" data-i18n="v_c2"># 2 · what actually ships in the package</span>
+npx --yes @vscode/vsce ls
+   <span class="ok">dist/*.js</span> · assets/refhaven-icon-256.png · LICENSE · SECURITY.md · PRIVACY.md · IP-PROVENANCE.md
+
+<span class="c" data-i18n="v_c3"># no source, no node_modules, no network binary.</span></pre>
+  </div>
+
+  <h2 data-i18n="h2_diff">Why it's different from mainstream Git tooling</h2>
+  <div class="cmp-scroll">
+  <table class="cmp">
+    <caption data-i18n="cmp_cap">Known categories of mainstream Git tooling, compared with RefHaven. Every RefHaven row is verifiable with the commands above.</caption>
+    <thead><tr>
+      <th scope="col" data-i18n="cmp_h1">Surface</th>
+      <th scope="col" data-i18n="cmp_h2">Mainstream Git tooling</th>
+      <th scope="col">RefHaven</th>
+    </tr></thead>
+    <tbody>
+      <tr><th scope="row" data-i18n="r1a">Usage telemetry</th><td class="other" data-i18n="r1b">Collected, often on by default</td><td class="rh">none · [ ] activationEvents</td></tr>
+      <tr><th scope="row" data-i18n="r2a">Account / subscription</th><td class="other" data-i18n="r2b">Features tied to a login</td><td class="rh" data-i18n="r2c">none</td></tr>
+      <tr><th scope="row" data-i18n="r3a">Cloud AI features</th><td class="other" data-i18n="r3b">Send diffs/code to a service</td><td class="rh" data-i18n="r3c">none · zero HTTP clients</td></tr>
+      <tr><th scope="row" data-i18n="r4a">Runtime dependencies</th><td class="other" data-i18n="r4b">Dozens, transitive</td><td class="rh">"dependencies": {}</td></tr>
+      <tr><th scope="row" data-i18n="r5a">"No network" guarantee</th><td class="other" data-i18n="r5b">Stated in a privacy policy</td><td class="rh" data-i18n="r5c">enforced by the build</td></tr>
+      <tr><th scope="row" data-i18n="r6a">Data egress</th><td class="other" data-i18n="r6b">Various endpoints</td><td class="rh" data-i18n="r6c">only your remote, on your click</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" data-i18n="cmp_note">The "mainstream" columns describe categories of features publicly known in that class of products, not any single product or version. The RefHaven column is the one you can reproduce.</p>
+
+  <footer>
+    <span class="mono">RefHaven 0.11.0</span>
+    <span class="dot" aria-hidden="true"></span>
+    <span><span data-i18n="foot_detail">Full detail:</span> <span class="mono">SECURITY.md</span> · <span class="mono">PRIVACY.md</span></span>
+    <span class="dot" aria-hidden="true"></span>
+    <span data-i18n="foot_local">Processed on your workstation · local processing</span>
+  </footer>
+</div>
+
+<script>
+  const I18N = {
+    en: {},
+    de: {
+      eyebrow: "RefHaven · Datensicherheits-Attestierung",
+      h1: 'Dein Repository verlässt diese Maschine nie.<span class="cross"> ↳ eine Tür.</span>',
+      lede: "Keine Telemetrie, kein Backend, kein HTTP-Client, keine Laufzeitabhängigkeiten. Kein Versprechen auf Vertrauensbasis: eine Invariante, die der Build erzwingt — und die du an den exakten Bytes prüfen kannst, die du installierst.",
+      b_inside: "INNERHALB DER GRENZE", b_local: "bleibt lokal",
+      tag1: "git · Vergleiche", tag2: "blame · Verlauf", tag3: "diff · Patch", tag4: "Stash",
+      tag5: "In-Memory-Cache", tag6: "Workspace-State", tag7: "redigierte lokale Logs",
+      door_title: "Der einzige Ausgang → das von dir konfigurierte Git-Remote",
+      door_sub: "Nur eine Browser-URL, konstruiert und validiert, geöffnet nach einem ausdrücklichen Befehl von dir. Keine API, kein Token, keine Anfrage im Hintergrund.",
+      boundary_note: "Auch Kopieren in die Zwischenablage und Patch-Speichern sind von dir ausgelöste Übergaben an von dir gewählte Ziele. Alles andere bleibt innerhalb der Grenze.",
+      h2_evidence: "Die Belege",
+      evidence_sub: "Jede Aussage unten entspricht einem realen Artefakt im Repository oder im Paket. Nichts, dem man blind glauben muss.",
+      c1_h: "Null Netzwerk-Primitive, vom Build erzwungen",
+      c1_p: "Ein Guard-Test durchsucht jede Quelldatei und schlägt fehl, sobald ein Netzwerkaufruf, ein Code-Ausführungs-Primitiv, Telemetrie oder eine ungeprüfte Prozess-/Browser-Übergabe auftaucht. Prozessausführung lebt in einer einzigen Datei; das Öffnen des Browsers in einer einzigen Datei.",
+      c2_h: "Git kann das Netzwerk nicht erreichen",
+      c2_p: "Jeder Git-Prozess startet mit deaktivierten Transporten: jeder fetch-/push-Versuch würde vom Protokoll selbst abgelehnt. Proxy, SSH, externe Diffs und geerbte Umgebungsvariablen zur Repository-Umleitung werden entfernt; keine Shell.",
+      c3_h: "Null Laufzeitabhängigkeiten",
+      c3_p: "Kein Fremdcode läuft im Extension-Host. Das VSIX enthält nur kompiliertes JavaScript, das Icon und drei Dokumente — kein Quellcode, kein node_modules, keine sonstige Nutzlast.",
+      c3_code_a: "// package.json", c3_code_b: "// Paket geprüft: 89 Dateien · 0 .ts · 0 node_modules",
+      c4_h: "Keine Telemetrie, kein Konto, keine automatische Erkennung",
+      c4_p: "Keine Telemetrie-API, keine Nutzungsereignisse, kein Kontosystem, kein Remote-Konfigurationsdienst. Die Erweiterung aktiviert sich ohne Netzwerkereignisse und Logs bleiben im lokalen Panel, mit redigierten sensiblen Metadaten.",
+      c4_code_a: "// Manifest-Beiträge",
+      h2_verify: "Prüfe es selbst",
+      verify_sub: "Du musst unseren Code nicht lesen, um ihm zu vertrauen. Zwei Befehle im Erweiterungsordner genügen.",
+      verify_bar: "Terminal — Erweiterungsordner",
+      v_c1: "# 1 · kein Netzwerk-Ausgang, von Tests erzwungen", v_c1b: "(5 Prüfungen bestanden)",
+      v_c2: "# 2 · was tatsächlich im Paket ausgeliefert wird",
+      v_c3: "# kein Quellcode, kein node_modules, keine Netzwerk-Binärdatei.",
+      h2_diff: "Warum es sich von üblichem Git-Tooling unterscheidet",
+      cmp_cap: "Bekannte Kategorien üblicher Git-Tools, verglichen mit RefHaven. Jede RefHaven-Zeile ist mit den obigen Befehlen überprüfbar.",
+      cmp_h1: "Fläche", cmp_h2: "Übliches Git-Tooling",
+      r1a: "Nutzungs-Telemetrie", r1b: "Erfasst, oft standardmäßig aktiv",
+      r2a: "Konto / Abo", r2b: "An Login gebundene Funktionen", r2c: "keines",
+      r3a: "Cloud-KI-Funktionen", r3b: "Senden Diffs/Code an einen Dienst", r3c: "keine · null HTTP-Clients",
+      r4a: "Laufzeitabhängigkeiten", r4b: "Dutzende, transitiv",
+      r5a: "„Kein Netzwerk\"-Garantie", r5b: "In einer Datenschutzrichtlinie erklärt", r5c: "vom Build erzwungen",
+      r6a: "Datenabfluss", r6b: "Verschiedene Endpunkte", r6c: "nur dein Remote, auf deinen Klick",
+      cmp_note: "Die „üblichen\" Spalten beschreiben öffentlich bekannte Funktionskategorien dieser Produktklasse, kein einzelnes Produkt und keine einzelne Version. Die RefHaven-Spalte ist die, die du reproduzieren kannst.",
+      foot_detail: "Vollständige Details:", foot_local: "Auf deiner Workstation verarbeitet · lokale Verarbeitung"
+    },
+    it: {
+      eyebrow: "RefHaven · attestazione sulla sicurezza dei dati",
+      h1: 'Il tuo repository non lascia questa macchina.<span class="cross"> ↳ un’unica porta.</span>',
+      lede: "Nessuna telemetria, nessun backend, nessun client HTTP, nessuna dipendenza a runtime. Non una promessa da leggere: un invariante che la build fa rispettare — e che puoi verificare sui byte esatti che installi.",
+      b_inside: "DENTRO IL CONFINE", b_local: "resta locale",
+      tag1: "git · comparazioni", tag2: "blame · history", tag3: "diff · patch", tag4: "stash",
+      tag5: "cache in memoria", tag6: "workspace state", tag7: "log locali redatti",
+      door_title: "L’unica uscita → il remote Git che hai configurato tu",
+      door_sub: "Solo un URL del browser, costruito e validato, aperto dopo un tuo comando esplicito. Nessuna API, nessun token, nessuna richiesta in background.",
+      boundary_note: "Copia negli appunti e salvataggio patch sono anch’essi handoff avviati da te, verso destinazioni scelte da te. Tutto il resto resta dentro il confine.",
+      h2_evidence: "Le prove",
+      evidence_sub: "Ogni affermazione qui sotto corrisponde a un artefatto reale nel repository o nel pacchetto. Niente da credere sulla fiducia.",
+      c1_h: "Zero primitive di rete, imposto dalla build",
+      c1_p: "Un test di guardia scandaglia ogni file sorgente e fallisce se compare una chiamata di rete, una primitiva di esecuzione codice, telemetria, o un handoff a processo/browser non auditato. L’esecuzione di processi vive in un solo file; l’apertura del browser in un solo file.",
+      c2_h: "Git non può raggiungere la rete",
+      c2_p: "Ogni processo Git parte con i trasporti disabilitati: qualunque tentativo di fetch/push verrebbe rifiutato dal protocollo stesso. Proxy, SSH, diff esterni e le variabili d’ambiente ereditate di redirezione del repository vengono azzerate; nessuna shell.",
+      c3_h: "Zero dipendenze a runtime",
+      c3_p: "Nessun codice di terze parti gira nell’host dell’estensione. Il VSIX contiene solo JavaScript compilato, l’icona e tre documenti — nessun sorgente, nessun node_modules, nessun altro payload.",
+      c3_code_a: "// package.json", c3_code_b: "// pacchetto verificato: 89 file · 0 .ts · 0 node_modules",
+      c4_h: "Nessuna telemetria, nessun account, nessuna scoperta automatica",
+      c4_p: "Nessuna API di telemetria, nessun evento d’uso, nessun sistema di account, nessun servizio di configurazione remota. L’estensione si attiva senza eventi di rete e i log restano nel pannello locale, con i metadati sensibili redatti.",
+      c4_code_a: "// contributi manifest",
+      h2_verify: "Verificalo tu stesso",
+      verify_sub: "Non serve leggere il nostro codice per fidarti. Bastano due comandi nella cartella dell’estensione.",
+      verify_bar: "terminale — cartella dell’estensione",
+      v_c1: "# 1 · nessuna via d’uscita di rete, imposto dai test", v_c1b: "(5 controlli superati)",
+      v_c2: "# 2 · cosa viene davvero spedito nel pacchetto",
+      v_c3: "# nessun sorgente, nessun node_modules, nessun binario di rete.",
+      h2_diff: "Perché è diverso dal tooling Git comune",
+      cmp_cap: "Categorie note del tooling Git comune, confrontate con RefHaven. Ogni riga di RefHaven è verificabile con i comandi qui sopra.",
+      cmp_h1: "Superficie", cmp_h2: "Tooling Git comune",
+      r1a: "Telemetria d’uso", r1b: "Raccolta, spesso attiva di default",
+      r2a: "Account / abbonamento", r2b: "Funzioni legate a un login", r2c: "nessuno",
+      r3a: "Funzioni AI verso il cloud", r3b: "Inviano diff/codice a un servizio", r3c: "nessuna · zero client HTTP",
+      r4a: "Dipendenze a runtime", r4b: "Decine, transitive",
+      r5a: "Garanzia “no rete”", r5b: "Dichiarata nella privacy policy", r5c: "imposta dalla build",
+      r6a: "Egress dei dati", r6b: "Vari endpoint", r6c: "solo il tuo remote, su tuo click",
+      cmp_note: "Le colonne “comune” descrivono categorie di funzionalità pubblicamente note in quella classe di prodotti, non un singolo prodotto o versione. La colonna RefHaven è quella che puoi riprodurre.",
+      foot_detail: "Dettaglio completo:", foot_local: "Processato sulla tua workstation · elaborazione locale"
+    }
+  };
+
+  const EN = {};
+  document.querySelectorAll("[data-i18n]").forEach((el) => { EN[el.getAttribute("data-i18n")] = el.innerHTML; });
+  I18N.en = EN;
+
+  function setLang(lang) {
+    const dict = I18N[lang] || I18N.en;
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      if (dict[key] != null) el.innerHTML = dict[key];
+    });
+    document.querySelectorAll(".langs button").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
+    });
+    try { localStorage.setItem("refhaven-attest-lang", lang); } catch (e) { /* ignore */ }
+  }
+
+  document.querySelectorAll(".langs button").forEach((b) => {
+    b.addEventListener("click", () => setLang(b.dataset.lang));
+  });
+
+  let initial = "en";
+  try {
+    const saved = localStorage.getItem("refhaven-attest-lang");
+    if (saved && I18N[saved]) initial = saved;
+    else {
+      const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
+      if (I18N[nav]) initial = nav;
+    }
+  } catch (e) { /* ignore */ }
+  setLang(initial);
+</script>

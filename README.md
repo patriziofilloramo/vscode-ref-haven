@@ -1,5 +1,7 @@
 # RefHaven
 
+<img src="assets/refhaven-icon-128.png" alt="RefHaven logo: a light-stroked shield sheltering a git branch with an amber tip" width="96" align="right">
+
 > **Your Git context, inside VS Code. Your repository data, under your control.**
 
 RefHaven brings branch comparisons, line intelligence, history, stashes, and
@@ -239,7 +241,9 @@ This "no egress" guarantee is **enforced by the build, not just promised**: a
 data-egress guard test fails the moment any source file gains a network call,
 a code-execution primitive, telemetry, or an unaudited process or browser
 handoff. Run `npm run test:unit` and read the "data-egress guard" results, or
-see the _Verify it yourself_ section of `PRIVACY.md`.
+see the _Verify it yourself_ section of `PRIVACY.md`. A shareable attestation
+(EN/DE/IT) lives in
+[`docs/security-attestation.html`](docs/security-attestation.html).
 
 See `SECURITY.md` for the complete threat model and `PRIVACY.md` for the
 concise data-handling notice.
@@ -323,6 +327,7 @@ finalized. See the publishing checklist before changing those safeguards.
 
 ## Documentation
 
+- Release history — `CHANGELOG.md`
 - Product definition — `docs/PRODUCT.md`
 - Architecture — `docs/ARCHITECTURE.md`
 - Security model — `SECURITY.md`

@@ -59,19 +59,21 @@ documentation, screenshots, command IDs, or marketing artwork.
 
 ## Metadata changes
 
-After approval, update `package.json` in one focused release branch:
+The repository already carries the public identity: publisher
+`patriziofilloramo`, the MIT `LICENSE`, and the `repository`, `homepage`, and
+`bugs` metadata. Before the first Marketplace release, still confirm:
 
-1. set `private` to `false`;
-2. replace `local-development` with the verified publisher ID;
-3. replace `UNLICENSED` with the approved SPDX license expression;
-4. add `repository`, `homepage`, and `bugs.url`;
-5. add the approved `LICENSE` file;
-6. replace the publication-input marker in `SECURITY.md` with the approved
-   reporting contact;
-7. update the version and changelog/release notes.
+1. the `patriziofilloramo` publisher ID is registered and verified on the
+   Marketplace under the owning account;
+2. `private` is set to `false` for the release build (it stays `true` in the
+   repository to block accidental `npm publish`);
+3. **private vulnerability reporting is enabled** on the GitHub repository
+   (Settings → Advanced Security → Private vulnerability reporting), because
+   `SECURITY.md` directs reporters there;
+4. the version in `package.json` and `package-lock.json` matches the top entry
+   of `CHANGELOG.md`.
 
-Then update the manifest unit test that intentionally protects the current
-pre-publication values.
+Then update the manifest unit test if any of the protected values change.
 
 ## Release gates
 

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RefHaven — Your Git context, inside VS Code</title>
+    <meta
+      name="description"
+      content="RefHaven is a VS Code extension for private branch comparisons, blame, history and stashes. No telemetry, no backend, no runtime dependencies — and the build proves it."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ground: #eef3f6;
+        --panel: #ffffff;
+        --ink: #0d2440;
+        --ink-soft: #47617a;
+        --line: #c6d6df;
+        --seal: #0e8a86;
+        --door: #b45309;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ground: #08182b;
+          --panel: #0f2942;
+          --ink: #dfeef5;
+          --ink-soft: #8bacc1;
+          --line: #1c3a56;
+          --seal: #5eead4;
+          --door: #fbbf24;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        line-height: 1.6;
+      }
+      .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 64px 24px 96px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      h1 {
+        font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+        font-size: clamp(30px, 6vw, 44px);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+      .tagline {
+        font-size: 18px;
+        color: var(--ink-soft);
+        max-width: 54ch;
+        margin: 22px 0 0;
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 24px 0 0;
+      }
+      .badges span {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 12px;
+        color: var(--ink-soft);
+      }
+      .cta {
+        display: block;
+        margin: 40px 0 0;
+        padding: 22px 24px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        text-decoration: none;
+        color: inherit;
+      }
+      .cta:hover,
+      .cta:focus-visible {
+        border-color: var(--seal);
+        outline: none;
+      }
+      .cta b {
+        display: block;
+        font-size: 18px;
+        color: var(--seal);
+      }
+      .cta small {
+        display: block;
+        color: var(--ink-soft);
+        font-size: 14.5px;
+        margin-top: 6px;
+      }
+      .cta .door {
+        color: var(--door);
+      }
+      h2 {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+        margin: 56px 0 14px;
+      }
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 10px;
+      }
+      ul a {
+        color: var(--seal);
+      }
+      ul small {
+        color: var(--ink-soft);
+      }
+      footer {
+        margin-top: 56px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="head">
+        <svg width="72" height="72" viewBox="0 0 256 256" role="img" aria-label="RefHaven logo">
+          <defs>
+            <linearGradient
+              id="g"
+              gradientUnits="userSpaceOnUse"
+              x1="128"
+              y1="42"
+              x2="128"
+              y2="216"
+            >
+              <stop offset="0" stop-color="#7dd3fc" />
+              <stop offset="1" stop-color="#5eead4" />
+            </linearGradient>
+          </defs>
+          <rect x="8" y="8" width="240" height="240" rx="54" fill="#0d2440" />
+          <path
+            d="M128 42 C 149 53 170 59 191 62 L 191 124 C 191 168 167 197 128 216 C 89 197 65 168 65 124 L 65 62 C 86 59 107 53 128 42 Z"
+            fill="none"
+            stroke="url(#g)"
+            stroke-width="9"
+            stroke-linejoin="round"
+          />
+          <g stroke="url(#g)" stroke-width="9" stroke-linecap="round" fill="none">
+            <path d="M104 100 V 160" />
+            <path d="M154 110 C 154 136 130 139 107 141" />
+            <circle cx="104" cy="86" r="11" />
+            <circle cx="104" cy="174" r="11" />
+          </g>
+          <circle cx="154" cy="97" r="11.5" fill="#fbbf24" />
+        </svg>
+        <h1>RefHaven</h1>
+      </div>
+
+      <p class="tagline">
+        Branch comparisons, line intelligence, history and stashes inside VS Code — with your
+        repository data staying on your machine.
+      </p>
+
+      <div class="badges">
+        <span>No telemetry</span>
+        <span>No backend</span>
+        <span>No runtime dependencies</span>
+        <span>Native UI</span>
+      </div>
+
+      <a class="cta" href="security-attestation.html">
+        <b>Data-security attestation →</b>
+        <small>
+          The data boundary, the <span class="door">one</span> sanctioned exit, and the
+          build-enforced proofs — with the commands to verify them yourself. Available in English,
+          German and Italian.
+        </small>
+      </a>
+
+      <h2>Project</h2>
+      <ul>
+        <li>
+          <a href="https://github.com/patriziofilloramo/ref-haven">Source code on GitHub</a>
+          <small>— MIT licensed, zero production dependencies</small>
+        </li>
+        <li>
+          <a href="https://github.com/patriziofilloramo/ref-haven/blob/master/SECURITY.md"
+            >Security model</a
+          >
+          <small>— threat model and hardening controls</small>
+        </li>
+        <li>
+          <a href="https://github.com/patriziofilloramo/ref-haven/blob/master/PRIVACY.md"
+            >Privacy notice</a
+          >
+          <small>— what is processed, and how to verify it</small>
+        </li>
+        <li>
+          <a href="https://github.com/patriziofilloramo/ref-haven/blob/master/docs/ARCHITECTURE.md"
+            >Architecture</a
+          >
+          <small>— layers, components and boundaries</small>
+        </li>
+      </ul>
+
+      <footer>
+        This page loads no external font, script, tracker or analytics — consistent with what
+        RefHaven itself promises.
+      </footer>
+    </div>
+  </body>
+</html>

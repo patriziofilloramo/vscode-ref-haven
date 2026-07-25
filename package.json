@@ -3,10 +3,20 @@
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
   "version": "0.11.0",
-  "publisher": "local-development",
-  "license": "UNLICENSED",
+  "publisher": "patriziofilloramo",
+  "license": "MIT",
   "private": true,
+  "author": "Patrizio Filloramo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/patriziofilloramo/ref-haven.git"
+  },
+  "homepage": "https://github.com/patriziofilloramo/ref-haven#readme",
+  "bugs": {
+    "url": "https://github.com/patriziofilloramo/ref-haven/issues"
+  },
   "icon": "assets/refhaven-icon-256.png",
+  "pricing": "Free",
   "galleryBanner": {
     "color": "#071426",
     "theme": "dark"
@@ -44,6 +54,8 @@
   "files": [
     "dist/**/*.js",
     "assets/refhaven-icon-256.png",
+    "LICENSE",
+    "CHANGELOG.md",
     "SECURITY.md",
     "PRIVACY.md",
     "IP-PROVENANCE.md"
@@ -1354,8 +1366,9 @@
     "test:unit": "npm run compile:tests && mocha --ui tdd \".test-out/test/unit/**/*.test.js\"",
     "test:extension": "npm run compile && npm run compile:tests && node scripts/run-extension-tests.mjs",
     "vscode:prepublish": "npm run compile",
-    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license",
-    "package:release": "npm run marketplace:check && vsce package --no-dependencies"
+    "prepackage": "node -e \"require('node:fs').mkdirSync('build',{recursive:true})\"",
+    "package": "vsce package --no-dependencies --out build",
+    "package:release": "npm run marketplace:check && vsce package --no-dependencies --out build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

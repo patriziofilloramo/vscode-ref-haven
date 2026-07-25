@@ -57,6 +57,7 @@ interface PackageManifest {
   readonly name: string;
   readonly private: boolean;
   readonly publisher: string;
+  readonly repository?: { readonly url: string };
   readonly scripts: Readonly<Record<string, string>>;
   readonly version: string;
 }
@@ -85,20 +86,21 @@ suite("extension manifest", () => {
 
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
-    assert.equal(manifest.publisher, "local-development");
+    assert.equal(manifest.publisher, "patriziofilloramo");
     assert.equal(manifest.version, "0.11.0");
     assert.match(manifest.description, /local processing/u);
   });
 
-  test("keeps accidental public publishing disabled until metadata is finalized", () => {
+  test("carries its public identity while blocking accidental npm publish", () => {
     const manifest = loadManifest();
 
     assert.equal(manifest.private, true);
-    assert.equal(manifest.publisher, "local-development");
-    assert.equal(manifest.license, "UNLICENSED");
+    assert.equal(manifest.publisher, "patriziofilloramo");
+    assert.equal(manifest.license, "MIT");
+    assert.match(manifest.repository?.url ?? "", /github\.com\/patriziofilloramo\/ref-haven/u);
     assert.equal(
       manifest.scripts["package:release"],
-      "npm run marketplace:check && vsce package --no-dependencies",
+      "npm run marketplace:check && vsce package --no-dependencies --out build",
     );
   });
 
@@ -306,6 +308,8 @@ suite("extension manifest", () => {
     assert.deepEqual(manifest.files, [
       "dist/**/*.js",
       "assets/refhaven-icon-256.png",
+      "LICENSE",
+      "CHANGELOG.md",
       "SECURITY.md",
       "PRIVACY.md",
       "IP-PROVENANCE.md",

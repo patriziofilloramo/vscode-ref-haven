@@ -31,7 +31,7 @@ import { previewMerge } from "../../src/infrastructure/git/mergePreview";
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
-const EXTENSION_ID = "local-development.refhaven";
+const EXTENSION_ID = "patriziofilloramo.refhaven";
 
 suite("native branch diff", () => {
   let repositoryRoot: string;
