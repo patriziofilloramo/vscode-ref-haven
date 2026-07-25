@@ -13,7 +13,6 @@ import {
   blameFile,
   blameLine,
   fileExistsAtRevision,
-  GitOperationError,
   listBranchDetails,
   listChangedLineRanges,
   listFileHistory,
@@ -28,6 +27,7 @@ import {
   readWorktreeState,
   searchCommits,
 } from "../../src/infrastructure/git/GitCli";
+import { previewMerge } from "../../src/infrastructure/git/mergePreview";
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
@@ -35,6 +35,7 @@ const EXTENSION_ID = "local-development.refhaven";
 
 suite("native branch diff", () => {
   let repositoryRoot: string;
+  let mergeTreeSupport: boolean | undefined;
 
   suiteSetup(() => {
     // Unique per run: Windows can refuse to delete read-only Git objects left
@@ -81,6 +82,10 @@ suite("native branch diff", () => {
     const result = await calculateComparison(comparison);
     assert.equal(result.fromSha, git("rev-parse", "refs/heads/main"));
     assert.equal(result.toSha, git("rev-parse", "refs/heads/feature/native-diff"));
+    assert.equal(
+      result.mergePreview?.kind,
+      mergeTreeWriteTreeSupported() ? "clean" : "unavailable",
+    );
     assert.deepEqual(
       result.files.map(({ newPath, oldPath, status }) => ({ newPath, oldPath, status })),
       [
@@ -255,25 +260,27 @@ suite("native branch diff", () => {
     const baseSha = git("rev-parse", "refs/heads/main");
     const featureSha = git("rev-parse", "refs/heads/feature/native-diff");
 
-    const full = await readComparisonPatch(repositoryRoot, baseSha, featureSha);
+    const full = (await readComparisonPatch(repositoryRoot, baseSha, featureSha)).toString("utf8");
     assert.match(full, /^diff --git/mu);
     assert.match(full, /-before/u);
     assert.match(full, /\+after/u);
     assert.match(full, /rename-new\.txt/u);
 
-    const single = await readComparisonPatch(repositoryRoot, baseSha, featureSha, ["modified.txt"]);
+    const single = (
+      await readComparisonPatch(repositoryRoot, baseSha, featureSha, ["modified.txt"])
+    ).toString("utf8");
     assert.match(single, /modified\.txt/u);
     assert.doesNotMatch(single, /added\.txt/u);
 
-    const root = await readComparisonPatch(repositoryRoot, null, baseSha);
+    const root = (await readComparisonPatch(repositoryRoot, null, baseSha)).toString("utf8");
     assert.match(root, /modified\.txt/u);
     assert.match(root, /\+before/u);
 
     writeFileSync(join(repositoryRoot, "modified.txt"), "working\n", "utf8");
     try {
-      const workingTree = await readComparisonPatch(repositoryRoot, featureSha, null, [
-        "modified.txt",
-      ]);
+      const workingTree = (
+        await readComparisonPatch(repositoryRoot, featureSha, null, ["modified.txt"])
+      ).toString("utf8");
       assert.match(workingTree, /\+working/u);
     } finally {
       writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
@@ -289,17 +296,77 @@ suite("native branch diff", () => {
     );
   });
 
-  test("bounds exported patch output", async () => {
-    const featureSha = git("rev-parse", "refs/heads/feature/native-diff");
-    writeFileSync(join(repositoryRoot, "modified.txt"), `${"x".repeat(6 * 1024 * 1024)}\n`, "utf8");
+  test("preserves exact bytes and a raised ceiling for exported patches", async () => {
+    const headSha = git("rev-parse", "HEAD");
+
+    // A byte that is invalid UTF-8 on its own must survive verbatim so the
+    // saved patch applies cleanly, rather than becoming the replacement char.
+    writeFileSync(
+      join(repositoryRoot, "modified.txt"),
+      Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]),
+    );
     try {
-      await assert.rejects(
-        readComparisonPatch(repositoryRoot, featureSha, null, ["modified.txt"]),
-        (error: unknown) => error instanceof GitOperationError && error.code === "outputTooLarge",
+      const patch = await readComparisonPatch(repositoryRoot, headSha, null, ["modified.txt"]);
+      assert.ok(patch.includes(0xe9), "raw non-UTF-8 byte is preserved");
+      assert.ok(
+        !patch.includes(Buffer.from([0xef, 0xbf, 0xbd])),
+        "no UTF-8 replacement character is introduced",
       );
     } finally {
       writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
     }
+
+    // A 6 MiB patch exceeds the 5 MiB text ceiling but stays within the
+    // dedicated patch ceiling, so export no longer fails on large diffs.
+    writeFileSync(join(repositoryRoot, "modified.txt"), `${"x".repeat(6 * 1024 * 1024)}\n`, "utf8");
+    try {
+      const large = await readComparisonPatch(repositoryRoot, headSha, null, ["modified.txt"]);
+      assert.ok(large.length > 6 * 1024 * 1024);
+    } finally {
+      writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+    }
+  });
+
+  test("forecasts merge conflicts without touching the worktree or index", async function () {
+    if (!mergeTreeWriteTreeSupported()) {
+      // Forecasts need `merge-tree --write-tree` (Git 2.38+); production
+      // degrades to no forecast, which the calculation test covers.
+      this.skip();
+    }
+    const featureSha = git("rev-parse", "refs/heads/feature/native-diff");
+    const mainSha = git("rev-parse", "refs/heads/main");
+
+    // main is an ancestor of the feature branch, so the merge is clean.
+    const clean = await previewMerge(repositoryRoot, mainSha, featureSha);
+    assert.deepEqual(clean, { kind: "clean" });
+
+    // A branch that edits the same line as the feature branch must conflict.
+    git("switch", "-c", "conflict/native-diff", "main");
+    writeFileSync(join(repositoryRoot, "modified.txt"), "conflicting\n", "utf8");
+    git("add", ".");
+    git("commit", "-m", "conflicting change");
+    git("switch", "feature/native-diff");
+    try {
+      const conflictSha = git("rev-parse", "refs/heads/conflict/native-diff");
+      const conflicted = await previewMerge(repositoryRoot, conflictSha, featureSha);
+      assert.equal(conflicted.kind, "conflicts");
+      assert.ok(
+        conflicted.conflictedPaths.includes("modified.txt"),
+        "expected modified.txt to be forecast as conflicting",
+      );
+      assert.equal(
+        git("status", "--porcelain"),
+        "",
+        "the merge preview must not touch the worktree or index",
+      );
+    } finally {
+      git("branch", "-D", "conflict/native-diff");
+    }
+
+    await assert.rejects(
+      previewMerge(repositoryRoot, "main", featureSha),
+      /merge preview base revision is invalid/u,
+    );
   });
 
   test("searches local commits and loads full commit details", async () => {
@@ -404,6 +471,19 @@ suite("native branch diff", () => {
       encoding: "utf8",
       windowsHide: true,
     }).trim();
+  }
+
+  function mergeTreeWriteTreeSupported(): boolean {
+    if (mergeTreeSupport === undefined) {
+      try {
+        const head = git("rev-parse", "HEAD");
+        git("merge-tree", "--write-tree", head, head);
+        mergeTreeSupport = true;
+      } catch {
+        mergeTreeSupport = false;
+      }
+    }
+    return mergeTreeSupport;
   }
 });
 

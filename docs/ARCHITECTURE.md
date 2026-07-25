@@ -149,6 +149,15 @@ with `execFile`, argument arrays, and no shell. Every operation runs through
 The adapter owns cancellation, centrally configured timeouts, encoding, 5 MiB
 stdout/stderr limits, stdin bounds, and stable process-control errors.
 
+The Git executable is resolved to an absolute path once and memoized:
+`gitBinary.ts` prefers the user's configured `git.path`, then probes only the
+absolute directories on `PATH` (skipping empty and relative entries, so a
+current-directory `git` cannot win), and falls back to the bare name only when
+nothing resolves. Resolving the binary means a poisoned `PATH` cannot
+substitute an attacker executable for `git`. The pure selection is
+host-independent and unit-tested; the buffer path also accepts a larger output
+ceiling for patch export.
+
 `GitCli.ts` owns typed Git operations, command construction, validation, and
 parser selection. Keeping process mechanics separate prevents the command
 adapter from becoming the implicit owner of configuration, scheduling, and
@@ -190,6 +199,12 @@ patch data enters the store.
 
 Accepts a comparison specification and cancellation token, resolves both refs, computes counts and commit pages, selects the diff endpoints by mode, and combines name-status and numstat results. Working-tree comparisons keep the resolved base immutable while using the live file as the right diff side. It returns a typed result and does not call VS Code UI APIs.
 
+For immutable endpoints the engine also requests a read-only merge forecast:
+`merge-tree --write-tree` computes in memory whether merging the target into
+the base would conflict, touching no worktree, index, or ref. Failures and
+older Git versions degrade to an absent forecast rather than an error, and
+Working Tree comparisons never request one because their endpoint is mutable.
+
 ### CommitDetailsController and provider
 
 Commit search dispatches typed, bounded local Git queries by message, author,
@@ -218,8 +233,10 @@ same invariant before accepting workspace state. Patch export re-resolves the
 current result and asks `readComparisonPatch` for a bounded local `git
 diff`/`git show --patch` between the already-immutable endpoint SHAs,
 optionally limited to a single validated file from a known workspace
-repository; output goes only to the clipboard or a user-chosen local
-filesystem location.
+repository. The patch is read as raw bytes so content in a legacy or mixed
+encoding survives verbatim: saving writes those exact bytes to a user-chosen
+local filesystem location, while the clipboard receives a best-effort UTF-8
+decode because it is inherently text.
 
 ### FileActionsController
 

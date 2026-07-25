@@ -1,5 +1,16 @@
 # Security and controlled remote handoff
 
+## Reporting a vulnerability
+
+RefHaven is currently distributed internally. Report suspected vulnerabilities
+through the organisation's existing internal security channel.
+
+<!-- PUBLICATION_INPUT_REQUIRED: security-contact -->
+
+Before a public release, replace this section with the approved public
+security-reporting address or private advisory process and its expected
+response policy. Do not publish a personal or inferred contact.
+
 ## Security objective
 
 RefHaven is designed for repositories whose data may be processed only on the
@@ -35,7 +46,11 @@ Every Git child process is started without a shell and receives a centrally test
 - pagers and configured `core.fsmonitor` processes are disabled;
 - optional Git locks and replace-object rewriting are disabled;
 - path arguments use Git's global literal-pathspec mode;
-- diff operations pass `--no-ext-diff` and `--no-textconv`.
+- diff operations pass `--no-ext-diff` and `--no-textconv`;
+- the Git executable is resolved to an absolute path from the configured
+  `git.path` or the absolute directories on `PATH`, so a poisoned or
+  current-directory `PATH` entry cannot substitute a different binary for
+  `git`.
 
 If a required object is not already available locally, the operation fails instead of contacting a remote. The extension does not activate VS Code's built-in Git extension. If that extension is already active, RefHaven reads its repository list only; all comparison data still comes from the restricted local Git process.
 
@@ -116,6 +131,12 @@ is trusted only when its URI's session HMAC verifies and its repository is
 still part of the workspace; blame then runs at the pinned SHA through the
 same transport-blocked Git policy.
 
+Merge forecasts run `merge-tree --write-tree`, which computes the merge
+in memory only: it does not touch the worktree, the index, or any ref, runs
+no checkout, and executes no merge drivers configured by the repository.
+A forecast failure degrades to "no forecast" and is never surfaced as an
+actionable error.
+
 Patch export writes a locally produced unified diff to the clipboard or to a
 local-filesystem location the user picks in a save dialog. RefHaven rejects
 non-file URI schemes, never writes patches to implicit locations, and does not
@@ -171,6 +192,15 @@ The VSIX contains compiled extension code and documentation only; development de
 
 The dependency-free `npm run quality` guard rejects production dependencies,
 non-exact direct development pins, missing branding assets, duplicated setting
-literals, oversized source files, and direct exception-message logging.
+literals, oversized source files, direct exception-message logging, and
+third-party product branding or command namespaces on public/runtime surfaces.
+The internal clean-implementation ADR is retained as provenance evidence and
+is intentionally outside that public-surface rule.
+
+`npm run marketplace:check` is a separate fail-closed publication gate. It
+requires the final publisher, license, repository, homepage, support URL, and
+public trust-boundary documents before a public VSIX can be produced through
+`npm run package:release`. Internal packaging remains available without
+weakening this release safeguard.
 
 Security updates take precedence over feature updates. A newer development package is not adopted when it requires an unsupported runtime or introduces a known advisory; the newest compatible audit-clean version is retained until a safe upgrade is available.

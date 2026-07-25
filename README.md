@@ -72,9 +72,16 @@ The **Branch Comparisons** view is the central review workspace.
 - See status, additions, deletions, tooltips, and clear empty-state
   explanations.
 - Open every change in VS Code's native readonly diff editor.
+- **Merge forecast**: see at a glance whether the target would merge cleanly
+  into the base. Conflicts appear on the comparison row (`⚠ 2 merge
+conflicts`) with the conflicted files named in the tooltip — computed
+  entirely in memory, without touching your worktree, index, or branches.
+  Requires Git 2.38+; older Git simply shows no forecast.
 - Filter, sort, Quick Open, mark reviewed, and navigate remaining files.
 - Pin, rename, refresh, swap, change mode, or close saved comparisons.
-- Copy a complete comparison patch or a patch for one selected file.
+- Copy a complete comparison patch or a patch for one selected file. Saved
+  patches preserve the exact file bytes, so legacy-encoded content still
+  applies cleanly with `git apply`.
 
 </details>
 
@@ -218,6 +225,8 @@ user command.
 Every Git process:
 
 - runs without a shell;
+- executes an absolute Git binary resolved once from your configured
+  `git.path` or the absolute directories on `PATH`—never a bare name;
 - blocks transports and partial-clone lazy fetch;
 - disables prompts, tracing, pagers, fsmonitor, external diff, and textconv;
 - uses literal validated paths;
@@ -226,7 +235,14 @@ Every Git process:
 Operational logs exclude exception messages and redact repository-derived or
 sensitive metadata.
 
-See `SECURITY.md` for the complete threat model and trust boundaries.
+This "no egress" guarantee is **enforced by the build, not just promised**: a
+data-egress guard test fails the moment any source file gains a network call,
+a code-execution primitive, telemetry, or an unaudited process or browser
+handoff. Run `npm run test:unit` and read the "data-egress guard" results, or
+see the _Verify it yourself_ section of `PRIVACY.md`.
+
+See `SECURITY.md` for the complete threat model and `PRIVACY.md` for the
+concise data-handling notice.
 
 ## Everyday commands
 
@@ -300,11 +316,19 @@ The project ships with zero production dependencies. Development dependencies
 are minimal, exact-pinned, lockfile-integrity pinned, and excluded from the
 VSIX.
 
+`npm run package` builds an internal VSIX. Public release packaging is
+deliberately blocked until the organisation-approved publisher, ownership,
+license, repository, support, homepage, and security-contact details are
+finalized. See the publishing checklist before changing those safeguards.
+
 ## Documentation
 
 - Product definition — `docs/PRODUCT.md`
 - Architecture — `docs/ARCHITECTURE.md`
 - Security model — `SECURITY.md`
+- Privacy notice — `PRIVACY.md`
+- Implementation and asset provenance — `IP-PROVENANCE.md`
+- Public publishing checklist — `docs/PUBLISHING.md`
 - Git comparison semantics — `docs/GIT-SEMANTICS.md`
 - Dependency policy — `docs/DEPENDENCIES.md`
 - Maintainability standards — `docs/MAINTAINABILITY.md`

@@ -8,6 +8,7 @@ import {
   listWorkingTreeChanges,
   resolveRef,
 } from "../infrastructure/git/GitCli";
+import { previewMerge } from "../infrastructure/git/mergePreview";
 
 export async function calculateComparison(
   comparison: SavedComparisonV1,
@@ -54,13 +55,18 @@ async function calculateComparisonCore(
   const fromSha = comparison.mode === "branchChanges" ? mergeBaseSha : baseSha;
   if (!fromSha) throw new Error("Could not determine the comparison start revision.");
 
-  const [files, counts, aheadCommits, behindCommits] = await Promise.all([
+  const [files, counts, aheadCommits, behindCommits, mergePreview] = await Promise.all([
     comparison.mode === "workingTree"
       ? listWorkingTreeChanges(repositoryRoot, fromSha, signal)
       : listChangedFiles(repositoryRoot, fromSha, targetSha, signal),
     countAheadBehind(repositoryRoot, baseSha, targetSha, signal),
     listCommitRange(repositoryRoot, baseSha, targetSha, COMMIT_PAGE_SIZE, signal),
     listCommitRange(repositoryRoot, targetSha, baseSha, COMMIT_PAGE_SIZE, signal),
+    // The working tree is mutable, so a merge forecast would be stale on
+    // arrival; immutable endpoints get a read-only merge-tree preview.
+    comparison.mode === "workingTree"
+      ? Promise.resolve(undefined)
+      : previewMerge(repositoryRoot, baseSha, targetSha, signal),
   ]);
 
   return {
@@ -74,6 +80,7 @@ async function calculateComparisonCore(
     files,
     fromSha,
     ...(mergeBaseSha ? { mergeBaseSha } : {}),
+    ...(mergePreview ? { mergePreview } : {}),
     targetSha,
     toSha: comparison.mode === "workingTree" ? null : targetSha,
   };

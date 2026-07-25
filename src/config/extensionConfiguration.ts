@@ -27,6 +27,25 @@ export function readExtensionSetting<T>(setting: ExtensionSetting, defaultValue:
   return getExtensionConfiguration().get<T>(setting, defaultValue);
 }
 
+/**
+ * Reads the Git executable path(s) configured for VS Code's built-in Git
+ * extension (`git.path`). Used to resolve an absolute, trusted Git binary
+ * instead of relying on `PATH` lookup. Non-string and empty entries are
+ * dropped; validation of the paths happens where they are resolved.
+ */
+export function readConfiguredGitPaths(): string[] {
+  const configured = vscode.workspace.getConfiguration("git").get<unknown>("path");
+  if (typeof configured === "string") {
+    return configured.length > 0 ? [configured] : [];
+  }
+  if (Array.isArray(configured)) {
+    return configured.filter(
+      (candidate): candidate is string => typeof candidate === "string" && candidate.length > 0,
+    );
+  }
+  return [];
+}
+
 /** Reads and clamps the Git timeout before converting it to milliseconds. */
 export function readGitTimeoutMilliseconds(): number {
   const configured = readExtensionSetting<number>(

@@ -51,6 +51,13 @@ An update is accepted only when the supported Node/VS Code matrix remains valid,
 
 The quality guard also rejects runtime dependencies, non-exact direct
 development pins, missing branding assets, oversized source files, duplicated
-setting literals, and direct exception-message logging. These checks are
-deliberately implemented with Node built-ins so the guard introduces no new
-supply-chain surface.
+setting literals, direct exception-message logging, and third-party branding
+or command namespaces in public/runtime surfaces. These checks are deliberately
+implemented with Node built-ins so the guard introduces no new supply-chain
+surface.
+
+For a public release, also run `npm run marketplace:check` and
+`npm run package:release`. The readiness script uses Node built-ins and verifies
+the final publisher, license file and expression, repository, homepage, support
+URL, privacy notice, security policy, and provenance record. The current
+pre-publication metadata intentionally makes that gate fail closed.

@@ -45,6 +45,7 @@ import {
 import { buildRepositoryIdentities } from "./repositoryDiscovery";
 
 const MAX_HOVER_DIFF_BYTES = 64 * 1024;
+const MAX_PATCH_BYTES = 64 * 1024 * 1024;
 export { GitOperationError } from "./GitProcess";
 
 interface GitApiRepository {
@@ -885,13 +886,19 @@ export async function readCommitDiffPreview(
  * and the working tree (`toSha === null`), or a root commit and the empty
  * tree (`fromSha === null`). Optionally limited to specific literal paths.
  */
+/**
+ * Reads a shareable unified diff as raw bytes so that content in a legacy or
+ * mixed encoding survives verbatim and the saved patch applies cleanly. The
+ * ceiling is far higher than for text output because a whole-comparison patch
+ * can be large, while still bounding memory use.
+ */
 export async function readComparisonPatch(
   repositoryRoot: string,
   fromSha: string | null,
   toSha: string | null,
   filePaths: readonly string[] = [],
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<Buffer> {
   for (const filePath of filePaths) assertRepositoryRelativeGitPath(filePath);
   for (const sha of [fromSha, toSha]) {
     if (sha !== null && !isGitObjectId(sha)) {
@@ -925,8 +932,9 @@ export async function readComparisonPatch(
   } else {
     throw new Error("A patch needs at least one resolved revision.");
   }
-  const stdout = await runGit(repositoryRoot, args, signal).catch((error: unknown) =>
-    failGitOperation(error, "Git could not produce a patch for this selection."),
+  const stdout = await runGitBuffer(repositoryRoot, args, signal, MAX_PATCH_BYTES).catch(
+    (error: unknown) =>
+      failGitOperation(error, "Git could not produce a patch for this selection."),
   );
   return stdout;
 }

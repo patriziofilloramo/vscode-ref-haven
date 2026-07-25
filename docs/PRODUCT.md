@@ -77,7 +77,8 @@ Version 0.1 explicitly excluded N-way comparisons, working-tree comparisons, mer
 
 ## Beyond version 0.1
 
-The product has since grown toward a GitLens-style feature set while keeping the native-UI, no-webview, no-telemetry principles:
+The product has since grown into a broader local Git investigation workspace
+while keeping the native-UI, no-webview, no-telemetry principles:
 
 - **Commit drill-down:** commits in the Ahead/Behind sections expand to the files they changed and open per-commit diffs (first parent; root commits diff against the empty tree).
 - **Comparison mode switching:** each saved comparison can switch between `branchChanges` (three-dot) and `tipToTip` (two-dot) diffs via _Change Comparison Mode..._; tip-to-tip comparisons are labelled in the tree. When a three-dot comparison legitimately has no files — the target has no commits of its own, or both refs point at the same commit — the Files section states the reason and its tooltip suggests swapping the direction or switching mode.
@@ -87,6 +88,11 @@ The product has since grown toward a GitLens-style feature set while keeping the
   sorting provide a keyboard-first review loop without changing Git state.
   Review markers are workspace-local, bounded, and tied to a fingerprint of
   the current result; Working Tree markers reset on recalculation.
+- **Merge forecast:** each comparison between immutable endpoints shows
+  whether merging the target into the base would conflict, computed in memory
+  with read-only `merge-tree` plumbing. Conflicts surface on the comparison
+  row with the conflicted paths in the tooltip; clean merges stay quiet, and
+  unsupported Git versions degrade silently to no forecast.
 - **Safe single-file stash:** a dedicated Stashes view lists stashes per
   repository with expandable file trees, native diffs, copy-message, revision
   actions, and recent-stash search. **Stash This File...** preserves selected

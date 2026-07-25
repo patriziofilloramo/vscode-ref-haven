@@ -4,8 +4,19 @@ import { extname, join, relative, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const sourceFiles = collectFiles(join(root, "src"), ".ts");
+const publicDocumentationFiles = collectFiles(join(root, "docs"), ".md").filter(
+  (file) => relative(root, file).replaceAll("\\", "/") !== "docs/ADR-001-clean-implementation.md",
+);
 const violations = [];
 const MAX_SOURCE_FILE_LINES = 1_200;
+const publicSurfaceFiles = [
+  ...collectFiles(root, ".md", false),
+  ...publicDocumentationFiles,
+  join(root, "package.json"),
+  ...sourceFiles,
+];
+const thirdPartyBrandPattern = /\b(?:gitlens|gitkraken|gitless)\b/iu;
+const thirdPartyCommandNamespacePattern = /\b(?:gitlens|gitkraken)\./iu;
 
 if (manifest.dependencies !== undefined) {
   violations.push("package.json must not declare runtime dependencies.");
@@ -20,6 +31,18 @@ for (const [name, version] of Object.entries(manifest.devDependencies ?? {})) {
 const iconPath = join(root, manifest.icon ?? "");
 if (!manifest.icon || !existsSync(iconPath) || statSync(iconPath).size === 0) {
   violations.push("The extension icon is missing or empty.");
+}
+
+for (const file of publicSurfaceFiles) {
+  if (!existsSync(file)) continue;
+  const content = readFileSync(file, "utf8");
+  const relativePath = relative(root, file).replaceAll("\\", "/");
+  if (thirdPartyBrandPattern.test(content)) {
+    violations.push(`${relativePath} contains a third-party product or company name.`);
+  }
+  if (thirdPartyCommandNamespacePattern.test(content)) {
+    violations.push(`${relativePath} contains a third-party command namespace.`);
+  }
 }
 
 for (const file of sourceFiles) {
@@ -64,10 +87,10 @@ if (violations.length > 0) {
   );
 }
 
-function collectFiles(directory, extension) {
+function collectFiles(directory, extension, recursive = true) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) return collectFiles(path, extension);
+    if (entry.isDirectory()) return recursive ? collectFiles(path, extension) : [];
     return extname(entry.name) === extension ? [path] : [];
   });
 }

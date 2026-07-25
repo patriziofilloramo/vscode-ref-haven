@@ -29,7 +29,7 @@ export function blameAuthorLabel(blame: LineBlame, currentUserName: string | nul
     : blame.authorName;
 }
 
-/** Dimmed text appended to the current line, GitLens style. */
+/** Dimmed authorship text appended to the current editor line. */
 export function inlineBlameText(
   blame: LineBlame,
   currentUserName: string | null,

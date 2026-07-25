@@ -53,8 +53,11 @@ interface PackageManifest {
   readonly displayName: string;
   readonly files: readonly string[];
   readonly icon: string;
+  readonly license: string;
   readonly name: string;
+  readonly private: boolean;
   readonly publisher: string;
+  readonly scripts: Readonly<Record<string, string>>;
   readonly version: string;
 }
 
@@ -83,8 +86,20 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "local-development");
-    assert.equal(manifest.version, "0.10.0");
+    assert.equal(manifest.version, "0.11.0");
     assert.match(manifest.description, /local processing/u);
+  });
+
+  test("keeps accidental public publishing disabled until metadata is finalized", () => {
+    const manifest = loadManifest();
+
+    assert.equal(manifest.private, true);
+    assert.equal(manifest.publisher, "local-development");
+    assert.equal(manifest.license, "UNLICENSED");
+    assert.equal(
+      manifest.scripts["package:release"],
+      "npm run marketplace:check && vsce package --no-dependencies",
+    );
   });
 
   test("keeps package-lock release metadata aligned with the manifest", () => {
@@ -285,11 +300,17 @@ suite("extension manifest", () => {
     }
   });
 
-  test("packages only compiled runtime files", () => {
+  test("packages only compiled runtime files and trust-boundary documents", () => {
     const manifest = loadManifest();
 
-    assert.deepEqual(manifest.files, ["dist/**/*.js", "assets/refhaven.png", "SECURITY.md"]);
-    assert.equal(manifest.icon, "assets/refhaven.png");
+    assert.deepEqual(manifest.files, [
+      "dist/**/*.js",
+      "assets/refhaven-icon-256.png",
+      "SECURITY.md",
+      "PRIVACY.md",
+      "IP-PROVENANCE.md",
+    ]);
+    assert.equal(manifest.icon, "assets/refhaven-icon-256.png");
   });
 
   test("requires a trusted, filesystem-backed workspace", () => {

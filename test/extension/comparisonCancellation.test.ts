@@ -158,6 +158,44 @@ suite("comparison tree lifecycle", () => {
     }
   });
 
+  test("surfaces merge-conflict forecasts prominently and clean forecasts quietly", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    provider.setComparisons([comparison]);
+    provider.setComparisonLoader(() =>
+      Promise.resolve(
+        createResult(comparison, {
+          mergePreview: { conflictedPaths: ["src/a.ts", "src/b.ts"], kind: "conflicts" },
+        }),
+      ),
+    );
+
+    try {
+      const node = provider.getComparisonNode(comparison.id);
+      assert.ok(node);
+      await provider.getChildren(node);
+      const conflictedItem = provider.getTreeItem(node);
+      assert.match(String(conflictedItem.description), /⚠ 2 merge conflicts/u);
+      const conflictedTooltip = conflictedItem.tooltip as vscode.MarkdownString;
+      assert.match(conflictedTooltip.value, /Merge preview: merging .* conflicts in/u);
+      assert.match(conflictedTooltip.value, /src\/a\\\.ts/u);
+
+      provider.invalidateResult(comparison.id);
+      provider.setComparisonLoader(() =>
+        Promise.resolve(createResult(comparison, { mergePreview: { kind: "clean" } })),
+      );
+      await provider.getChildren(node);
+      const cleanItem = provider.getTreeItem(node);
+      assert.doesNotMatch(String(cleanItem.description), /merge/u);
+      assert.match(
+        (cleanItem.tooltip as vscode.MarkdownString).value,
+        /Merge preview: .* merges cleanly into/u,
+      );
+    } finally {
+      provider.dispose();
+    }
+  });
+
   test("renders review progress and filters comparison files without affecting other nodes", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();

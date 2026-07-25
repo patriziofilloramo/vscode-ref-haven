@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Monochrome mark: inherits currentColor for theme-aware documents. -->
+  <path d="M128 42
+           C 149 53 170 59 191 62
+           L 191 124
+           C 191 168 167 197 128 216
+           C 89 197 65 168 65 124
+           L 65 62
+           C 86 59 107 53 128 42 Z"
+        fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round"/>
+  <g stroke="currentColor" stroke-width="9" stroke-linecap="round" fill="none">
+    <path d="M104 100 V 160"/>
+    <path d="M154 110 C 154 136 130 139 107 141"/>
+  </g>
+  <circle cx="104" cy="86"  r="11" fill="none" stroke="currentColor" stroke-width="9"/>
+  <circle cx="104" cy="174" r="11" fill="none" stroke="currentColor" stroke-width="9"/>
+  <circle cx="154" cy="97" r="11.5" fill="currentColor"/>
+</svg>

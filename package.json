@@ -2,11 +2,11 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "local-development",
   "license": "UNLICENSED",
   "private": true,
-  "icon": "assets/refhaven.png",
+  "icon": "assets/refhaven-icon-256.png",
   "galleryBanner": {
     "color": "#071426",
     "theme": "dark"
@@ -43,8 +43,10 @@
   "main": "./dist/extension.js",
   "files": [
     "dist/**/*.js",
-    "assets/refhaven.png",
-    "SECURITY.md"
+    "assets/refhaven-icon-256.png",
+    "SECURITY.md",
+    "PRIVACY.md",
+    "IP-PROVENANCE.md"
   ],
   "contributes": {
     "commands": [
@@ -1346,12 +1348,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint src test scripts *.mjs --max-warnings 0",
+    "marketplace:check": "node scripts/check-marketplace-readiness.mjs",
     "quality": "node scripts/check-quality.mjs",
     "test": "npm run test:unit",
     "test:unit": "npm run compile:tests && mocha --ui tdd \".test-out/test/unit/**/*.test.js\"",
     "test:extension": "npm run compile && npm run compile:tests && node scripts/run-extension-tests.mjs",
     "vscode:prepublish": "npm run compile",
-    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license"
+    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "package:release": "npm run marketplace:check && vsce package --no-dependencies"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -85,3 +85,9 @@ npx vsce ls --no-dependencies
 
 Reviewers also verify that repository data remains within the documented local
 and explicitly approved GitLab trust boundary.
+
+Public releases additionally require `npm run marketplace:check` and
+`npm run package:release`. The public/runtime surface must use RefHaven's own
+identity and command namespace. Historical product research belongs only in
+the clean-implementation ADR or another explicit provenance record, not in
+runtime comments, manifest metadata, user documentation, or marketing assets.

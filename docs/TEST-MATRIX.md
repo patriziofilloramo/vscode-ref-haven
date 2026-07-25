@@ -103,7 +103,22 @@ verify that both file marks survive.
 - malformed/truncated NUL records and unknown statuses;
 - numstat text values, rename pairs, binary `-/-`, missing data, and aggregation;
 - branchChanges and tipToTip endpoint selection;
-- no-common-ancestor classification.
+- no-common-ancestor classification;
+- Git binary resolution: configured absolute path wins, relative/missing
+  configured paths fall through to `PATH`, empty and relative `PATH` entries
+  are never resolved, Windows executable extensions include `git.exe`, and an
+  absent `PATH` or no match falls back to the bare name.
+
+### Data-egress guard
+
+- the full source tree imports no network or code-loading module
+  (`http`, `https`, `net`, `tls`, `dns`, `worker_threads`, …);
+- no source file uses a network or code-execution primitive (`fetch`,
+  `WebSocket`, `XMLHttpRequest`, `sendBeacon`, `eval`, dynamic `import`) or a
+  telemetry API;
+- process execution appears only in `GitProcess.ts` and the browser handoff
+  only in `GitLabController.ts`; a match elsewhere fails the build;
+- the manifest declares zero runtime and extension dependencies.
 
 ### Persistence and state
 
@@ -176,8 +191,11 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
   non-SHA revision argument;
 - comparison and single-file patches are produced locally, respect literal
   path limits, cover root commits, include working-tree changes when one
-  endpoint is live, stop above the 5 MiB output ceiling, and reject missing or
+  endpoint is live, preserve non-UTF-8 bytes verbatim, export beyond the 5 MiB
+  text ceiling within the raised patch ceiling, and reject missing or
   symbolic revisions;
+- merge forecasts report clean ancestors, name genuinely conflicting paths,
+  leave `git status --porcelain` empty, and reject symbolic revisions;
 - revision-document identity is exposed only for URIs the provider signed
   itself: tampered, foreign-provider, empty-document, and re-schemed URIs
   all return null;

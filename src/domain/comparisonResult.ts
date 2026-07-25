@@ -25,6 +25,16 @@ export interface CommitInfo {
   readonly subject: string;
 }
 
+/**
+ * Read-only forecast of merging the target into the base, computed with
+ * `merge-tree` plumbing. "unavailable" means the local Git could not compute
+ * it (older Git, unrelated histories); callers must degrade silently.
+ */
+export type MergePreview =
+  | { readonly kind: "clean" }
+  | { readonly conflictedPaths: readonly string[]; readonly kind: "conflicts" }
+  | { readonly kind: "unavailable" };
+
 export interface ComparisonResult {
   /** Commits reachable from the target but not the base, newest first. */
   readonly aheadCommits: readonly CommitInfo[];
@@ -39,6 +49,8 @@ export interface ComparisonResult {
   readonly files: readonly FileChange[];
   readonly fromSha: string;
   readonly mergeBaseSha?: string;
+  /** Absent for Working Tree comparisons, whose target is mutable. */
+  readonly mergePreview?: MergePreview;
   readonly targetSha: string;
   /** Right-side revision; null represents the live working tree. */
   readonly toSha: string | null;

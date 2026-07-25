@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d2440"/>
+      <stop offset="1" stop-color="#14536b"/>
+    </linearGradient>
+    <!-- userSpaceOnUse: bounding-box gradients degenerate on straight lines -->
+    <linearGradient id="glyph" gradientUnits="userSpaceOnUse" x1="128" y1="42" x2="128" y2="216">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="1" stop-color="#5eead4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- badge -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#bg)"/>
+
+  <!-- shield: the haven, drawn light -->
+  <path d="M128 42
+           C 149 53 170 59 191 62
+           L 191 124
+           C 191 168 167 197 128 216
+           C 89 197 65 168 65 124
+           L 65 62
+           C 86 59 107 53 128 42 Z"
+        fill="rgba(255,255,255,0.045)"
+        stroke="url(#glyph)" stroke-width="9"
+        stroke-linejoin="round"/>
+
+  <!-- git branch: a side branch flowing back into the main line -->
+  <g stroke="url(#glyph)" stroke-width="9" stroke-linecap="round" fill="none">
+    <path d="M104 100 V 160"/>
+    <path d="M154 110 C 154 136 130 139 107 141"/>
+  </g>
+  <circle cx="104" cy="86"  r="11" fill="none" stroke="url(#glyph)" stroke-width="9"/>
+  <circle cx="104" cy="174" r="11" fill="none" stroke="url(#glyph)" stroke-width="9"/>
+
+  <!-- the branch tip: the lighthouse of the harbor -->
+  <circle cx="154" cy="97" r="11.5" fill="#fbbf24"/>
+</svg>

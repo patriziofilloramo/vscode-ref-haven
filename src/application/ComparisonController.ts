@@ -424,12 +424,14 @@ export class ComparisonController {
       result.fromSha,
       result.toSha,
     );
-    if (patch.trim().length === 0) {
+    if (patch.length === 0) {
       void vscode.window.showInformationMessage("This comparison has no differences to export.");
       return;
     }
     if (destination === "clipboard") {
-      await vscode.env.clipboard.writeText(patch);
+      // The clipboard is inherently text; non-UTF-8 bytes are decoded
+      // best-effort. Saving to a file preserves the exact bytes.
+      await vscode.env.clipboard.writeText(patch.toString("utf8"));
       showTransientSuccess(`Patch for ${comparisonLabel(comparison)} copied`);
     } else {
       const target = await vscode.window.showSaveDialog({
@@ -443,7 +445,7 @@ export class ComparisonController {
       if (target.scheme !== "file") {
         throw new Error("Comparison patches can only be saved to the local filesystem.");
       }
-      await vscode.workspace.fs.writeFile(target, Buffer.from(patch, "utf8"));
+      await vscode.workspace.fs.writeFile(target, patch);
       void vscode.window.showInformationMessage(`Patch saved to ${target.fsPath}.`);
     }
     this.logger.info("Exported comparison patch", {
@@ -466,11 +468,11 @@ export class ComparisonController {
       scope.toSha,
       paths,
     );
-    if (patch.trim().length === 0) {
+    if (patch.length === 0) {
       void vscode.window.showInformationMessage(`${file.newPath} has no textual patch to copy.`);
       return;
     }
-    await vscode.env.clipboard.writeText(patch);
+    await vscode.env.clipboard.writeText(patch.toString("utf8"));
     showTransientSuccess(`Patch for ${file.newPath} copied`);
   }
 

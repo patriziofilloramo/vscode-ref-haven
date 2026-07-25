@@ -623,6 +623,11 @@ function comparisonDescription(
       ? [`${review.reviewedCount.toString()}/${review.totalCount.toString()} reviewed`]
       : []),
     formatDiffStats(totals.additions, totals.deletions),
+    // Only conflicts earn description space; a clean forecast stays in the
+    // tooltip so the row does not shout when everything is fine.
+    ...(result.mergePreview?.kind === "conflicts"
+      ? [`⚠ ${pluralize(result.mergePreview.conflictedPaths.length, "merge conflict")}`]
+      : []),
     ...(comparison.mode === "tipToTip"
       ? ["tip-to-tip"]
       : comparison.mode === "workingTree"
@@ -630,6 +635,27 @@ function comparisonDescription(
         : []),
     `updated ${formatRelativeTime(result.computedAt)}`,
   ].join(" · ");
+}
+
+const MAX_TOOLTIP_CONFLICT_PATHS = 5;
+
+/** Renders the read-only merge forecast; silent when it is unavailable. */
+function mergePreviewTooltipLine(result: ComparisonResult): string[] {
+  const preview = result.mergePreview;
+  const base = escapeMarkdown(result.comparison.baseRef.displayName);
+  const target = escapeMarkdown(result.comparison.targetRef.displayName);
+  if (preview?.kind === "clean") {
+    return [`$(check) Merge preview: ${target} merges cleanly into ${base}`];
+  }
+  if (preview?.kind !== "conflicts") return [];
+  const shown = preview.conflictedPaths
+    .slice(0, MAX_TOOLTIP_CONFLICT_PATHS)
+    .map((path) => `\`${escapeMarkdown(path)}\``)
+    .join(", ");
+  const remaining = preview.conflictedPaths.length - MAX_TOOLTIP_CONFLICT_PATHS;
+  return [
+    `$(warning) Merge preview: merging ${target} into ${base} conflicts in ${shown}${remaining > 0 ? ` and ${pluralize(remaining, "more file")}` : ""}`,
+  ];
 }
 
 /** Explains WHY a comparison legitimately has no changed files. */
@@ -694,6 +720,7 @@ function comparisonTooltip(
       ...(totals.binaryFileCount > 0
         ? [`$(file-binary) ${pluralize(totals.binaryFileCount, "binary file")}`]
         : []),
+      ...mergePreviewTooltipLine(result),
       `_Updated ${formatRelativeTime(result.computedAt)}_`,
     );
   }

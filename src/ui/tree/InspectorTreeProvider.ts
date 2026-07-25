@@ -95,11 +95,15 @@ export class InspectorTreeProvider
     return this.commitDetailsProvider.getChildren(node);
   }
 
+  /**
+   * Ancestry is reported only where it is exact: nodes that sit directly
+   * under a section. Files and folders nested below Changed Files do not
+   * carry a parent reference, and nothing reveals them.
+   */
   public getParent(node: InspectorTreeNode): InspectorTreeNode | undefined {
-    if (node.kind === "inspectorSection") return undefined;
     if (node.kind === "fileHistoryCommit") return FILE_HISTORY_SECTION;
-    if (node.kind === "inspectorMessage") return undefined;
-    return COMMIT_DETAILS_SECTION;
+    if (node.kind === "detail" || node.kind === "commitFiles") return COMMIT_DETAILS_SECTION;
+    return undefined;
   }
 
   private async fileHistoryChildren(): Promise<InspectorTreeNode[]> {

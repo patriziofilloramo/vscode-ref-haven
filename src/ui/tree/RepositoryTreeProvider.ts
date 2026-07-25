@@ -78,9 +78,15 @@ export class RepositoryTreeProvider
       : this.worktreesProvider.getChildren(node);
   }
 
+  /**
+   * Ancestry is reported only where it is exact: the repository-grouping
+   * nodes that sit directly under each section. Deeper nodes do not carry a
+   * parent reference, and nothing reveals them.
+   */
   public getParent(node: RepositoryTreeNode): RepositoryTreeNode | undefined {
-    if (node.kind === "repositorySection") return undefined;
-    return isBranchNode(node) ? BRANCHES_SECTION : WORKTREES_SECTION;
+    if (node.kind === "branchRepository") return BRANCHES_SECTION;
+    if (node.kind === "worktreeRepository") return WORKTREES_SECTION;
+    return undefined;
   }
 }
 

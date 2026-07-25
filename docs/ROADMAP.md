@@ -1,11 +1,26 @@
 # Roadmap
 
-RefHaven is growing toward a GitLens-style feature set while staying a fast,
-native-UI, no-webview, no-telemetry extension. Features are selected for high
-daily value at low-to-medium implementation and maintenance cost.
+RefHaven is growing into a complete local Git investigation workspace while
+staying a fast, native-UI, no-webview, no-telemetry extension. Features are
+selected for high daily value at low-to-medium implementation and maintenance
+cost.
 
 Each batch must compile, lint, pass unit and Extension Host tests, package
 successfully, and receive a security review before it merges to `master`.
+
+## Publication-readiness release 0.10.1
+
+- Added an explicit privacy notice and an independently maintained
+  implementation/provenance record to the shipped package.
+- Added a dependency-free Marketplace readiness gate that blocks public
+  packaging until verified ownership, license, publisher, repository, support,
+  and homepage metadata are present.
+- Added automated public-surface checks that reject accidental third-party
+  product branding or command namespaces while preserving the internal
+  clean-implementation ADR.
+- Documented the final legal, security-contact, name-clearance, metadata, and
+  release-signoff inputs required before publication.
+- Kept the Branch Comparisons title toolbar unchanged.
 
 ## Native sidebar release 0.10.0
 
@@ -322,6 +337,51 @@ Delivered in version 0.8.0 without new dependencies, views, or settings.
 Cherry-pick from Ahead/Behind commits remains the natural next hardened
 mutation; it must follow the batch-8 playbook (real-repository tests and a
 written failure/recovery contract) and is deliberately not part of this batch.
+
+## Completed — Batch 13: Git binary and patch integrity
+
+Delivered in version 0.11.0 without new dependencies, views, commands, or
+settings. Both items came from a security/performance self-audit.
+
+- **Trusted Git executable (S1)** — the Git binary is resolved to an absolute
+  path once and memoized, from the configured `git.path` or the absolute
+  directories on `PATH`. Empty and relative `PATH` entries are skipped so a
+  current-directory `git` (a Windows CWD-injection vector) can never win; the
+  bare name is used only when nothing resolves, so functionality never
+  regresses. Selection logic is a pure, host-independent, unit-tested module.
+- **Lossless patch export (P1)** — comparison and single-file patches are read
+  as raw bytes through the buffer process path, so content in a legacy or
+  mixed encoding survives verbatim and the saved patch applies cleanly. Saving
+  writes the exact bytes; the clipboard receives a best-effort UTF-8 decode
+  because it is inherently text. The export ceiling is raised to 64 MiB so
+  large refactors export instead of failing at the 5 MiB text limit, while
+  remaining bounded.
+
+## Completed — Batch 14: Merge forecast
+
+Delivered in version 0.11.0 without new dependencies, views, commands, or
+settings.
+
+- Every comparison between immutable endpoints now carries a **read-only
+  merge forecast**: `git merge-tree --write-tree` computes in-memory whether
+  merging the target into the base would conflict, without touching the
+  worktree, index, or any ref, and without a checkout.
+- Clean forecasts stay quiet (a tooltip line); conflicts surface directly in
+  the comparison row (`⚠ N merge conflicts`) with the first conflicted paths
+  named in the tooltip.
+- The forecast is computed with the ordinary result, cached and invalidated
+  with it, and costs one bounded local plumbing call. Git older than 2.38
+  (no `merge-tree --write-tree`) is detected once per session and degrades
+  silently to no forecast without spawning further processes; unrelated
+  histories also produce no forecast. Working Tree comparisons are excluded
+  because their endpoint is mutable.
+- Zero configuration, zero prompts, zero network activity — the forecast is
+  informational and never blocks any action.
+
+Alongside the forecast, GitLab open/copy feedback now names the exact origin
+that was used (non-blocking status-bar transparency for inferred origins),
+and the composite Repository/Inspector views report tree ancestry only where
+it is exact.
 
 ## Next priorities
 

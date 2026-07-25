@@ -27,6 +27,11 @@ documentation agree.
 - Settings and limits are centralized instead of repeated in controllers.
 - No production dependency is added, and development pins remain exact,
   justified, audited, and lockfile-integrity pinned.
+- Public/runtime surfaces contain only RefHaven branding and the `refhaven.`
+  command namespace; external-product research remains in explicit internal
+  provenance records.
 
 Architecture rules are documented in `docs/ARCHITECTURE.md`; coding and
 documentation conventions are in `docs/MAINTAINABILITY.md`.
+Public-release ownership, licensing, name-clearance, and packaging gates are
+documented in `docs/PUBLISHING.md`.

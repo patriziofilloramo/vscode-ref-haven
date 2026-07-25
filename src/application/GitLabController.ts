@@ -302,6 +302,9 @@ export class GitLabController {
     if (!url) return;
     const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
     if (!opened) throw new Error("VS Code could not open the validated GitLab URL.");
+    // Non-blocking transparency: always show which origin was opened, which
+    // matters most when the origin was inferred from the repository remote.
+    showTransientSuccess(`Opened ${new URL(url).origin}`);
     this.logger.info("Opened validated GitLab URL", { operation });
   }
 
@@ -313,7 +316,7 @@ export class GitLabController {
     const url = await this.resolveUrl(repositoryRoot, target);
     if (!url) return;
     await vscode.env.clipboard.writeText(url);
-    showTransientSuccess("Validated GitLab URL copied");
+    showTransientSuccess(`Copied ${new URL(url).origin} URL`);
     this.logger.info("Copied validated GitLab URL", { operation });
   }
 

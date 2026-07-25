@@ -1,8 +1,13 @@
 import { execFile } from "node:child_process";
+import { statSync } from "node:fs";
 import { promisify } from "node:util";
 
-import { readGitTimeoutMilliseconds } from "../../config/extensionConfiguration";
+import {
+  readConfiguredGitPaths,
+  readGitTimeoutMilliseconds,
+} from "../../config/extensionConfiguration";
 import { pathIdentityKey } from "../../domain/pathValidation";
+import { selectGitBinaryPath } from "./gitBinary";
 import { buildLocalOnlyGitArguments, buildLocalOnlyGitEnvironment } from "./gitProcessPolicy";
 import { GitScheduler } from "./GitScheduler";
 
@@ -11,6 +16,35 @@ const execFileAsync = promisify(execFile);
 const MAX_GIT_INPUT_BYTES = 5 * 1_024 * 1_024;
 const MAX_GIT_OUTPUT_BYTES = 5 * 1_024 * 1_024;
 const scheduler = new GitScheduler(4, 2);
+
+let cachedGitBinary: string | undefined;
+
+/**
+ * Resolves and memoizes the absolute Git executable. Resolution reads the
+ * user's configured `git.path` and probes `PATH`; a window reload re-resolves.
+ */
+function gitBinary(): string {
+  cachedGitBinary ??= selectGitBinaryPath(readConfiguredGitPaths(), {
+    isExecutableFile: isRegularFile,
+    pathExtValue: process.env.PATHEXT,
+    pathValue: process.env.PATH,
+    platform: process.platform,
+  });
+  return cachedGitBinary;
+}
+
+function isRegularFile(candidate: string): boolean {
+  try {
+    return statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Test seam: clears the memoized Git binary so a new environment is resolved. */
+export function resetGitBinaryPathCache(): void {
+  cachedGitBinary = undefined;
+}
 
 export type GitOperationErrorCode = "commandCancelled" | "commandTimedOut" | "outputTooLarge";
 
@@ -37,7 +71,7 @@ export function runGit(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
+        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
           cwd,
           env: buildLocalOnlyGitEnvironment(process.env),
           maxBuffer: maxOutputBytes,
@@ -47,6 +81,51 @@ export function runGit(
         });
         return stdout;
       } catch (error) {
+        throw normalizeGitError(error);
+      }
+    },
+    signal,
+  );
+}
+
+/**
+ * Executes Git where listed non-zero exit codes carry data instead of
+ * failure — e.g. `merge-tree --write-tree` exits 1 when the merge would
+ * conflict and still prints the conflicted paths on stdout.
+ */
+export function runGitWithExitCode(
+  cwd: string,
+  args: readonly string[],
+  acceptedExitCodes: readonly number[],
+  signal?: AbortSignal,
+): Promise<{ readonly exitCode: number; readonly stdout: string }> {
+  return scheduler.run(
+    pathIdentityKey(cwd),
+    async () => {
+      try {
+        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
+          cwd,
+          env: buildLocalOnlyGitEnvironment(process.env),
+          maxBuffer: MAX_GIT_OUTPUT_BYTES,
+          signal,
+          timeout: readGitTimeoutMilliseconds(),
+          windowsHide: true,
+        });
+        return { exitCode: 0, stdout };
+      } catch (error) {
+        const candidate = error as {
+          readonly code?: unknown;
+          readonly killed?: unknown;
+          readonly stdout?: unknown;
+        };
+        if (
+          candidate.killed !== true &&
+          typeof candidate.code === "number" &&
+          acceptedExitCodes.includes(candidate.code) &&
+          typeof candidate.stdout === "string"
+        ) {
+          return { exitCode: candidate.code, stdout: candidate.stdout };
+        }
         throw normalizeGitError(error);
       }
     },
@@ -65,7 +144,7 @@ export function runGitWithTemporaryIndex(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
+        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
           cwd,
           env: {
             ...buildLocalOnlyGitEnvironment(process.env),
@@ -85,21 +164,22 @@ export function runGitWithTemporaryIndex(
   );
 }
 
-/** Executes Git and preserves binary stdout for immutable blob content. */
+/** Executes Git and preserves binary stdout for immutable blob or patch content. */
 export function runGitBuffer(
   cwd: string,
   args: readonly string[],
   signal?: AbortSignal,
+  maxOutputBytes = MAX_GIT_OUTPUT_BYTES,
 ): Promise<Buffer> {
   return scheduler.run(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
+        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
           cwd,
           encoding: "buffer",
           env: buildLocalOnlyGitEnvironment(process.env),
-          maxBuffer: MAX_GIT_OUTPUT_BYTES,
+          maxBuffer: maxOutputBytes,
           signal,
           timeout: readGitTimeoutMilliseconds(),
           windowsHide: true,
@@ -129,7 +209,7 @@ export function runGitWithInput(
     () =>
       new Promise((resolve, reject) => {
         const child = execFile(
-          "git",
+          gitBinary(),
           buildLocalOnlyGitArguments(args),
           {
             cwd,

@@ -25,7 +25,7 @@ interface MutableFolder {
 /**
  * Groups changed files into a folder hierarchy. Folder chains with a single
  * child folder and no files are compacted into one node (`src/application`),
- * matching how VS Code and GitLens render sparse trees.
+ * matching VS Code's compact folder presentation for sparse trees.
  */
 export function buildFileTree(files: readonly FileChange[]): readonly FileTreeNode[] {
   const root: MutableFolder = { files: [], folders: new Map() };
