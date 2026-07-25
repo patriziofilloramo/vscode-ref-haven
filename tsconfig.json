@@ -3,7 +3,8 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node", "vscode"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules"]

@@ -15,6 +15,7 @@ suite("Branch Compare extension", () => {
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes("branchCompare.newComparison"));
     assert.ok(commands.includes("branchCompare.compareCurrentBranch"));
+    assert.ok(commands.includes("branchCompare.openFileDiff"));
     assert.ok(commands.includes("branchCompare.refreshAll"));
   });
 });
