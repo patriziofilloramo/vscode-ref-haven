@@ -18,7 +18,7 @@ import { showTransientSuccess } from "../ui/feedback";
 import type { Logger } from "./Logger";
 
 const OVERLAP_NOTICE_KEY = "refhaven.lineIntelligenceOverlapNoticeShown";
-const COEXISTENCE_GUIDE_URL = "https://patriziofilloramo.github.io/ref-haven/#coexistence";
+const COEXISTENCE_GUIDE_URL = "https://patriziofilloramo.github.io/vscode-ref-haven/#coexistence";
 
 const MODE_LABELS: Readonly<Record<LineIntelligenceMode, string>> = {
   full: "Full",

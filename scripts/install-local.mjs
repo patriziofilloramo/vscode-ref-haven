@@ -27,16 +27,28 @@ try {
   );
 }
 
+/**
+ * The VS Code CLI is a Node program that uses APIs Node now warns about, so a
+ * plain install prints deprecation notices about someone else's internals.
+ * They are not actionable here and they bury the one line that matters, so
+ * they are silenced for the child process only — warnings from this script,
+ * and from every other command in the project, are untouched.
+ */
+const childEnvironment = {
+  ...process.env,
+  NODE_OPTIONS: [process.env.NODE_OPTIONS, "--no-deprecation"].filter(Boolean).join(" "),
+};
+
 function runCodeCli(arguments_, stdio) {
   if (process.platform === "win32") {
     return spawnSync(
       process.env.ComSpec ?? "cmd.exe",
       ["/d", "/s", "/c", "code.cmd", ...arguments_],
-      { encoding: "utf8", stdio, windowsHide: true },
+      { encoding: "utf8", env: childEnvironment, stdio, windowsHide: true },
     );
   }
 
-  return spawnSync("code", arguments_, { encoding: "utf8", stdio });
+  return spawnSync("code", arguments_, { encoding: "utf8", env: childEnvironment, stdio });
 }
 
 const installation = runCodeCli(["--install-extension", vsixPath, "--force"], "inherit");

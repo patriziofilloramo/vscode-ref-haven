@@ -97,7 +97,10 @@ suite("extension manifest", () => {
     assert.equal(manifest.private, true);
     assert.equal(manifest.publisher, "patriziofilloramo");
     assert.equal(manifest.license, "MIT");
-    assert.match(manifest.repository?.url ?? "", /github\.com\/patriziofilloramo\/ref-haven/u);
+    assert.match(
+      manifest.repository?.url ?? "",
+      /github\.com\/patriziofilloramo\/vscode-ref-haven/u,
+    );
     assert.equal(
       manifest.scripts["package:release"],
       "npm run marketplace:check && vsce package --no-dependencies --out build",
@@ -279,6 +282,15 @@ suite("extension manifest", () => {
     ]) {
       assert.ok(titleCommands.includes(command));
     }
+
+    // Search results are shown in the Inspector, and its empty state tells the
+    // reader to search, so the entry point has to be in that view's title.
+    assert.ok(
+      (manifest.contributes.menus["view/title"] ?? []).some(
+        ({ command, when }) =>
+          command === "refhaven.searchCommits" && when === "view == refhaven.inspector",
+      ),
+    );
 
     const itemMenus = manifest.contributes.menus["view/item/context"] ?? [];
     assert.ok(

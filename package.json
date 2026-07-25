@@ -9,11 +9,11 @@
   "author": "Patrizio Filloramo",
   "repository": {
     "type": "git",
-    "url": "https://github.com/patriziofilloramo/ref-haven.git"
+    "url": "https://github.com/patriziofilloramo/vscode-ref-haven.git"
   },
-  "homepage": "https://github.com/patriziofilloramo/ref-haven#readme",
+  "homepage": "https://github.com/patriziofilloramo/vscode-ref-haven#readme",
   "bugs": {
-    "url": "https://github.com/patriziofilloramo/ref-haven/issues"
+    "url": "https://github.com/patriziofilloramo/vscode-ref-haven/issues"
   },
   "icon": "assets/refhaven-icon-256.png",
   "pricing": "Free",
@@ -911,14 +911,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "refhaven.changeFileHistoryFilter",
+          "command": "refhaven.searchCommits",
           "when": "view == refhaven.inspector",
           "group": "navigation@1"
         },
         {
-          "command": "refhaven.refreshFileHistory",
+          "command": "refhaven.changeFileHistoryFilter",
           "when": "view == refhaven.inspector",
           "group": "navigation@2"
+        },
+        {
+          "command": "refhaven.refreshFileHistory",
+          "when": "view == refhaven.inspector",
+          "group": "navigation@3"
         },
         {
           "command": "refhaven.refreshRepositoryNavigation",
