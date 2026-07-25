@@ -13,12 +13,7 @@
   "categories": [
     "SCM Providers"
   ],
-  "activationEvents": [
-    "onView:branchCompare.comparisons",
-    "onCommand:branchCompare.newComparison",
-    "onCommand:branchCompare.compareCurrentBranch",
-    "onCommand:branchCompare.refreshAll"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "files": [
     "dist/**"
@@ -41,6 +36,114 @@
         "title": "Refresh All Comparisons",
         "category": "Branch Compare",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "branchCompare.refreshComparison",
+        "title": "Refresh Comparison",
+        "category": "Branch Compare",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "branchCompare.swapComparison",
+        "title": "Swap Base and Target",
+        "category": "Branch Compare",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "branchCompare.pinComparison",
+        "title": "Pin Comparison",
+        "category": "Branch Compare",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "branchCompare.unpinComparison",
+        "title": "Unpin Comparison",
+        "category": "Branch Compare",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "branchCompare.closeComparison",
+        "title": "Close Comparison",
+        "category": "Branch Compare",
+        "icon": "$(close)"
+      },
+      {
+        "command": "branchCompare.copyComparisonSummary",
+        "title": "Copy Summary",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.copyCommitSha",
+        "title": "Copy Commit SHA",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.viewFilesAsList",
+        "title": "View Changed Files as List",
+        "category": "Branch Compare",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "branchCompare.viewFilesAsTree",
+        "title": "View Changed Files as Tree",
+        "category": "Branch Compare",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "branchCompare.copyCommitMessage",
+        "title": "Copy Commit Message",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.openFile",
+        "title": "Open File",
+        "category": "Branch Compare",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "branchCompare.copyFilePath",
+        "title": "Copy Path",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.copyRelativeFilePath",
+        "title": "Copy Relative Path",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.stashAllChanges",
+        "title": "Stash All Changes",
+        "category": "Branch Compare",
+        "icon": "$(add)"
+      },
+      {
+        "command": "branchCompare.refreshStashes",
+        "title": "Refresh Stashes",
+        "category": "Branch Compare",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "branchCompare.applyStash",
+        "title": "Apply Stash",
+        "category": "Branch Compare",
+        "icon": "$(git-stash-apply)"
+      },
+      {
+        "command": "branchCompare.popStash",
+        "title": "Pop Stash (Apply and Drop)",
+        "category": "Branch Compare",
+        "icon": "$(git-stash-pop)"
+      },
+      {
+        "command": "branchCompare.dropStash",
+        "title": "Drop Stash",
+        "category": "Branch Compare",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "branchCompare.copyStashMessage",
+        "title": "Copy Stash Message",
+        "category": "Branch Compare"
       }
     ],
     "views": {
@@ -48,16 +151,86 @@
         {
           "id": "branchCompare.comparisons",
           "name": "Branch Comparisons"
+        },
+        {
+          "id": "branchCompare.stashes",
+          "name": "Stashes"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "branchCompare.comparisons",
-        "contents": "No branch comparisons yet.\n[New Comparison](command:branchCompare.newComparison)"
+        "contents": "No branch comparisons yet.\n[New Comparison](command:branchCompare.newComparison)\nCompare any two branches and keep the comparison across reloads."
+      },
+      {
+        "view": "branchCompare.stashes",
+        "contents": "No stashes in this workspace.\n[Stash All Changes](command:branchCompare.stashAllChanges)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "branchCompare.refreshComparison",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.swapComparison",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.pinComparison",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.unpinComparison",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.closeComparison",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.copyComparisonSummary",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.copyCommitSha",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.copyCommitMessage",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.openFile",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.copyFilePath",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.copyRelativeFilePath",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.applyStash",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.popStash",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.dropStash",
+          "when": "false"
+        },
+        {
+          "command": "branchCompare.copyStashMessage",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "branchCompare.newComparison",
@@ -65,9 +238,136 @@
           "group": "navigation@1"
         },
         {
+          "command": "branchCompare.viewFilesAsTree",
+          "when": "view == branchCompare.comparisons && branchCompare.filesLayout == list",
+          "group": "navigation@2"
+        },
+        {
+          "command": "branchCompare.viewFilesAsList",
+          "when": "view == branchCompare.comparisons && branchCompare.filesLayout == tree",
+          "group": "navigation@2"
+        },
+        {
           "command": "branchCompare.refreshAll",
           "when": "view == branchCompare.comparisons",
+          "group": "navigation@3"
+        },
+        {
+          "command": "branchCompare.stashAllChanges",
+          "when": "view == branchCompare.stashes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "branchCompare.refreshStashes",
+          "when": "view == branchCompare.stashes",
           "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "branchCompare.refreshComparison",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "inline@1"
+        },
+        {
+          "command": "branchCompare.swapComparison",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "inline@2"
+        },
+        {
+          "command": "branchCompare.pinComparison",
+          "when": "view == branchCompare.comparisons && viewItem == branchCompare.comparison",
+          "group": "inline@3"
+        },
+        {
+          "command": "branchCompare.unpinComparison",
+          "when": "view == branchCompare.comparisons && viewItem == branchCompare.comparisonPinned",
+          "group": "inline@3"
+        },
+        {
+          "command": "branchCompare.closeComparison",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "inline@4"
+        },
+        {
+          "command": "branchCompare.refreshComparison",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "branchCompare.swapComparison",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "branchCompare.copyComparisonSummary",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "branchCompare.closeComparison",
+          "when": "view == branchCompare.comparisons && viewItem =~ /^branchCompare\\.comparison/",
+          "group": "3_close@1"
+        },
+        {
+          "command": "branchCompare.copyCommitSha",
+          "when": "view == branchCompare.comparisons && viewItem == branchCompare.commit",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "branchCompare.copyCommitMessage",
+          "when": "view == branchCompare.comparisons && viewItem == branchCompare.commit",
+          "group": "2_copy@2"
+        },
+        {
+          "command": "branchCompare.openFile",
+          "when": "(view == branchCompare.comparisons || view == branchCompare.stashes) && viewItem =~ /^branchCompare\\.file/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "branchCompare.copyFilePath",
+          "when": "(view == branchCompare.comparisons || view == branchCompare.stashes) && viewItem =~ /^branchCompare\\.file/",
+          "group": "2_copy@1"
+        },
+        {
+          "command": "branchCompare.copyRelativeFilePath",
+          "when": "(view == branchCompare.comparisons || view == branchCompare.stashes) && viewItem =~ /^branchCompare\\.file/",
+          "group": "2_copy@2"
+        },
+        {
+          "command": "branchCompare.applyStash",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "inline@1"
+        },
+        {
+          "command": "branchCompare.popStash",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "inline@2"
+        },
+        {
+          "command": "branchCompare.dropStash",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "inline@3"
+        },
+        {
+          "command": "branchCompare.applyStash",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "branchCompare.popStash",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "branchCompare.dropStash",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "branchCompare.copyStashMessage",
+          "when": "view == branchCompare.stashes && viewItem == branchCompare.stash",
+          "group": "2_copy@1"
         }
       ]
     }

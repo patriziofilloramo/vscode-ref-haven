@@ -1,8 +1,27 @@
 export const COMMAND_IDS = {
+  applyStash: "branchCompare.applyStash",
+  closeComparison: "branchCompare.closeComparison",
   compareCurrentBranch: "branchCompare.compareCurrentBranch",
+  copyCommitMessage: "branchCompare.copyCommitMessage",
+  copyCommitSha: "branchCompare.copyCommitSha",
+  copyComparisonSummary: "branchCompare.copyComparisonSummary",
+  copyFilePath: "branchCompare.copyFilePath",
+  copyRelativeFilePath: "branchCompare.copyRelativeFilePath",
+  copyStashMessage: "branchCompare.copyStashMessage",
+  dropStash: "branchCompare.dropStash",
   newComparison: "branchCompare.newComparison",
+  openFile: "branchCompare.openFile",
   openFileDiff: "branchCompare.openFileDiff",
+  pinComparison: "branchCompare.pinComparison",
+  popStash: "branchCompare.popStash",
   refreshAll: "branchCompare.refreshAll",
+  refreshComparison: "branchCompare.refreshComparison",
+  refreshStashes: "branchCompare.refreshStashes",
+  stashAllChanges: "branchCompare.stashAllChanges",
+  swapComparison: "branchCompare.swapComparison",
+  unpinComparison: "branchCompare.unpinComparison",
+  viewFilesAsList: "branchCompare.viewFilesAsList",
+  viewFilesAsTree: "branchCompare.viewFilesAsTree",
 } as const;
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];

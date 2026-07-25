@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   deduplicateComparisons,
   hasSameComparisonIdentity,
+  sortComparisonsForDisplay,
+  withPinned,
+  withSwappedRefs,
   type SavedComparisonV1,
 } from "../../src/domain/comparison";
 
@@ -43,6 +46,33 @@ suite("comparison identity", () => {
     assert.deepEqual(
       unique.map(({ id }) => id),
       ["first", "different-mode"],
+    );
+  });
+});
+
+suite("comparison helpers", () => {
+  test("withSwappedRefs swaps direction and bumps the update time", () => {
+    const swapped = withSwappedRefs(createComparison({ id: "swap" }), 42);
+
+    assert.equal(swapped.baseRef.fullName, "refs/heads/testbranch");
+    assert.equal(swapped.targetRef.fullName, "refs/heads/master");
+    assert.equal(swapped.updatedAt, 42);
+  });
+
+  test("withPinned updates the pinned flag", () => {
+    assert.equal(withPinned(createComparison({ id: "pin" }), true, 42).pinned, true);
+  });
+
+  test("sortComparisonsForDisplay lists pinned comparisons first, then by order", () => {
+    const late = createComparison({ id: "late", order: 2 });
+    const early = createComparison({ id: "early", mode: "tipToTip", order: 0 });
+    const pinned = { ...createComparison({ id: "pinned", order: 1 }), pinned: true };
+
+    const sorted = sortComparisonsForDisplay([late, early, pinned]);
+
+    assert.deepEqual(
+      sorted.map(({ id }) => id),
+      ["pinned", "early", "late"],
     );
   });
 });

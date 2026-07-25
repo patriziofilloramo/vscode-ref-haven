@@ -1,41 +1,67 @@
-import { join } from "node:path";
-
 import * as vscode from "vscode";
 
 import { comparisonLabel, type SavedComparisonV1 } from "../../domain/comparison";
-import type { ComparisonResult, FileChange } from "../../domain/comparisonResult";
-import { COMMAND_IDS } from "../commands/commandIds";
+import {
+  COMMIT_PAGE_SIZE,
+  shortSha,
+  sumDiffTotals,
+  type CommitInfo,
+  type ComparisonResult,
+} from "../../domain/comparisonResult";
+import type { FileDiffScope } from "../../domain/fileDiffScope";
+import type { CommitFileChanges } from "../../infrastructure/git/GitCli";
+import { formatCount, formatDiffStats, formatRelativeTime, pluralize } from "../format";
+import {
+  buildChangeNodes,
+  createFileItem,
+  createFolderItem,
+  createMessageItem,
+  getFolderChildren,
+  type FileNode,
+  type FilesLayout,
+  type FolderNode,
+  type MessageNode,
+} from "./changeNodes";
 
 export const COMPARISON_VIEW_ID = "branchCompare.comparisons";
 
-interface ComparisonNode {
+export type { FilesLayout } from "./changeNodes";
+
+export interface ComparisonNode {
   readonly comparison: SavedComparisonV1;
   readonly kind: "comparison";
 }
 
-interface FileNode {
-  readonly file: FileChange;
-  readonly kind: "file";
+export interface CommitTreeNode {
+  readonly commit: CommitInfo;
+  readonly comparisonId: string;
+  readonly kind: "commit";
+  readonly repositoryRoot: string;
+}
+
+interface SectionNode {
+  readonly kind: "section";
   readonly result: ComparisonResult;
+  readonly section: "ahead" | "behind" | "files";
 }
 
-interface MessageNode {
-  readonly icon: string;
-  readonly kind: "message";
-  readonly label: string;
-}
+export type ComparisonTreeNode =
+  CommitTreeNode | ComparisonNode | FileNode | FolderNode | MessageNode | SectionNode;
 
-type ComparisonTreeNode = ComparisonNode | FileNode | MessageNode;
 type ComparisonLoader = (comparison: SavedComparisonV1) => Promise<ComparisonResult>;
+type CommitFilesLoader = (repositoryRoot: string, sha: string) => Promise<CommitFileChanges>;
 
 export class ComparisonTreeProvider implements vscode.TreeDataProvider<ComparisonTreeNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
     ComparisonTreeNode | undefined
   >();
+  private readonly commitFiles = new Map<string, Promise<CommitFileChanges>>();
+  private commitFilesLoader: CommitFilesLoader | undefined;
   private comparisons: readonly SavedComparisonV1[] = [];
   private comparisonLoader: ComparisonLoader | undefined;
   private readonly errors = new Map<string, string>();
-  private generation = 0;
+  private filesLayout: FilesLayout = "tree";
+  private readonly generations = new Map<string, number>();
   private readonly pendingResults = new Map<string, Promise<ComparisonResult>>();
   private readonly results = new Map<string, ComparisonResult>();
 
@@ -53,43 +79,130 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
     this.comparisonLoader = loader;
   }
 
-  public invalidateResults(): void {
-    this.generation += 1;
+  public setCommitFilesLoader(loader: CommitFilesLoader): void {
+    this.commitFilesLoader = loader;
+  }
+
+  public getFilesLayout(): FilesLayout {
+    return this.filesLayout;
+  }
+
+  public setFilesLayout(layout: FilesLayout): void {
+    if (this.filesLayout === layout) return;
+    this.filesLayout = layout;
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
+
+  public invalidateAllResults(): void {
+    for (const comparison of this.comparisons) this.bumpGeneration(comparison.id);
+    this.commitFiles.clear();
     this.errors.clear();
     this.pendingResults.clear();
     this.results.clear();
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
-  public getTreeItem(element: ComparisonTreeNode): vscode.TreeItem {
-    if (element.kind === "comparison") return this.createComparisonItem(element.comparison);
-    if (element.kind === "file") return createFileItem(element);
+  public invalidateResult(comparisonId: string): void {
+    this.bumpGeneration(comparisonId);
+    this.errors.delete(comparisonId);
+    this.pendingResults.delete(comparisonId);
+    this.results.delete(comparisonId);
+    this.onDidChangeTreeDataEmitter.fire(undefined);
+  }
 
-    const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
-    item.iconPath = new vscode.ThemeIcon(element.icon);
-    return item;
+  public getTreeItem(element: ComparisonTreeNode): vscode.TreeItem {
+    switch (element.kind) {
+      case "comparison":
+        return this.createComparisonItem(element.comparison);
+      case "section":
+        return createSectionItem(element);
+      case "commit":
+        return createCommitItem(element);
+      case "folder":
+        return createFolderItem(element);
+      case "file":
+        return createFileItem(element);
+      case "message":
+        return createMessageItem(element);
+    }
   }
 
   public async getChildren(element?: ComparisonTreeNode): Promise<ComparisonTreeNode[]> {
     if (!element) {
       return this.comparisons.map((comparison) => ({ comparison, kind: "comparison" }));
     }
-    if (element.kind !== "comparison") return [];
 
-    const result = await this.getComparisonResult(element.comparison);
+    switch (element.kind) {
+      case "comparison":
+        return this.getComparisonChildren(element.comparison);
+      case "section":
+        return getSectionChildren(element, this.filesLayout);
+      case "commit":
+        return this.getCommitChildren(element);
+      case "folder":
+        return getFolderChildren(element);
+      default:
+        return [];
+    }
+  }
+
+  private async getComparisonChildren(
+    comparison: SavedComparisonV1,
+  ): Promise<ComparisonTreeNode[]> {
+    const result = await this.getComparisonResult(comparison);
     if (!result) {
       return [
         {
           icon: "error",
           kind: "message",
-          label: this.errors.get(element.comparison.id) ?? "Comparison failed.",
+          label: this.errors.get(comparison.id) ?? "Comparison failed.",
         },
       ];
     }
-    if (result.files.length === 0) {
-      return [{ icon: "check", kind: "message", label: "No changed files" }];
+    return [
+      { kind: "section", result, section: "behind" },
+      { kind: "section", result, section: "ahead" },
+      { kind: "section", result, section: "files" },
+    ];
+  }
+
+  private async getCommitChildren(element: CommitTreeNode): Promise<ComparisonTreeNode[]> {
+    if (!this.commitFilesLoader) return [];
+
+    const key = `${element.repositoryRoot}:${element.commit.sha}`;
+    let pending = this.commitFiles.get(key);
+    if (!pending) {
+      pending = this.commitFilesLoader(element.repositoryRoot, element.commit.sha);
+      this.commitFiles.set(key, pending);
     }
-    return result.files.map((file) => ({ file, kind: "file", result }));
+
+    try {
+      const { files, parentSha } = await pending;
+      if (files.length === 0) {
+        return [{ icon: "info", kind: "message", label: "No file changes in this commit." }];
+      }
+      const scope: FileDiffScope = {
+        fromSha: parentSha,
+        label: shortSha(element.commit.sha),
+        repositoryRootPath: element.repositoryRoot,
+        toSha: element.commit.sha,
+      };
+      return buildChangeNodes(
+        files,
+        this.filesLayout,
+        scope,
+        `${element.comparisonId}:commit:${element.commit.sha}`,
+      );
+    } catch (error) {
+      this.commitFiles.delete(key);
+      return [
+        {
+          icon: "error",
+          kind: "message",
+          label: error instanceof Error ? error.message : "Could not load the commit files.",
+        },
+      ];
+    }
   }
 
   private createComparisonItem(comparison: SavedComparisonV1): vscode.TreeItem {
@@ -98,19 +211,16 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     const result = this.results.get(comparison.id);
-    item.description = result
-      ? `${comparison.repository.label} · ${result.files.length.toString()} files`
-      : comparison.repository.label;
-    item.iconPath = new vscode.ThemeIcon("git-compare");
+    const error = this.errors.get(comparison.id);
+    item.contextValue = comparison.pinned
+      ? "branchCompare.comparisonPinned"
+      : "branchCompare.comparison";
+    item.description = comparisonDescription(comparison, result);
+    item.iconPath = comparison.pinned
+      ? new vscode.ThemeIcon("pinned")
+      : new vscode.ThemeIcon("git-compare");
     item.id = `comparison:${comparison.id}`;
-    item.tooltip = [
-      comparisonLabel(comparison),
-      `Repository: ${comparison.repository.rootPath}`,
-      `Base: ${comparison.baseRef.fullName}`,
-      `Target: ${comparison.targetRef.fullName}`,
-      `Mode: ${comparison.mode}`,
-      ...(result ? [`Changed files: ${result.files.length.toString()}`] : []),
-    ].join("\n");
+    item.tooltip = comparisonTooltip(comparison, result, error);
     return item;
   }
 
@@ -121,7 +231,7 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
     if (cached) return cached;
     if (!this.comparisonLoader) throw new Error("Comparison loader is unavailable.");
 
-    const generation = this.generation;
+    const generation = this.generations.get(comparison.id) ?? 0;
     let pending = this.pendingResults.get(comparison.id);
     if (!pending) {
       pending = this.comparisonLoader(comparison);
@@ -130,7 +240,9 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
 
     try {
       const result = await pending;
-      if (generation !== this.generation) return await this.getComparisonResult(comparison);
+      if (generation !== (this.generations.get(comparison.id) ?? 0)) {
+        return await this.getComparisonResult(comparison);
+      }
       this.results.set(comparison.id, result);
       this.errors.delete(comparison.id);
       this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -144,46 +256,151 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
       }
     }
   }
+
+  private bumpGeneration(comparisonId: string): void {
+    this.generations.set(comparisonId, (this.generations.get(comparisonId) ?? 0) + 1);
+  }
 }
 
-function createFileItem(element: FileNode): vscode.TreeItem {
-  const { file, result } = element;
-  const item = new vscode.TreeItem(file.newPath, vscode.TreeItemCollapsibleState.None);
-  item.command = {
-    arguments: [result, file],
-    command: COMMAND_IDS.openFileDiff,
-    title: "Open File Comparison",
+/** Scope opening file diffs across the whole comparison (merge base → target). */
+function comparisonDiffScope(result: ComparisonResult): FileDiffScope {
+  return {
+    fromSha: result.fromSha,
+    label: `${result.comparison.targetRef.displayName} relative to ${result.comparison.baseRef.displayName}`,
+    repositoryRootPath: result.comparison.repository.rootPath,
+    toSha: result.toSha,
   };
-  item.contextValue = `branchCompare.file.${file.status}`;
-  item.description = fileDescription(file);
-  item.iconPath = new vscode.ThemeIcon(fileIcon(file.status));
-  item.resourceUri = vscode.Uri.file(join(result.comparison.repository.rootPath, file.newPath));
-  item.tooltip = file.oldPath
-    ? `${file.oldPath} -> ${file.newPath}`
-    : `${file.newPath} (${file.status})`;
+}
+
+function comparisonDescription(
+  comparison: SavedComparisonV1,
+  result: ComparisonResult | undefined,
+): string {
+  if (!result) return comparison.repository.label;
+  const totals = sumDiffTotals(result.files);
+  return [
+    `↑${formatCount(result.aheadCount)} ↓${formatCount(result.behindCount)}`,
+    pluralize(result.files.length, "file"),
+    formatDiffStats(totals.additions, totals.deletions),
+  ].join(" · ");
+}
+
+function comparisonTooltip(
+  comparison: SavedComparisonV1,
+  result: ComparisonResult | undefined,
+  error: string | undefined,
+): vscode.MarkdownString {
+  const modeLabel =
+    comparison.mode === "branchChanges" ? "branch changes (three-dot)" : "tip to tip (two-dot)";
+  const lines = [
+    `**${comparison.targetRef.displayName}** relative to **${comparison.baseRef.displayName}**`,
+    `$(repo) ${comparison.repository.label} · ${modeLabel}`,
+  ];
+
+  if (result) {
+    const totals = sumDiffTotals(result.files);
+    lines.push(
+      `$(git-commit) base \`${shortSha(result.baseSha)}\` → target \`${shortSha(result.targetSha)}\``,
+      ...(result.mergeBaseSha
+        ? [`$(git-merge) merge base \`${shortSha(result.mergeBaseSha)}\``]
+        : []),
+      `$(arrow-up) ${pluralize(result.aheadCount, "commit")} ahead · $(arrow-down) ${pluralize(result.behindCount, "commit")} behind`,
+      `$(files) ${pluralize(result.files.length, "changed file")} · ${formatDiffStats(totals.additions, totals.deletions)}`,
+      ...(totals.binaryFileCount > 0
+        ? [`$(file-binary) ${pluralize(totals.binaryFileCount, "binary file")}`]
+        : []),
+      `_Updated ${formatRelativeTime(result.computedAt)}_`,
+    );
+  } else if (error) {
+    lines.push(`$(error) ${error}`);
+  }
+
+  const tooltip = new vscode.MarkdownString(lines.join("\n\n"));
+  tooltip.supportThemeIcons = true;
+  return tooltip;
+}
+
+function createSectionItem(element: SectionNode): vscode.TreeItem {
+  const { result, section } = element;
+
+  if (section === "files") {
+    const totals = sumDiffTotals(result.files);
+    const item = new vscode.TreeItem(
+      `${pluralize(result.files.length, "file")} changed`,
+      result.files.length > 0
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.None,
+    );
+    item.description =
+      result.files.length > 0 ? formatDiffStats(totals.additions, totals.deletions) : "";
+    item.iconPath = new vscode.ThemeIcon("request-changes");
+    item.id = `${result.comparison.id}:section:files`;
+    return item;
+  }
+
+  const count = section === "ahead" ? result.aheadCount : result.behindCount;
+  const item = new vscode.TreeItem(
+    section === "ahead" ? "Ahead" : "Behind",
+    count > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+  );
+  item.description = pluralize(count, "commit");
+  item.iconPath = new vscode.ThemeIcon(section === "ahead" ? "arrow-up" : "arrow-down");
+  item.id = `${result.comparison.id}:section:${section}`;
+  item.tooltip =
+    section === "ahead"
+      ? `Commits only in ${result.comparison.targetRef.displayName}`
+      : `Commits only in ${result.comparison.baseRef.displayName}`;
   return item;
 }
 
-function fileDescription(file: FileChange): string {
-  if (file.status === "renamed" || file.status === "copied") {
-    const score = file.similarity === undefined ? "" : ` ${file.similarity.toString()}%`;
-    return `${file.status}${score}`;
+function getSectionChildren(element: SectionNode, layout: FilesLayout): ComparisonTreeNode[] {
+  const { result, section } = element;
+
+  if (section === "files") {
+    return buildChangeNodes(
+      result.files,
+      layout,
+      comparisonDiffScope(result),
+      `${result.comparison.id}:files`,
+    );
   }
-  return file.status;
+
+  const commits = section === "ahead" ? result.aheadCommits : result.behindCommits;
+  const count = section === "ahead" ? result.aheadCount : result.behindCount;
+  const nodes: ComparisonTreeNode[] = commits.map((commit) => ({
+    commit,
+    comparisonId: result.comparison.id,
+    kind: "commit",
+    repositoryRoot: result.comparison.repository.rootPath,
+  }));
+  if (count > commits.length) {
+    nodes.push({
+      icon: "ellipsis",
+      kind: "message",
+      label: `Showing the first ${formatCount(COMMIT_PAGE_SIZE)} of ${pluralize(count, "commit")}`,
+    });
+  }
+  return nodes;
 }
 
-function fileIcon(status: FileChange["status"]): string {
-  switch (status) {
-    case "added":
-    case "copied":
-      return "diff-added";
-    case "deleted":
-      return "diff-removed";
-    case "renamed":
-      return "diff-renamed";
-    case "modified":
-    case "typeChanged":
-    case "unmerged":
-      return "diff-modified";
-  }
+function createCommitItem(element: CommitTreeNode): vscode.TreeItem {
+  const { commit } = element;
+  const item = new vscode.TreeItem(commit.subject, vscode.TreeItemCollapsibleState.Collapsed);
+  item.contextValue = "branchCompare.commit";
+  item.description = `${commit.authorName}, ${formatRelativeTime(commit.authorDate)}`;
+  item.iconPath = new vscode.ThemeIcon("git-commit");
+  item.id = `${element.comparisonId}:commit:${commit.sha}`;
+
+  const tooltip = new vscode.MarkdownString(
+    [
+      `**${commit.subject}**`,
+      "",
+      `$(git-commit) \`${shortSha(commit.sha)}\``,
+      `$(person) ${commit.authorName}`,
+      `$(history) ${formatRelativeTime(commit.authorDate)} (${new Date(commit.authorDate).toLocaleString()})`,
+    ].join("\n\n"),
+  );
+  tooltip.supportThemeIcons = true;
+  item.tooltip = tooltip;
+  return item;
 }

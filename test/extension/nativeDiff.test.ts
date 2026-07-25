@@ -69,7 +69,12 @@ suite("native branch diff", () => {
       vscode.TreeItemCollapsibleState.Collapsed,
     );
 
-    const fileNodes = await treeProvider.getChildren(comparisonNode);
+    const sections = await treeProvider.getChildren(comparisonNode);
+    const filesSection = sections.find(
+      (node) => node.kind === "section" && node.section === "files",
+    );
+    assert.ok(filesSection, "Expected the comparison to expose a changed-files section");
+    const fileNodes = await treeProvider.getChildren(filesSection);
     const modifiedNode = fileNodes.find(
       (node) => treeProvider.getTreeItem(node).label === "modified.txt",
     );

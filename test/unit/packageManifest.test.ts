@@ -23,23 +23,47 @@ function loadManifest(): PackageManifest {
 }
 
 suite("extension manifest", () => {
-  test("contributes the Branch Comparisons view to Source Control", () => {
+  test("contributes the Branch Comparisons and Stashes views to Source Control", () => {
     const manifest = loadManifest();
 
     assert.deepEqual(manifest.contributes.views.scm, [
       { id: "branchCompare.comparisons", name: "Branch Comparisons" },
+      { id: "branchCompare.stashes", name: "Stashes" },
     ]);
-    assert.ok(manifest.activationEvents.includes("onView:branchCompare.comparisons"));
+    assert.deepEqual(
+      manifest.activationEvents,
+      [],
+      "VS Code derives activation events from the view and command contributions",
+    );
   });
 
-  test("declares every command exposed by the skeleton", () => {
+  test("declares every user-facing command", () => {
     const manifest = loadManifest();
     const commands = manifest.contributes.commands.map(({ command }) => command).sort();
 
     assert.deepEqual(commands, [
+      "branchCompare.applyStash",
+      "branchCompare.closeComparison",
       "branchCompare.compareCurrentBranch",
+      "branchCompare.copyCommitMessage",
+      "branchCompare.copyCommitSha",
+      "branchCompare.copyComparisonSummary",
+      "branchCompare.copyFilePath",
+      "branchCompare.copyRelativeFilePath",
+      "branchCompare.copyStashMessage",
+      "branchCompare.dropStash",
       "branchCompare.newComparison",
+      "branchCompare.openFile",
+      "branchCompare.pinComparison",
+      "branchCompare.popStash",
       "branchCompare.refreshAll",
+      "branchCompare.refreshComparison",
+      "branchCompare.refreshStashes",
+      "branchCompare.stashAllChanges",
+      "branchCompare.swapComparison",
+      "branchCompare.unpinComparison",
+      "branchCompare.viewFilesAsList",
+      "branchCompare.viewFilesAsTree",
     ]);
   });
 

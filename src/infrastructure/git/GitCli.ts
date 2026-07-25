@@ -5,9 +5,13 @@ import { promisify } from "node:util";
 import * as vscode from "vscode";
 
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
-import type { FileChange } from "../../domain/comparisonResult";
+import type { CommitInfo, FileChange } from "../../domain/comparisonResult";
+import type { StashEntry } from "../../domain/stash";
 import { parseBranchRefs } from "./branchRefs";
+import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
 import { parseNameStatusZ } from "./nameStatus";
+import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
+import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_OUTPUT_BYTES = 5 * 1024 * 1024;
@@ -87,18 +91,125 @@ export async function listChangedFiles(
   fromSha: string,
   toSha: string,
 ): Promise<FileChange[]> {
-  const stdout = await runGit(repositoryRoot, [
-    "diff",
-    "--name-status",
-    "-z",
-    "--find-renames",
-    fromSha,
-    toSha,
-    "--",
+  const [nameStatusOutput, numstatOutput] = await Promise.all([
+    runGit(repositoryRoot, ["diff", "--name-status", "-z", "--find-renames", fromSha, toSha, "--"]),
+    runGit(repositoryRoot, ["diff", "--numstat", "-z", "--find-renames", fromSha, toSha, "--"]),
   ]).catch(() => {
     throw new Error("Git could not calculate the changed files for this comparison.");
   });
-  return parseNameStatusZ(stdout);
+  return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
+}
+
+export async function countAheadBehind(
+  repositoryRoot: string,
+  baseSha: string,
+  targetSha: string,
+): Promise<{ readonly ahead: number; readonly behind: number }> {
+  const stdout = await runGit(repositoryRoot, [
+    "rev-list",
+    "--left-right",
+    "--count",
+    `${baseSha}...${targetSha}`,
+  ]).catch(() => {
+    throw new Error("Git could not count the commits between these branches.");
+  });
+  const match = /^(\d+)\s+(\d+)/.exec(stdout.trim());
+  const behind = match?.[1];
+  const ahead = match?.[2];
+  if (behind === undefined || ahead === undefined) {
+    throw new Error("Git returned an invalid ahead/behind count.");
+  }
+  return { ahead: Number.parseInt(ahead, 10), behind: Number.parseInt(behind, 10) };
+}
+
+/** Lists commits reachable from `toSha` but not from `fromSha`, newest first. */
+export async function listCommitRange(
+  repositoryRoot: string,
+  fromSha: string,
+  toSha: string,
+  limit: number,
+): Promise<CommitInfo[]> {
+  const stdout = await runGit(repositoryRoot, [
+    "log",
+    `--max-count=${limit.toString()}`,
+    `--format=${COMMIT_LOG_FORMAT}`,
+    `${fromSha}..${toSha}`,
+    "--",
+  ]).catch(() => {
+    throw new Error("Git could not list the commits between these branches.");
+  });
+  return parseCommitLog(stdout);
+}
+
+export interface CommitFileChanges {
+  readonly files: FileChange[];
+  /** First parent SHA, or null when the commit is a root commit. */
+  readonly parentSha: string | null;
+}
+
+/** Lists the files a single commit changed relative to its first parent. */
+export async function listCommitFileChanges(
+  repositoryRoot: string,
+  sha: string,
+): Promise<CommitFileChanges> {
+  const parentOutput = await runGit(repositoryRoot, [
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    `${sha}^`,
+  ]).catch(() => null);
+  if (parentOutput !== null) {
+    const parentSha = parseObjectId(parentOutput, "Git returned an invalid parent commit.");
+    return { files: await listChangedFiles(repositoryRoot, parentSha, sha), parentSha };
+  }
+
+  const diffTreeArgs = ["diff-tree", "--no-commit-id", "-r", "-z", "--root", "--find-renames"];
+  const [nameStatusOutput, numstatOutput] = await Promise.all([
+    runGit(repositoryRoot, [...diffTreeArgs, "--name-status", sha, "--"]),
+    runGit(repositoryRoot, [...diffTreeArgs, "--numstat", sha, "--"]),
+  ]).catch(() => {
+    throw new Error("Git could not calculate the changed files for this commit.");
+  });
+  return {
+    files: mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput)),
+    parentSha: null,
+  };
+}
+
+export async function listStashes(repositoryRoot: string): Promise<StashEntry[]> {
+  const stdout = await runGit(repositoryRoot, [
+    "stash",
+    "list",
+    `--format=${STASH_LOG_FORMAT}`,
+  ]).catch(() => {
+    throw new Error("Git could not list the stashes for this repository.");
+  });
+  return parseStashList(stdout);
+}
+
+export async function applyStash(repositoryRoot: string, selector: string): Promise<void> {
+  await runStashCommand(repositoryRoot, ["stash", "apply", validateStashSelector(selector)]);
+}
+
+export async function popStash(repositoryRoot: string, selector: string): Promise<void> {
+  await runStashCommand(repositoryRoot, ["stash", "pop", validateStashSelector(selector)]);
+}
+
+export async function dropStash(repositoryRoot: string, selector: string): Promise<void> {
+  await runStashCommand(repositoryRoot, ["stash", "drop", validateStashSelector(selector)]);
+}
+
+/** Stashes working tree changes; returns Git's status line for display. */
+export async function pushStash(
+  repositoryRoot: string,
+  message: string | null,
+  includeUntracked: boolean,
+): Promise<string> {
+  const args = ["stash", "push"];
+  if (includeUntracked) args.push("--include-untracked");
+  if (message !== null && message.length > 0) args.push("--message", message);
+  const stdout = await runStashCommand(repositoryRoot, args);
+  return stdout.trim().split("\n")[0]?.trim() ?? "";
 }
 
 export async function readFileAtRevision(
@@ -126,6 +237,24 @@ async function runGit(cwd: string, args: readonly string[]): Promise<string> {
     windowsHide: true,
   });
   return stdout;
+}
+
+/** Runs a mutating stash command, surfacing Git's stderr (e.g. conflicts). */
+async function runStashCommand(cwd: string, args: readonly string[]): Promise<string> {
+  try {
+    return await runGit(cwd, args);
+  } catch (error) {
+    const stderr = (error as { readonly stderr?: unknown }).stderr;
+    const detail = typeof stderr === "string" ? stderr.trim() : "";
+    throw new Error(detail.length > 0 ? detail : "The Git stash operation failed.", {
+      cause: error,
+    });
+  }
+}
+
+function validateStashSelector(selector: string): string {
+  if (!/^stash@\{\d+\}$/.test(selector)) throw new Error("The stash reference is invalid.");
+  return selector;
 }
 
 function parseObjectId(stdout: string, errorMessage: string): string {

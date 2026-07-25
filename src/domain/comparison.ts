@@ -33,7 +33,37 @@ export type ComparisonIdentity = Pick<
 >;
 
 export function comparisonLabel(comparison: SavedComparisonV1): string {
-  return `${comparison.targetRef.displayName} relative to ${comparison.baseRef.displayName}`;
+  return (
+    comparison.customLabel ??
+    `${comparison.targetRef.displayName} relative to ${comparison.baseRef.displayName}`
+  );
+}
+
+export function withSwappedRefs(comparison: SavedComparisonV1, now: number): SavedComparisonV1 {
+  return {
+    ...comparison,
+    baseRef: comparison.targetRef,
+    targetRef: comparison.baseRef,
+    updatedAt: now,
+  };
+}
+
+export function withPinned(
+  comparison: SavedComparisonV1,
+  pinned: boolean,
+  now: number,
+): SavedComparisonV1 {
+  return { ...comparison, pinned, updatedAt: now };
+}
+
+/** Pinned comparisons first, then by explicit order. */
+export function sortComparisonsForDisplay(
+  comparisons: readonly SavedComparisonV1[],
+): SavedComparisonV1[] {
+  return [...comparisons].sort((left, right) => {
+    if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+    return left.order - right.order;
+  });
 }
 
 export function hasSameComparisonIdentity(
