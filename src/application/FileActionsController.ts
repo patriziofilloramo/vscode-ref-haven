@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 
+import { isGitObjectId } from "../domain/gitObjectId";
+import { MAX_STASH_MESSAGE_LENGTH } from "../domain/inputLimits";
 import type { FileChange } from "../domain/comparisonResult";
 import type { FileDiffScope } from "../domain/fileDiffScope";
 import {
@@ -82,6 +84,12 @@ export class FileActionsController {
             vscode.commands.executeCommand(COMMAND_IDS.compareFileWithRevision, target.uri),
         },
         {
+          detail: "Select the matching change in a saved branch comparison",
+          label: "$(reveal-in-explorer) Reveal File in Branch Comparison",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.revealFileInComparison, target.uri),
+        },
+        {
           detail: "Tracked staged and unstaged changes for this file only",
           label: "$(git-stash) Stash This File...",
           run: (): Thenable<unknown> =>
@@ -105,6 +113,12 @@ export class FileActionsController {
             vscode.commands.executeCommand(COMMAND_IDS.openGitLabFile, target.uri),
         },
         {
+          detail: "Copy a locally validated URL without opening a browser",
+          label: "$(copy) Copy Validated GitLab File URL",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.copyGitLabFileUrl, target.uri),
+        },
+        {
           detail: "Open #issue or !merge-request on the approved project",
           label: "$(link-external) Open GitLab Reference...",
           run: (): Thenable<unknown> =>
@@ -126,6 +140,11 @@ export class FileActionsController {
     await this.fileHistoryController.showFileHistory(target.repositoryRoot, target.filePath);
   }
 
+  public async revealFileInComparison(candidate?: unknown): Promise<void> {
+    const target = await this.requireTarget(candidate);
+    await this.comparisonController.revealFileInComparison(target.repositoryRoot, target.filePath);
+  }
+
   public async stashFile(candidate?: unknown): Promise<void> {
     const selectedTarget = await this.requireTarget(candidate);
     const message = await vscode.window.showInputBox({
@@ -137,8 +156,8 @@ export class FileActionsController {
       value: `RefHaven: ${selectedTarget.filePath}`,
       validateInput: (value) => {
         const length = value.trim().length;
-        return length === 0 || length > 500
-          ? "Enter a stash message between 1 and 500 characters."
+        return length === 0 || length > MAX_STASH_MESSAGE_LENGTH
+          ? `Enter a stash message between 1 and ${MAX_STASH_MESSAGE_LENGTH.toString()} characters.`
           : undefined;
       },
     });
@@ -370,7 +389,7 @@ export class FileActionsController {
     label: unknown,
   ): Promise<void> {
     const target = await this.requireKnownTarget(repositoryRoot, filePath);
-    if (typeof sha !== "string" || !/^[0-9a-f]{40,64}$/u.test(sha)) {
+    if (!isGitObjectId(sha)) {
       throw new Error("The selected revision is invalid.");
     }
     const canonicalSha = await resolveRef(target.repositoryRoot, sha);

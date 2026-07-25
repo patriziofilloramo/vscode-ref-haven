@@ -1,4 +1,5 @@
 import type { FileBlameLine, LineBlame } from "../../domain/blame";
+import { isGitObjectId } from "../../domain/gitObjectId";
 
 const HEADER_PATTERN = /^([0-9a-f]{40,64}) (\d+) (\d+)(?: \d+)?$/u;
 
@@ -119,7 +120,7 @@ function parsePrevious(value: string | undefined): {
     throw new GitBlameParseError("Git blame output contains an invalid previous revision.");
   }
   const previousSha = value.slice(0, separator);
-  if (!/^[0-9a-f]{40,64}$/u.test(previousSha)) {
+  if (!isGitObjectId(previousSha)) {
     throw new GitBlameParseError("Git blame output contains an invalid previous revision.");
   }
   return { previousPath: value.slice(separator + 1), previousSha };

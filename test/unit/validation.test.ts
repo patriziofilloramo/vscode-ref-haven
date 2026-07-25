@@ -37,6 +37,11 @@ suite("domain boundary validation", () => {
       { ...valid, targetRef: { ...valid.targetRef, fullName: "refs/heads/../secret" } },
       { ...valid, targetRef: { ...valid.targetRef, fullName: "refs/heads/feature.lock" } },
       { ...valid, targetRef: { ...valid.targetRef, fullName: "refs/heads//feature" } },
+      { ...valid, customLabel: "" },
+      { ...valid, customLabel: " padded" },
+      { ...valid, customLabel: "line\nbreak" },
+      { ...valid, customLabel: "hidden\u202econtrol" },
+      { ...valid, customLabel: "x".repeat(101) },
       {
         ...valid,
         mode: "workingTree",
@@ -44,6 +49,7 @@ suite("domain boundary validation", () => {
       },
     ];
     for (const candidate of invalid) assert.equal(isSavedComparisonV1(candidate), false);
+    assert.equal(isSavedComparisonV1({ ...valid, customLabel: "Release 🚀" }), true);
   });
 
   test("rejects file changes and scopes that can escape their repository", () => {

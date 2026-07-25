@@ -21,13 +21,21 @@ suite("OutputChannelLogger", () => {
     const output = formatLogEntry(
       "error",
       "Command failed",
-      { operation: "refresh", remoteUrl: "https://secret@example.test", token: "secret" },
+      {
+        errorKind: "ProcessError",
+        message: "private commit subject",
+        operation: "refresh",
+        remoteUrl: "https://secret@example.test",
+        repositoryPath: "P:/private/repository",
+        sha: "0123456789abcdef",
+        token: "secret",
+      },
       new Date("2026-07-14T10:00:00.000Z"),
     );
 
     assert.equal(
       output,
-      '2026-07-14T10:00:00.000Z ERROR Command failed {"operation":"refresh","remoteUrl":"[REDACTED]","token":"[REDACTED]"}',
+      '2026-07-14T10:00:00.000Z ERROR Command failed {"errorKind":"ProcessError","message":"[REDACTED]","operation":"refresh","remoteUrl":"[REDACTED]","repositoryPath":"[REDACTED]","sha":"[REDACTED]","token":"[REDACTED]"}',
     );
   });
 });

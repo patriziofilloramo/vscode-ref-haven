@@ -8,9 +8,12 @@ import * as vscode from "vscode";
 
 import { calculateComparison } from "../../src/application/ComparisonEngine";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
+import { resolveGitLabProjects } from "../../src/domain/gitLab";
 import {
   blameFile,
+  blameLine,
   fileExistsAtRevision,
+  GitOperationError,
   listBranchDetails,
   listChangedLineRanges,
   listFileHistory,
@@ -21,6 +24,7 @@ import {
   listWorktrees,
   readCommitDiffPreview,
   readCommitDetails,
+  readComparisonPatch,
   readWorktreeState,
   searchCommits,
 } from "../../src/infrastructure/git/GitCli";
@@ -125,6 +129,12 @@ suite("native branch diff", () => {
       "after\n",
       "before\n",
     ]);
+    const [leftDocument, rightDocument] = revisionDocuments;
+    assert.ok(leftDocument);
+    assert.ok(rightDocument);
+    await vscode.commands.executeCommand("vscode.changes", "RefHaven test changes", [
+      [vscode.Uri.file(join(repositoryRoot, "modified.txt")), leftDocument.uri, rightDocument.uri],
+    ]);
   });
 
   test("loads file and line history without leaving the repository", async () => {
@@ -205,6 +215,93 @@ suite("native branch diff", () => {
     assert.match(preview, /\+after/u);
   });
 
+  test("blames a line at a pinned local revision for time-travel hover", async () => {
+    const baseSha = git("rev-parse", "refs/heads/main");
+    const featureSha = git("rev-parse", "refs/heads/feature/native-diff");
+
+    const atBase = await blameLine(
+      repositoryRoot,
+      "modified.txt",
+      1,
+      undefined,
+      undefined,
+      baseSha,
+    );
+    assert.ok(atBase);
+    assert.equal(atBase.sha, baseSha);
+    const atFeature = await blameLine(
+      repositoryRoot,
+      "modified.txt",
+      1,
+      undefined,
+      undefined,
+      featureSha,
+    );
+    assert.ok(atFeature);
+    assert.equal(atFeature.sha, featureSha);
+    assert.equal(atFeature.previousSha, baseSha);
+
+    await assert.rejects(
+      blameLine(repositoryRoot, "modified.txt", 1, "buffer\n", undefined, baseSha),
+      /either buffer contents or a revision/u,
+    );
+    await assert.rejects(
+      blameLine(repositoryRoot, "modified.txt", 1, undefined, undefined, "main"),
+      /blame revision is invalid/u,
+    );
+  });
+
+  test("produces shareable patches for comparisons and single files", async () => {
+    const baseSha = git("rev-parse", "refs/heads/main");
+    const featureSha = git("rev-parse", "refs/heads/feature/native-diff");
+
+    const full = await readComparisonPatch(repositoryRoot, baseSha, featureSha);
+    assert.match(full, /^diff --git/mu);
+    assert.match(full, /-before/u);
+    assert.match(full, /\+after/u);
+    assert.match(full, /rename-new\.txt/u);
+
+    const single = await readComparisonPatch(repositoryRoot, baseSha, featureSha, ["modified.txt"]);
+    assert.match(single, /modified\.txt/u);
+    assert.doesNotMatch(single, /added\.txt/u);
+
+    const root = await readComparisonPatch(repositoryRoot, null, baseSha);
+    assert.match(root, /modified\.txt/u);
+    assert.match(root, /\+before/u);
+
+    writeFileSync(join(repositoryRoot, "modified.txt"), "working\n", "utf8");
+    try {
+      const workingTree = await readComparisonPatch(repositoryRoot, featureSha, null, [
+        "modified.txt",
+      ]);
+      assert.match(workingTree, /\+working/u);
+    } finally {
+      writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+    }
+
+    await assert.rejects(
+      readComparisonPatch(repositoryRoot, null, null),
+      /at least one resolved revision/u,
+    );
+    await assert.rejects(
+      readComparisonPatch(repositoryRoot, "main", featureSha),
+      /patch revision is invalid/u,
+    );
+  });
+
+  test("bounds exported patch output", async () => {
+    const featureSha = git("rev-parse", "refs/heads/feature/native-diff");
+    writeFileSync(join(repositoryRoot, "modified.txt"), `${"x".repeat(6 * 1024 * 1024)}\n`, "utf8");
+    try {
+      await assert.rejects(
+        readComparisonPatch(repositoryRoot, featureSha, null, ["modified.txt"]),
+        (error: unknown) => error instanceof GitOperationError && error.code === "outputTooLarge",
+      );
+    } finally {
+      writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+    }
+  });
+
   test("searches local commits and loads full commit details", async () => {
     const byMessage = await searchCommits(repositoryRoot, "message", "feature changes");
     assert.equal(byMessage[0]?.subject, "feature changes");
@@ -254,10 +351,21 @@ suite("native branch diff", () => {
   });
 
   test("reads configured remote URLs without contacting them", async () => {
-    assert.deepEqual(await listGitRemoteUrls(repositoryRoot), [
+    const remotes = await listGitRemoteUrls(repositoryRoot);
+    assert.deepEqual(remotes, [
       {
         name: "origin",
         url: "git@gitlab.example.invalid:group/project.git",
+      },
+    ]);
+    assert.deepEqual(resolveGitLabProjects(remotes, []), [
+      {
+        browserOrigin: {
+          hostname: "gitlab.example.invalid",
+          origin: "https://gitlab.example.invalid",
+        },
+        projectPath: "group/project",
+        remoteName: "origin",
       },
     ]);
   });

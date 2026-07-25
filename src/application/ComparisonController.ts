@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { dirname, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import * as vscode from "vscode";
 
 import type { Logger } from "./Logger";
 import { calculateComparison } from "./ComparisonEngine";
+import { errorLogMetadata } from "./errorHandling";
 import type { ComparisonStore } from "./ComparisonStore";
 import type { ComparisonReviewStore } from "./ComparisonReviewStore";
 import {
   comparisonLabel,
   hasSameComparisonIdentity,
+  isValidCustomLabel,
+  MAX_CUSTOM_LABEL_LENGTH,
+  withCustomLabel,
   withMode,
   withPinned,
   withSwappedRefs,
@@ -34,11 +38,13 @@ import {
 import type { FileDiffScope } from "../domain/fileDiffScope";
 import { pathIdentityKey, resolvePathWithinRepository } from "../domain/pathValidation";
 import { formatDiffStats, pluralize } from "../ui/format";
+import { showTransientSuccess } from "../ui/feedback";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
   findRepositoryRoot,
   listComparisonRefs,
   discoverRepositories,
+  readComparisonPatch,
   readCurrentBranch,
   resolveRef,
 } from "../infrastructure/git/GitCli";
@@ -86,11 +92,22 @@ export class ComparisonController {
     void this.reviewStore
       .prune(new Set(comparisons.map(({ id }) => id)))
       .catch((error: unknown) => {
-        this.logger.error("Comparison review cleanup failed", {
-          message: error instanceof Error ? error.message : String(error),
-          operation: "pruneComparisonReviews",
-        });
+        this.logger.error(
+          "Comparison review cleanup failed",
+          errorLogMetadata(error, "pruneComparisonReviews"),
+        );
       });
+  }
+
+  public updateViewBadge(): void {
+    const unreviewedCount = this.treeProvider.getUnreviewedCount();
+    this.treeView.badge =
+      unreviewedCount > 0
+        ? {
+            tooltip: `${pluralize(unreviewedCount, "unreviewed file")} in loaded comparisons`,
+            value: unreviewedCount,
+          }
+        : undefined;
   }
 
   public async newComparison(): Promise<void> {
@@ -136,6 +153,39 @@ export class ComparisonController {
     await this.saveAndRevealComparison(
       canonicalRepository,
       currentRef,
+      canonicalTarget,
+      "branchChanges",
+    );
+  }
+
+  public async compareReferences(
+    repository: RepositoryIdentity,
+    baseRef: BranchRef,
+    targetRef: BranchRef,
+  ): Promise<void> {
+    const expectedRoot = pathIdentityKey(repository.rootPath);
+    const canonicalRepository = (await discoverRepositories()).find(
+      ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
+    );
+    if (!canonicalRepository) {
+      throw new Error("The selected repository is not part of the current workspace.");
+    }
+    const refs = await listComparisonRefs(canonicalRepository.rootPath);
+    const canonicalBase = refs.find(
+      (ref) => ref.fullName === baseRef.fullName && ref.kind === baseRef.kind,
+    );
+    const canonicalTarget = refs.find(
+      (ref) => ref.fullName === targetRef.fullName && ref.kind === targetRef.kind,
+    );
+    if (!canonicalBase || !canonicalTarget) {
+      throw new Error("One of the selected branches is no longer available.");
+    }
+    if (canonicalBase.fullName === canonicalTarget.fullName) {
+      throw new Error("Select two different branches to create a comparison.");
+    }
+    await this.saveAndRevealComparison(
+      canonicalRepository,
+      canonicalBase,
       canonicalTarget,
       "branchChanges",
     );
@@ -251,6 +301,34 @@ export class ComparisonController {
     });
   }
 
+  /** Sets or clears the comparison's display name; an empty input restores the default. */
+  public async renameComparison(comparison: SavedComparisonV1): Promise<void> {
+    const defaultLabel = `${comparison.targetRef.displayName} relative to ${comparison.baseRef.displayName}`;
+    const value = await vscode.window.showInputBox({
+      ignoreFocusOut: true,
+      placeHolder: defaultLabel,
+      prompt: "Enter a display name for this comparison. Leave empty to restore the default.",
+      title: "RefHaven: Rename Comparison",
+      validateInput: (input) =>
+        input.trim().length === 0 || isValidCustomLabel(input.trim())
+          ? undefined
+          : `Use at most ${MAX_CUSTOM_LABEL_LENGTH.toString()} printable characters.`,
+      value: comparison.customLabel ?? "",
+    });
+    if (value === undefined) return;
+    const trimmed = value.trim();
+    if (trimmed.length > 0 && !isValidCustomLabel(trimmed)) {
+      throw new Error("The comparison name is invalid.");
+    }
+    const comparisons = await this.store.replace(comparison.id, (current) =>
+      withCustomLabel(current, trimmed.length === 0 ? undefined : trimmed, Date.now()),
+    );
+    this.treeProvider.setComparisons(comparisons);
+    this.logger.info(trimmed.length === 0 ? "Restored comparison label" : "Renamed comparison", {
+      operation: "renameComparison",
+    });
+  }
+
   public async closeComparison(comparison: SavedComparisonV1): Promise<void> {
     const comparisons = await this.store.remove(comparison.id);
     await this.reviewStore.removeComparison(comparison.id);
@@ -274,17 +352,17 @@ export class ComparisonController {
       // Copy the configuration line alone when Git cannot compute a result.
     }
     await vscode.env.clipboard.writeText(summary);
-    void vscode.window.showInformationMessage("Comparison summary copied to the clipboard.");
+    showTransientSuccess("Comparison summary copied");
   }
 
   public async copyCommitSha(commit: CommitInfo): Promise<void> {
     await vscode.env.clipboard.writeText(commit.sha);
-    void vscode.window.showInformationMessage(`Copied ${shortSha(commit.sha)} to the clipboard.`);
+    showTransientSuccess(`Commit ${shortSha(commit.sha)} copied`);
   }
 
   public async copyCommitMessage(commit: CommitInfo): Promise<void> {
     await vscode.env.clipboard.writeText(commit.subject);
-    void vscode.window.showInformationMessage("Commit message copied to the clipboard.");
+    showTransientSuccess("Commit message copied");
   }
 
   public async openWorkingTreeFile(scope: FileDiffScope, file: FileChange): Promise<void> {
@@ -335,6 +413,67 @@ export class ComparisonController {
     });
   }
 
+  /** Exports the comparison's full diff as a shareable unified patch. */
+  public async exportComparisonPatch(
+    comparison: SavedComparisonV1,
+    destination: "clipboard" | "file",
+  ): Promise<void> {
+    const result = await this.treeProvider.loadComparisonResult(comparison.id);
+    const patch = await readComparisonPatch(
+      result.comparison.repository.rootPath,
+      result.fromSha,
+      result.toSha,
+    );
+    if (patch.trim().length === 0) {
+      void vscode.window.showInformationMessage("This comparison has no differences to export.");
+      return;
+    }
+    if (destination === "clipboard") {
+      await vscode.env.clipboard.writeText(patch);
+      showTransientSuccess(`Patch for ${comparisonLabel(comparison)} copied`);
+    } else {
+      const target = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file(
+          join(result.comparison.repository.rootPath, `${patchFileName(comparison)}.patch`),
+        ),
+        filters: { "Patch files": ["patch", "diff"] },
+        title: "RefHaven: Save Comparison Patch",
+      });
+      if (!target) return;
+      if (target.scheme !== "file") {
+        throw new Error("Comparison patches can only be saved to the local filesystem.");
+      }
+      await vscode.workspace.fs.writeFile(target, Buffer.from(patch, "utf8"));
+      void vscode.window.showInformationMessage(`Patch saved to ${target.fsPath}.`);
+    }
+    this.logger.info("Exported comparison patch", {
+      destination,
+      operation: "exportComparisonPatch",
+    });
+  }
+
+  /** Copies one changed file's diff, in the node's own comparison scope. */
+  public async copyFilePatch(scope: FileDiffScope, file: FileChange): Promise<void> {
+    if (!isFileDiffScope(scope) || !isFileChange(file)) {
+      throw new Error("RefHaven file selection is invalid.");
+    }
+    await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
+    const paths =
+      file.oldPath && file.oldPath !== file.newPath ? [file.newPath, file.oldPath] : [file.newPath];
+    const patch = await readComparisonPatch(
+      scope.repositoryRootPath,
+      scope.fromSha,
+      scope.toSha,
+      paths,
+    );
+    if (patch.trim().length === 0) {
+      void vscode.window.showInformationMessage(`${file.newPath} has no textual patch to copy.`);
+      return;
+    }
+    await vscode.env.clipboard.writeText(patch);
+    showTransientSuccess(`Patch for ${file.newPath} copied`);
+  }
+
   public async copyFilePath(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
@@ -342,7 +481,7 @@ export class ComparisonController {
     await vscode.env.clipboard.writeText(
       resolvePathWithinRepository(scope.repositoryRootPath, file.newPath),
     );
-    void vscode.window.showInformationMessage("File path copied to the clipboard.");
+    showTransientSuccess("File path copied");
   }
 
   public async copyRelativeFilePath(scope: FileDiffScope, file: FileChange): Promise<void> {
@@ -350,7 +489,62 @@ export class ComparisonController {
       throw new Error("RefHaven file selection is invalid.");
     }
     await vscode.env.clipboard.writeText(file.newPath);
-    void vscode.window.showInformationMessage("Relative file path copied to the clipboard.");
+    showTransientSuccess("Relative file path copied");
+  }
+
+  public async revealFileInComparison(repositoryRootPath: string, filePath: string): Promise<void> {
+    await this.assertKnownRepositoryRoot(repositoryRootPath);
+    const comparisons = this.store
+      .getAll()
+      .filter(
+        ({ repository }) =>
+          pathIdentityKey(repository.rootPath) === pathIdentityKey(repositoryRootPath),
+      );
+    if (comparisons.length === 0) {
+      void vscode.window.showInformationMessage(
+        "Create a branch comparison for this repository first.",
+      );
+      return;
+    }
+
+    const selectedId = comparisonIdFromTreeNode(this.treeView.selection[0]);
+    let comparison = comparisons.find(({ id }) => id === selectedId);
+    if (!comparison && comparisons.length === 1) comparison = comparisons[0];
+    if (!comparison) {
+      const selected = await vscode.window.showQuickPick(
+        comparisons.map((candidate) => ({
+          comparison: candidate,
+          description: candidate.repository.label,
+          label: comparisonLabel(candidate),
+        })),
+        {
+          matchOnDescription: true,
+          placeHolder: filePath,
+          title: "RefHaven: Reveal File in Comparison",
+        },
+      );
+      comparison = selected?.comparison;
+    }
+    if (!comparison) return;
+
+    const result = await this.treeProvider.loadComparisonResult(comparison.id);
+    const file = result.files.find(
+      (candidate) => candidate.newPath === filePath || candidate.oldPath === filePath,
+    );
+    if (!file) {
+      void vscode.window.showInformationMessage(
+        `${filePath} is not changed in ${comparisonLabel(comparison)}.`,
+      );
+      return;
+    }
+    if (this.treeProvider.getFileFilter() !== "all") {
+      this.treeProvider.setFileFilter("all");
+      await this.context.workspaceState.update(FILE_FILTER_STORAGE_KEY, "all");
+    }
+    const node = await this.treeProvider.findComparisonFileNode(comparison.id, file.newPath);
+    if (!node) throw new Error("The comparison file could not be revealed.");
+    await vscode.commands.executeCommand(COMPARISON_VIEW_FOCUS_COMMAND);
+    await this.treeView.reveal(node, { focus: true, select: true });
   }
 
   /**
@@ -607,18 +801,7 @@ export class ComparisonController {
       throw new Error("RefHaven file selection is invalid.");
     }
 
-    const repositoryRoot = scope.repositoryRootPath;
-    const oldPath = file.oldPath ?? file.newPath;
-    const left =
-      file.status === "added" || scope.fromSha === null
-        ? this.revisionProvider.createEmptyUri(file.newPath)
-        : this.revisionProvider.createRevisionUri(repositoryRoot, scope.fromSha, oldPath);
-    const right =
-      file.status === "deleted"
-        ? this.revisionProvider.createEmptyUri(file.newPath)
-        : scope.toSha === null
-          ? vscode.Uri.file(resolvePathWithinRepository(repositoryRoot, file.newPath))
-          : this.revisionProvider.createRevisionUri(repositoryRoot, scope.toSha, file.newPath);
+    const { left, right } = this.createFileDiffUris(scope, file);
 
     try {
       await this.revisionProvider.prepareTextDiff(left, right);
@@ -632,6 +815,57 @@ export class ComparisonController {
 
     const title = `${file.newPath} (${scope.label})`;
     await vscode.commands.executeCommand("vscode.diff", left, right, title, { preview: true });
+  }
+
+  public async openAllComparisonChanges(comparison: SavedComparisonV1): Promise<void> {
+    const current = this.requireStoredComparison(comparison);
+    const result = await this.treeProvider.loadComparisonResult(current.id);
+    const scope = comparisonScope(result);
+    const textFiles = result.files.filter(
+      ({ additions, deletions }) => additions !== undefined || deletions !== undefined,
+    );
+    if (textFiles.length === 0) {
+      void vscode.window.showInformationMessage(
+        result.files.length === 0
+          ? "This comparison has no changed files."
+          : "This comparison contains only binary changes.",
+      );
+      return;
+    }
+    const resources: [vscode.Uri, vscode.Uri, vscode.Uri][] = textFiles.map((file) => {
+      const { left, right } = this.createFileDiffUris(scope, file);
+      return [
+        vscode.Uri.file(resolvePathWithinRepository(scope.repositoryRootPath, file.newPath)),
+        left,
+        right,
+      ];
+    });
+    await vscode.commands.executeCommand("vscode.changes", comparisonLabel(current), resources);
+    const omitted = result.files.length - textFiles.length;
+    if (omitted > 0) {
+      showTransientSuccess(
+        `Opened ${pluralize(textFiles.length, "text change")}; ${pluralize(omitted, "binary change")} omitted`,
+      );
+    }
+  }
+
+  private createFileDiffUris(
+    scope: FileDiffScope,
+    file: FileChange,
+  ): { readonly left: vscode.Uri; readonly right: vscode.Uri } {
+    const repositoryRoot = scope.repositoryRootPath;
+    const oldPath = file.oldPath ?? file.newPath;
+    const left =
+      file.status === "added" || scope.fromSha === null
+        ? this.revisionProvider.createEmptyUri(file.newPath)
+        : this.revisionProvider.createRevisionUri(repositoryRoot, scope.fromSha, oldPath);
+    const right =
+      file.status === "deleted"
+        ? this.revisionProvider.createEmptyUri(file.newPath)
+        : scope.toSha === null
+          ? vscode.Uri.file(resolvePathWithinRepository(repositoryRoot, file.newPath))
+          : this.revisionProvider.createRevisionUri(repositoryRoot, scope.toSha, file.newPath);
+    return { left, right };
   }
 
   private applyFilesLayout(layout: FilesLayout): void {
@@ -796,6 +1030,24 @@ export class ComparisonController {
   }
 }
 
+function comparisonIdFromTreeNode(node: ComparisonTreeNode | undefined): string | undefined {
+  if (!node) return undefined;
+  switch (node.kind) {
+    case "comparison":
+      return node.comparison.id;
+    case "section":
+      return node.result.comparison.id;
+    case "commit":
+      return node.comparisonId;
+    case "file":
+      return node.review?.comparisonId;
+    case "folder":
+      return node.reviewContext?.comparisonId;
+    case "message":
+      return undefined;
+  }
+}
+
 function comparisonScope(result: ComparisonResult): FileDiffScope {
   return {
     fromSha: result.fromSha,
@@ -803,4 +1055,13 @@ function comparisonScope(result: ComparisonResult): FileDiffScope {
     repositoryRootPath: result.comparison.repository.rootPath,
     toSha: result.toSha,
   };
+}
+
+/** Derives a portable file name from the comparison label. */
+function patchFileName(comparison: SavedComparisonV1): string {
+  const name = comparisonLabel(comparison)
+    .replaceAll(/[^\p{L}\p{N}]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "")
+    .slice(0, 80);
+  return name.length > 0 ? `refhaven-${name}` : "refhaven-comparison";
 }

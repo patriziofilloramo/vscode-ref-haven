@@ -7,6 +7,44 @@ daily value at low-to-medium implementation and maintenance cost.
 Each batch must compile, lint, pass unit and Extension Host tests, package
 successfully, and receive a security review before it merges to `master`.
 
+## Native sidebar release 0.10.0
+
+- Consolidated the six Source Control sections into four focused views:
+  Branch Comparisons, Stashes, Inspector, and Repository.
+- Inspector groups File History with Commit Details; Repository groups
+  Branches with Worktrees while preserving the existing tested providers.
+- Added explicit comparison loading, refreshed-at, stale, and error
+  presentation plus an unreviewed-file badge on Branch Comparisons.
+- Added **Open All Changes** through VS Code's documented `vscode.changes`
+  command; binary changes remain available individually and are not forced
+  through a text editor.
+- Kept the Branch Comparisons title toolbar unchanged.
+
+## Native workflow release 0.9.0
+
+- Added a Command Palette fast path for enabling or clearing one strict GitLab
+  browser origin while preserving the default zero-configuration behavior.
+- Added copied GitLab URLs for project, commit, branch, comparison, and file
+  targets through the same local validation and allowlist boundary as browser
+  opening.
+- Added direct Source Control **Stash This File...**, **Inspect Current Line**,
+  file-to-comparison reveal, and two-branch multi-selection comparison.
+- Replaced routine clipboard notification popups with transient status-bar
+  confirmation.
+- Kept the Branch Comparisons title toolbar unchanged.
+
+## Maintenance release 0.8.2
+
+- Separated bounded Git process execution from typed Git operations.
+- Centralized runtime settings, shared input limits, and Git object-ID
+  validation.
+- Hardened operational logging so exception messages and repository-derived
+  metadata cannot enter the output channel.
+- Added trust/virtual-workspace declarations, professional marketplace
+  metadata, and an original RefHaven icon.
+- Added maintainability and contribution standards plus a dependency-free
+  architectural quality gate.
+
 ## Security boundary
 
 The security objective is not absolute offline operation. Repository data may
@@ -197,6 +235,11 @@ Direct GitLab API support for merge-request/pipeline status remains deferred.
 It should be added only if the URL-only milestone proves insufficient and a
 specific approved use case justifies SecretStorage and response-data handling.
 
+Version 0.8.1 refined the URL-only flow for immediate usability: an empty
+origin setting now derives validated browser origins from local remotes, while
+any configured origin activates the original strict allowlist policy. No
+network discovery, API client, token, or background request was introduced.
+
 ## Completed — Batch 10: Comparison review experience
 
 - Track reviewed/unreviewed files per saved comparison without modifying the
@@ -250,11 +293,41 @@ Git commands, and the Branches and Worktrees surfaces remain read-only.
 - Serialized comparison-review writes so rapid mark/unmark actions cannot
   overwrite one another.
 
+## Completed — Batch 12: History links and sharing
+
+Delivered in version 0.8.0 without new dependencies, views, or settings.
+
+- **Rename Comparison** — a per-comparison display name stored in the
+  already-versioned `customLabel` field; an empty input restores the
+  ref-derived default. Names are trimmed, length-capped, and control-character
+  free.
+- **Approved-GitLab autolinks** — `#123` issue and `!123` merge-request
+  shorthand in commit summaries (rich line hover) and full commit messages
+  (Commit Details tooltip) become command links. Rendering performs no
+  network activity; clicking runs the existing origin-policy flow, and the
+  Markdown trust list contains only the single reference-opening command.
+  Word-adjacent, zero-padded, path-like (`/#12`), and entity-like (`&#38;`)
+  candidates never linkify.
+- **Time-travel blame** — the rich line hover works on RefHaven's readonly
+  revision documents (HMAC-verified URIs only) and blames at the document's
+  pinned revision. A new "Before This Change" action opens the file just
+  before the blamed commit, so hovers chain backwards through history using
+  the blame `previous` metadata that was already parsed.
+- **Patch export** — Copy Patch / Save Patch... on comparison nodes and Copy
+  File Patch on changed-file nodes across the Comparisons, Stashes, and
+  Commit Details views. Patches are produced by bounded local
+  `git diff`/`git show --patch` with literal validated pathspecs; saving
+  writes only to the user-chosen location.
+
+Cherry-pick from Ahead/Behind commits remains the natural next hardened
+mutation; it must follow the batch-8 playbook (real-repository tests and a
+written failure/recovery contract) and is deliberately not part of this batch.
+
 ## Next priorities
 
 The planned low/medium-complexity native UI roadmap is complete. Select the
 next batch from measured user feedback rather than adding another permanent
-Source Control view. Prefer refinements to the six existing views and keep the
+Source Control view. Prefer refinements to the four focused views and keep the
 items below deferred unless a specific workflow justifies their cost.
 
 ## Deliberately deferred

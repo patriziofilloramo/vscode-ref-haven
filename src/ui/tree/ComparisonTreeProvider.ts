@@ -88,8 +88,10 @@ export class ComparisonTreeProvider
   private readonly generations = new Map<string, number>();
   private readonly pendingResults = new Map<string, Promise<ComparisonResult>>();
   private readonly pendingResultAbortControllers = new Map<string, AbortController>();
+  private readonly parentNodes = new Map<string, ComparisonTreeNode>();
   private readonly results = new Map<string, ComparisonResult>();
   private reviewStateProvider: ReviewStateProvider | undefined;
+  private readonly staleResults = new Set<string>();
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -104,6 +106,7 @@ export class ComparisonTreeProvider
     for (const id of this.pendingResults.keys())
       if (!validIds.has(id)) this.removeComparisonState(id);
     for (const id of this.errors.keys()) if (!validIds.has(id)) this.removeComparisonState(id);
+    for (const id of this.staleResults) if (!validIds.has(id)) this.removeComparisonState(id);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -137,6 +140,17 @@ export class ComparisonTreeProvider
     return result;
   }
 
+  public async findComparisonFileNode(
+    comparisonId: string,
+    filePath: string,
+  ): Promise<FileNode | undefined> {
+    const result = await this.loadComparisonResult(comparisonId);
+    const section: SectionNode = { kind: "section", result, section: "files" };
+    return findFileNode(this.buildFileSectionNodes(result, section), filePath, (folder) =>
+      this.registerFolderChildren(folder),
+    );
+  }
+
   public requestComparisonExpansion(comparisonId: string): void {
     const node = this.getComparisonNode(comparisonId);
     if (!node) throw new Error("The comparison is not available in the RefHaven view.");
@@ -159,6 +173,8 @@ export class ComparisonTreeProvider
     this.pendingResults.clear();
     this.commitFiles.clear();
     this.results.clear();
+    this.staleResults.clear();
+    this.parentNodes.clear();
     this.errors.clear();
     this.expansionRequests.clear();
     this.comparisons = [];
@@ -173,6 +189,7 @@ export class ComparisonTreeProvider
   public setFilesLayout(layout: FilesLayout): void {
     if (this.filesLayout === layout) return;
     this.filesLayout = layout;
+    this.parentNodes.clear();
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -183,6 +200,7 @@ export class ComparisonTreeProvider
   public setFileFilter(filter: ComparisonFileFilter): void {
     if (this.fileFilter === filter) return;
     this.fileFilter = filter;
+    this.parentNodes.clear();
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -193,6 +211,7 @@ export class ComparisonTreeProvider
   public setFileSort(sort: ComparisonFileSort): void {
     if (this.fileSort === sort) return;
     this.fileSort = sort;
+    this.parentNodes.clear();
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -201,8 +220,18 @@ export class ComparisonTreeProvider
     this.onDidChangeTreeDataEmitter.fire(node);
   }
 
+  public getUnreviewedCount(): number {
+    let count = 0;
+    for (const result of this.results.values()) {
+      const review = this.reviewSummary(result);
+      count += Math.max(0, review.totalCount - review.reviewedCount);
+    }
+    return count;
+  }
+
   public invalidateAllResults(): void {
     for (const comparison of this.comparisons) this.bumpGeneration(comparison.id);
+    for (const id of this.results.keys()) this.staleResults.add(id);
     for (const controller of this.pendingResultAbortControllers.values()) controller.abort();
     for (const controller of this.commitFilesAbortControllers.values()) controller.abort();
     this.pendingResultAbortControllers.clear();
@@ -210,7 +239,7 @@ export class ComparisonTreeProvider
     this.commitFiles.clear();
     this.errors.clear();
     this.pendingResults.clear();
-    this.results.clear();
+    this.parentNodes.clear();
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -223,7 +252,8 @@ export class ComparisonTreeProvider
     this.commitFiles.clear();
     this.errors.delete(comparisonId);
     this.pendingResults.delete(comparisonId);
-    this.results.delete(comparisonId);
+    if (this.results.has(comparisonId)) this.staleResults.add(comparisonId);
+    this.clearComparisonParents(comparisonId);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -258,7 +288,7 @@ export class ComparisonTreeProvider
       case "commit":
         return this.getCommitChildren(element);
       case "folder":
-        return getFolderChildren(element);
+        return this.registerFolderChildren(element);
       default:
         return [];
     }
@@ -285,6 +315,9 @@ export class ComparisonTreeProvider
         }
         return { kind: "section", result, section: inAhead ? "ahead" : "behind" };
       }
+      case "folder":
+      case "file":
+        return this.parentNodes.get(changeNodeKey(element));
       default:
         return undefined;
     }
@@ -369,12 +402,27 @@ export class ComparisonTreeProvider
     );
     const result = this.results.get(comparison.id);
     const error = this.errors.get(comparison.id);
+    const pending = this.pendingResults.has(comparison.id);
+    const stale = this.staleResults.has(comparison.id);
     const review = result ? this.reviewSummary(result) : undefined;
     item.contextValue = comparison.pinned ? "refhaven.comparisonPinned" : "refhaven.comparison";
-    item.description = comparisonDescription(comparison, result, review);
-    item.iconPath = comparison.pinned
-      ? new vscode.ThemeIcon("pinned")
-      : new vscode.ThemeIcon("git-compare");
+    const description = comparisonDescription(comparison, result, review);
+    item.description = error
+      ? `Error - ${description}`
+      : pending
+        ? `${result ? "Refreshing" : "Loading"}... - ${description}`
+        : stale
+          ? `Stale - ${description}`
+          : description;
+    item.iconPath = error
+      ? new vscode.ThemeIcon("error")
+      : pending
+        ? new vscode.ThemeIcon("loading~spin")
+        : stale
+          ? new vscode.ThemeIcon("history")
+          : comparison.pinned
+            ? new vscode.ThemeIcon("pinned")
+            : new vscode.ThemeIcon("git-compare");
     item.id = `comparison:${comparison.id}`;
     item.tooltip = comparisonTooltip(comparison, result, error, review);
     return item;
@@ -403,7 +451,21 @@ export class ComparisonTreeProvider
         },
       ];
     }
-    return buildChangeNodes(
+    return this.buildFileSectionNodes(result, element);
+  }
+
+  private buildFileSectionNodes(
+    result: ComparisonResult,
+    parent: SectionNode,
+  ): (FileNode | FolderNode)[] {
+    const review = this.reviewSummary(result);
+    const files = filterAndSortComparisonFiles(
+      result.files,
+      review.reviewedPaths,
+      this.fileFilter,
+      this.fileSort,
+    );
+    const nodes = buildChangeNodes(
       files,
       this.filesLayout,
       comparisonDiffScope(result),
@@ -414,6 +476,21 @@ export class ComparisonTreeProvider
         revisionKey: review.revisionKey,
       },
     );
+    this.registerParents(nodes, parent);
+    return nodes;
+  }
+
+  private registerFolderChildren(folder: FolderNode): (FileNode | FolderNode)[] {
+    const children = getFolderChildren(folder);
+    this.registerParents(children, folder);
+    return children;
+  }
+
+  private registerParents(
+    nodes: readonly (FileNode | FolderNode)[],
+    parent: ComparisonTreeNode,
+  ): void {
+    for (const node of nodes) this.parentNodes.set(changeNodeKey(node), parent);
   }
 
   private reviewSummary(result: ComparisonResult): ComparisonReviewSummary {
@@ -432,7 +509,7 @@ export class ComparisonTreeProvider
   ): Promise<ComparisonResult | null> {
     if (!this.currentComparison(comparison.id)) return null;
     const cached = this.results.get(comparison.id);
-    if (cached) return cached;
+    if (cached && !this.staleResults.has(comparison.id)) return cached;
     if (this.errors.has(comparison.id)) return null;
     if (!this.comparisonLoader) throw new Error("Comparison loader is unavailable.");
 
@@ -443,6 +520,7 @@ export class ComparisonTreeProvider
       pending = this.comparisonLoader(comparison, controller.signal);
       this.pendingResults.set(comparison.id, pending);
       this.pendingResultAbortControllers.set(comparison.id, controller);
+      this.onDidChangeTreeDataEmitter.fire(this.getComparisonNode(comparison.id));
     }
 
     try {
@@ -452,6 +530,7 @@ export class ComparisonTreeProvider
         return current ? await this.getComparisonResult(current) : null;
       }
       this.results.set(comparison.id, result);
+      this.staleResults.delete(comparison.id);
       this.errors.delete(comparison.id);
       this.onDidChangeTreeDataEmitter.fire(undefined);
       return result;
@@ -466,6 +545,7 @@ export class ComparisonTreeProvider
       if (this.pendingResults.get(comparison.id) === pending) {
         this.pendingResults.delete(comparison.id);
         this.pendingResultAbortControllers.delete(comparison.id);
+        this.onDidChangeTreeDataEmitter.fire(this.getComparisonNode(comparison.id));
       }
     }
   }
@@ -480,12 +560,43 @@ export class ComparisonTreeProvider
     this.pendingResultAbortControllers.delete(comparisonId);
     this.pendingResults.delete(comparisonId);
     this.results.delete(comparisonId);
+    this.staleResults.delete(comparisonId);
     this.errors.delete(comparisonId);
+    this.clearComparisonParents(comparisonId);
+  }
+
+  private clearComparisonParents(comparisonId: string): void {
+    const prefix = `${comparisonId}:files:`;
+    for (const key of this.parentNodes.keys()) {
+      if (key.startsWith(prefix)) this.parentNodes.delete(key);
+    }
   }
 
   private currentComparison(comparisonId: string): SavedComparisonV1 | undefined {
     return this.comparisons.find(({ id }) => id === comparisonId);
   }
+}
+
+function changeNodeKey(node: FileNode | FolderNode): string {
+  return node.kind === "folder"
+    ? `${node.idPrefix}:folder:${node.folder.path}`
+    : `${node.idPrefix}:file:${node.file.newPath}`;
+}
+
+function findFileNode(
+  nodes: readonly (FileNode | FolderNode)[],
+  filePath: string,
+  childrenOf: (folder: FolderNode) => readonly (FileNode | FolderNode)[],
+): FileNode | undefined {
+  for (const node of nodes) {
+    if (node.kind === "file") {
+      if (node.file.newPath === filePath || node.file.oldPath === filePath) return node;
+      continue;
+    }
+    const match = findFileNode(childrenOf(node), filePath, childrenOf);
+    if (match) return match;
+  }
+  return undefined;
 }
 
 /** Scope opening file diffs across the whole comparison (merge base → target). */
@@ -517,6 +628,7 @@ function comparisonDescription(
       : comparison.mode === "workingTree"
         ? ["working tree"]
         : []),
+    `updated ${formatRelativeTime(result.computedAt)}`,
   ].join(" · ");
 }
 
@@ -584,7 +696,8 @@ function comparisonTooltip(
         : []),
       `_Updated ${formatRelativeTime(result.computedAt)}_`,
     );
-  } else if (error) {
+  }
+  if (error) {
     lines.push(`$(error) ${escapeMarkdown(error)}`);
   }
 

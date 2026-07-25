@@ -1,8 +1,8 @@
 import type { StashEntry } from "../../domain/stash";
+import { isGitObjectId } from "../../domain/gitObjectId";
 
 const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\u001f";
-const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/i;
 const SELECTOR_PATTERN = /^stash@\{\d+\}$/;
 
 /** `git stash list --format` template matching {@link parseStashList}. */
@@ -38,11 +38,11 @@ export function parseStashList(stdout: string): StashEntry[] {
     if (!SELECTOR_PATTERN.test(selector)) {
       throw new GitStashListParseError(`Invalid stash selector in Git output: ${selector}.`);
     }
-    if (!OBJECT_ID_PATTERN.test(sha)) {
+    if (!isGitObjectId(sha)) {
       throw new GitStashListParseError(`Invalid stash SHA in Git output: ${sha}.`);
     }
     const parentSha = parents.split(" ")[0];
-    if (parentSha === undefined || !OBJECT_ID_PATTERN.test(parentSha)) {
+    if (parentSha === undefined || !isGitObjectId(parentSha)) {
       throw new GitStashListParseError(`Invalid stash parent in Git output: ${parents}.`);
     }
     const authorDateSeconds = Number.parseInt(epochSeconds, 10);

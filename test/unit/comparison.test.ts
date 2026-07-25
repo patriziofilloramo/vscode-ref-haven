@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 
 import {
+  comparisonLabel,
   deduplicateComparisons,
   hasSameComparisonIdentity,
   sortComparisonsForDisplay,
+  withCustomLabel,
   withMode,
   withPinned,
   withSwappedRefs,
@@ -72,6 +74,26 @@ suite("comparison helpers", () => {
 
   test("withPinned updates the pinned flag", () => {
     assert.equal(withPinned(createComparison({ id: "pin" }), true, 42).pinned, true);
+  });
+
+  test("withCustomLabel sets, prefers, and clears the display name", () => {
+    const base = createComparison({ id: "label" });
+    assert.equal(comparisonLabel(base), "testbranch relative to master");
+
+    const renamed = withCustomLabel(base, "Release audit", 42);
+    assert.equal(renamed.customLabel, "Release audit");
+    assert.equal(renamed.updatedAt, 42);
+    assert.equal(comparisonLabel(renamed), "Release audit");
+
+    const restored = withCustomLabel(renamed, undefined, 43);
+    assert.equal("customLabel" in restored, false);
+    assert.equal(restored.updatedAt, 43);
+    assert.equal(comparisonLabel(restored), "testbranch relative to master");
+
+    for (const invalid of ["", " padded", "line\nbreak", "hidden\u202econtrol", "x".repeat(101)]) {
+      assert.throws(() => withCustomLabel(base, invalid, 44), /comparison name is invalid/u);
+    }
+    assert.equal(withCustomLabel(base, "Review 🚀", 45).customLabel, "Review 🚀");
   });
 
   test("withMode switches the diff mode and bumps the update time", () => {

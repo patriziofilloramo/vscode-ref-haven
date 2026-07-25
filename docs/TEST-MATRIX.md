@@ -52,12 +52,14 @@ partially staged, deleted, renamed, Unicode, whitespace, bracket/pathspec,
 long-path, linked-worktree, clean, untracked, metadata, content-filter, and
 hook scenarios. Tests prove unrelated index/worktree preservation, standard
 stash-list parsing, and `git stash apply --index` compatibility.
-Approved-GitLab coverage includes exact-origin normalization, scheme/port/path
-rejection, credential stripping, HTTP-versus-SSH matching, unsafe encoded
-project paths, immutable commit/tree/compare/file URLs, line ranges,
-issue/MR validation, final-origin enforcement, bounded local remote reading,
-manifest allowlist defaults, command registration, and hover command
-allowlists. No test or activation path opens a browser or contacts a host.
+GitLab coverage includes zero-config HTTP-origin preservation, SSH-to-HTTPS
+inference, invalid/local remote rejection, `origin` preference, exact-origin
+normalization, strict allowlist scheme/port/path enforcement, credential
+stripping, unsafe encoded project paths, immutable commit/tree/compare/file
+URLs, line ranges, issue/MR validation, final-origin enforcement, bounded local
+remote reading, manifest setting semantics, command registration, and hover
+command allowlists. No test or activation path opens a browser or contacts a
+host.
 Comparison-review coverage includes order-independent revision fingerprints,
 endpoint/file-state invalidation, conservative Working Tree invalidation,
 strict bounded record validation, stale-path rejection, closed-comparison
@@ -124,6 +126,13 @@ verify that both file marks survive.
 - rename/copy old/new side selection;
 - binary changes do not invoke text diff;
 - safe comparison labels, descriptions, tooltips, error nodes, modes, and commit section labels;
+- custom comparison labels set, prefer, and clear cleanly against the
+  ref-derived default; persisted labels are rejected when empty, untrimmed,
+  oversized, or contain non-printable characters;
+- GitLab autolinks linkify only boundary-checked `#`/`!` references, keep all
+  surrounding text escaped, reject ASCII and Unicode word-adjacent candidates,
+  percent-encode parentheses, and declare exactly one trusted command; hover
+  summaries and the time-travel action render with validated arguments;
 - repository grouping only when more than one repository exists.
 
 ## Git integration scenarios
@@ -157,7 +166,23 @@ Additional hardening fixtures cover filenames with spaces, tabs, newlines and no
   boundary, and the RefHaven submenu contributes Stash This File;
 - GitLab commands register without enumerating remotes or opening a browser;
   remote URLs are read only in an explicit command path;
-- `refhaven.comparisons` is contributed to Source Control;
+- restricted-origin input accepts only exact HTTP(S) origins, empty input
+  restores zero-config inference, and copied links pass through the same
+  immutable-ref and final-origin validation as browser-open actions;
+- comparison file nodes expose a complete parent chain so native reveal can
+  focus the matching item in both list and compacted-tree layouts;
+- blame at a pinned revision returns that revision's commit and its `previous`
+  metadata, and rejects buffer contents combined with a revision or a
+  non-SHA revision argument;
+- comparison and single-file patches are produced locally, respect literal
+  path limits, cover root commits, include working-tree changes when one
+  endpoint is live, stop above the 5 MiB output ceiling, and reject missing or
+  symbolic revisions;
+- revision-document identity is exposed only for URIs the provider signed
+  itself: tampered, foreign-provider, empty-document, and re-schemed URIs
+  all return null;
+- Branch Comparisons, Stashes, Inspector, and Repository are contributed to
+  Source Control, with the composite views preserving their child providers;
 - New Comparison works by keyboard through repository/base/target/mode picks;
 - Compare Current Branch With uses current branch as target and defaults to branchChanges;
 - restored nodes appear immediately as not computed;
@@ -188,10 +213,12 @@ Before delivering `refhaven-x.y.z.vsix`:
 11. From Source Control, stash a partially staged file while unrelated staged
     and unstaged files are present; verify only the selected path becomes
     clean, then inspect and apply the stash with `--index`.
-12. With no approved GitLab origin, invoke an Open on GitLab action and verify
-    that RefHaven offers Settings without opening a browser. Add the exact
-    internal origin, verify project/commit/comparison/file-line/issue/MR links,
-    then configure a non-matching port and verify fail-closed behavior.
+12. With an empty GitLab origin list, verify HTTP and SSH remotes immediately
+    open the expected project/commit/comparison/file-line/issue/MR targets.
+    Add the exact internal origin and verify strict allowlist behavior, then
+    configure a non-matching port and verify fail-closed behavior. For an SSH
+    remote whose browser uses a custom port, configure that explicit origin and
+    verify it replaces the default HTTPS inference.
 13. Capture the required screenshot with at least three persistent comparisons.
 14. Mark several comparison files reviewed, reload VS Code, and verify progress
     survives while the refs are unchanged. Move the target ref and verify the

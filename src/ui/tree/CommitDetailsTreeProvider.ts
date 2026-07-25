@@ -6,7 +6,7 @@ import type { FileDiffScope } from "../../domain/fileDiffScope";
 import type { CommitFileChanges } from "../../infrastructure/git/GitCli";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatDiffStats, formatRelativeTime } from "../format";
-import { escapeMarkdown } from "../markdown";
+import { GITLAB_AUTOLINK_COMMANDS, escapeMarkdownWithGitLabAutolinks } from "../gitLabAutolinks";
 import {
   buildChangeNodes,
   createFileItem,
@@ -18,8 +18,7 @@ import {
   type MessageNode,
 } from "./changeNodes";
 
-export const COMMIT_DETAILS_VIEW_ID = "refhaven.commitDetails";
-export const COMMIT_DETAILS_FOCUS_COMMAND = `${COMMIT_DETAILS_VIEW_ID}.focus`;
+export const COMMIT_DETAILS_FOCUS_COMMAND = "refhaven.inspector.focus";
 
 export interface DetailNode {
   readonly commitSha: string;
@@ -81,6 +80,10 @@ export class CommitDetailsTreeProvider
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
+  public getCommitLabel(): string | undefined {
+    return this.commit?.sha.slice(0, 8);
+  }
+
   public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -95,7 +98,13 @@ export class CommitDetailsTreeProvider
       item.contextValue = node.parentSha ? "refhaven.commitParent" : "refhaven.commitDetail";
       item.iconPath = new vscode.ThemeIcon(node.icon);
       if (node.tooltip) {
-        item.tooltip = new vscode.MarkdownString(escapeMarkdown(node.tooltip));
+        // Issue/MR shorthand in commit messages links to the approved GitLab
+        // origin; trust is limited to that single command.
+        const tooltip = new vscode.MarkdownString(
+          escapeMarkdownWithGitLabAutolinks(node.tooltip, node.repositoryRoot),
+        );
+        tooltip.isTrusted = { enabledCommands: [...GITLAB_AUTOLINK_COMMANDS] };
+        item.tooltip = tooltip;
       } else {
         item.tooltip = node.description;
       }

@@ -2,7 +2,15 @@ import { dirname, isAbsolute, relative, sep } from "node:path";
 
 import * as vscode from "vscode";
 
+import {
+  EXTENSION_CONFIGURATION_SECTION,
+  EXTENSION_SETTING_DEFAULTS,
+  EXTENSION_SETTINGS,
+  getExtensionConfiguration,
+  readExtensionSetting,
+} from "../config/extensionConfiguration";
 import type { Logger } from "./Logger";
+import { runInBackground } from "./errorHandling";
 import type { LineBlame } from "../domain/blame";
 import { shortSha } from "../domain/comparisonResult";
 import { blameLine, findRepositoryRoot, readGitUserName } from "../infrastructure/git/GitCli";
@@ -15,10 +23,6 @@ import {
 } from "../ui/blame/blamePresentation";
 import { COMMAND_IDS } from "../ui/commands/commandIds";
 
-const CONFIG_SECTION = "refhaven";
-const INLINE_BLAME_SETTING = "inlineBlame.enabled";
-const LINE_HOVER_SETTING = "lineHover.enabled";
-const STATUS_BAR_BLAME_SETTING = "statusBarBlame.enabled";
 const UPDATE_DEBOUNCE_MS = 250;
 
 interface CurrentLineBlame {
@@ -64,7 +68,7 @@ export class BlameController implements vscode.Disposable {
         if (event.document === vscode.window.activeTextEditor?.document) this.scheduleUpdate();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration(CONFIG_SECTION)) this.scheduleUpdate();
+        if (event.affectsConfiguration(EXTENSION_CONFIGURATION_SECTION)) this.scheduleUpdate();
       }),
     );
     this.scheduleUpdate();
@@ -86,9 +90,16 @@ export class BlameController implements vscode.Disposable {
   }
 
   public async toggleInlineBlame(): Promise<void> {
-    const configuration = vscode.workspace.getConfiguration(CONFIG_SECTION);
-    const enabled = configuration.get<boolean>(INLINE_BLAME_SETTING, true);
-    await configuration.update(INLINE_BLAME_SETTING, !enabled, vscode.ConfigurationTarget.Global);
+    const configuration = getExtensionConfiguration();
+    const enabled = configuration.get<boolean>(
+      EXTENSION_SETTINGS.inlineBlameEnabled,
+      EXTENSION_SETTING_DEFAULTS.inlineBlameEnabled,
+    );
+    await configuration.update(
+      EXTENSION_SETTINGS.inlineBlameEnabled,
+      !enabled,
+      vscode.ConfigurationTarget.Global,
+    );
     void vscode.window.showInformationMessage(
       enabled ? "Inline blame disabled." : "Inline blame enabled.",
     );
@@ -174,12 +185,7 @@ export class BlameController implements vscode.Disposable {
   private scheduleUpdate(): void {
     if (this.updateTimer) clearTimeout(this.updateTimer);
     this.updateTimer = setTimeout(() => {
-      this.update().catch((error: unknown) => {
-        this.logger.error("Line blame update failed", {
-          message: error instanceof Error ? error.message : String(error),
-          operation: "lineBlame",
-        });
-      });
+      runInBackground(this.update(), this.logger, "Line blame update failed", "lineBlame");
     }, UPDATE_DEBOUNCE_MS);
   }
 
@@ -188,10 +194,18 @@ export class BlameController implements vscode.Disposable {
     const abortController = new AbortController();
     this.activeUpdate = abortController;
     const generation = ++this.generation;
-    const configuration = vscode.workspace.getConfiguration(CONFIG_SECTION);
-    const inlineEnabled = configuration.get<boolean>(INLINE_BLAME_SETTING, true);
-    const richHoverEnabled = configuration.get<boolean>(LINE_HOVER_SETTING, true);
-    const statusBarEnabled = configuration.get<boolean>(STATUS_BAR_BLAME_SETTING, true);
+    const inlineEnabled = readExtensionSetting<boolean>(
+      EXTENSION_SETTINGS.inlineBlameEnabled,
+      EXTENSION_SETTING_DEFAULTS.inlineBlameEnabled,
+    );
+    const richHoverEnabled = readExtensionSetting<boolean>(
+      EXTENSION_SETTINGS.lineHoverEnabled,
+      EXTENSION_SETTING_DEFAULTS.lineHoverEnabled,
+    );
+    const statusBarEnabled = readExtensionSetting<boolean>(
+      EXTENSION_SETTINGS.statusBarBlameEnabled,
+      EXTENSION_SETTING_DEFAULTS.statusBarBlameEnabled,
+    );
 
     const editor = vscode.window.activeTextEditor;
     if ((!inlineEnabled && !statusBarEnabled) || editor?.document.uri.scheme !== "file") {

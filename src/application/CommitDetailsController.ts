@@ -12,11 +12,11 @@ import { pickRepository } from "../ui/pickers/comparisonPickers";
 import {
   COMMIT_DETAILS_FOCUS_COMMAND,
   type DetailNode,
-  type CommitDetailsTreeNode,
   type CommitDetailsTreeProvider,
 } from "../ui/tree/CommitDetailsTreeProvider";
 import { formatRelativeTime } from "../ui/format";
 import type { Logger } from "./Logger";
+import { showTransientSuccess } from "../ui/feedback";
 import type { ComparisonController } from "./ComparisonController";
 
 interface SearchModeItem extends vscode.QuickPickItem {
@@ -26,21 +26,19 @@ interface SearchModeItem extends vscode.QuickPickItem {
 export class CommitDetailsController {
   public constructor(
     private readonly treeProvider: CommitDetailsTreeProvider,
-    private readonly treeView: vscode.TreeView<CommitDetailsTreeNode>,
     private readonly comparisonController: ComparisonController,
     private readonly logger: Logger,
   ) {}
 
   public async show(repositoryRoot: string, commit: CommitInfo): Promise<void> {
     this.treeProvider.setCommit(repositoryRoot, commit);
-    this.treeView.description = commit.sha.slice(0, 8);
     await vscode.commands.executeCommand(COMMIT_DETAILS_FOCUS_COMMAND);
     this.logger.info("Opened commit details", { operation: "showCommitDetails" });
   }
 
   public async copyDetail(node: DetailNode): Promise<void> {
     await vscode.env.clipboard.writeText(node.copyValue);
-    void vscode.window.showInformationMessage(`${node.label} copied to the clipboard.`);
+    showTransientSuccess(`${node.label} copied`);
   }
 
   public async openParent(node: DetailNode): Promise<void> {

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
+import { MAX_INTERACTIVE_INPUT_LENGTH } from "../../domain/inputLimits";
 import { resolveRef } from "../../infrastructure/git/GitCli";
 
 interface BranchQuickPickItem extends vscode.QuickPickItem {
@@ -129,7 +130,7 @@ function toBranchItem(
 
 function validateRevisionInput(value: string): string | undefined {
   if (value.length === 0) return "Enter a revision.";
-  if (value.length > 256) return "Revision is too long.";
+  if (value.length > MAX_INTERACTIVE_INPUT_LENGTH) return "Revision is too long.";
   if (value.startsWith("-") || value.includes("\0") || /[\r\n]/u.test(value)) {
     return "Revision contains unsupported characters.";
   }

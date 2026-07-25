@@ -160,21 +160,22 @@ recoverable stash in place. Mutating commands override `core.hooksPath` with a
 private empty path, and the operation refuses content filters before any
 worktree/index mutation. Once started, it is intentionally not cancellable.
 
-## Approved GitLab URL semantics
+## GitLab browser URL semantics
 
-GitLab actions enumerate only locally configured remotes and require an
-empty-by-default allowlist of exact HTTP(S) origins. HTTP remotes match the
-complete origin, including the effective port. SSH and scp-style remotes match
-only the hostname and require an explicit choice when several approved browser
-origins share it.
+GitLab actions enumerate only locally configured remotes. With the default
+empty origin list, HTTP(S) remotes supply their exact browser origin and SSH or
+scp-style remotes infer HTTPS on the same hostname. A non-empty configured list
+becomes a strict allowlist: HTTP remotes match the complete origin, including
+the effective port, while SSH remotes match only the hostname and require an
+explicit choice when several allowed browser origins share it.
 
 Every symbolic reference is resolved locally to a full commit object ID before
 URL construction. Comparison URLs therefore use `<baseSha>...<targetSha>`,
 branch and tag actions use immutable tree URLs, and file URLs are emitted only
 after `git ls-tree` confirms that the exact literal path is a blob at the
 selected SHA. Project and file path segments are decoded once, validated, and
-encoded again. The completed URL must still have the approved origin before it
-is passed to `vscode.env.openExternal`.
+encoded again. The completed URL must still have the selected, policy-matched
+origin before it is passed to `vscode.env.openExternal`.
 
 RefHaven does not perform an HTTP request, follow redirects, read browser
 credentials, or persist/log the resulting URL. Browser and server behavior

@@ -2,6 +2,10 @@
 
 RefHaven ships with zero production dependencies. All direct packages are development-only, exact-pinned in `package.json`, integrity-pinned in `package-lock.json`, and omitted from the VSIX. Source maps remain available for local development but are excluded from the package, which contains only compiled JavaScript and documentation.
 
+Unit tests also require the root package name and release version in
+`package-lock.json` to match `package.json`, preventing stale lockfile metadata
+from reaching a packaged batch.
+
 ## Direct development dependencies
 
 | Package                                      | Purpose                                                                 |
@@ -37,9 +41,16 @@ npm run test:unit
 npm run test:extension
 npm run lint
 npm run compile
+npm run quality
 npm run format:check
 npm run package
 npx vsce ls --no-dependencies
 ```
 
 An update is accepted only when the supported Node/VS Code matrix remains valid, the complete audit is clean, registry signatures verify, tests pass, and the packaged file list contains no dependency tree.
+
+The quality guard also rejects runtime dependencies, non-exact direct
+development pins, missing branding assets, oversized source files, duplicated
+setting literals, and direct exception-message logging. These checks are
+deliberately implemented with Node built-ins so the guard introduces no new
+supply-chain surface.

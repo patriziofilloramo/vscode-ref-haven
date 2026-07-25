@@ -3,6 +3,7 @@ import { basename, isAbsolute } from "node:path";
 
 import * as vscode from "vscode";
 
+import { isGitObjectId } from "../../domain/gitObjectId";
 import { assertRepositoryRelativeGitPath } from "../../domain/pathValidation";
 import { readFileAtRevision } from "../../infrastructure/git/GitCli";
 import { BoundedPromiseCache } from "./BoundedPromiseCache";
@@ -21,6 +22,13 @@ interface GitRevisionRequest {
 }
 
 type RevisionRequest = EmptyRevisionRequest | GitRevisionRequest;
+
+/** Verified identity of a RefHaven revision document. */
+export interface RevisionDocumentIdentity {
+  readonly filePath: string;
+  readonly repositoryRoot: string;
+  readonly sha: string;
+}
 
 export class BinaryRevisionError extends Error {
   public constructor() {
@@ -42,13 +50,33 @@ export class GitRevisionContentProvider implements vscode.TextDocumentContentPro
 
   public createRevisionUri(repositoryRoot: string, sha: string, filePath: string): vscode.Uri {
     if (!isAbsolute(repositoryRoot)) throw new Error("Repository root must be absolute.");
-    if (!/^[0-9a-f]{40,64}$/i.test(sha)) throw new Error("Revision SHA is invalid.");
+    if (!isGitObjectId(sha)) throw new Error("Revision SHA is invalid.");
     assertRepositoryRelativeGitPath(filePath);
     return this.createUri({ filePath, kind: "revision", repositoryRoot, sha }, filePath);
   }
 
   public provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
     return this.loadContent(uri);
+  }
+
+  /**
+   * Returns the revision identity of a URI this provider signed, or null.
+   * Only HMAC-verified URIs are trusted, so document metadata cannot be
+   * forged by other extensions or restored editor state.
+   */
+  public parseVerifiedRevisionUri(uri: vscode.Uri): RevisionDocumentIdentity | null {
+    if (uri.scheme !== REVISION_DOCUMENT_SCHEME) return null;
+    try {
+      const request = parseRequest(this.verifyAndExtractPayload(uri.query));
+      if (request.kind !== "revision") return null;
+      return {
+        filePath: request.filePath,
+        repositoryRoot: request.repositoryRoot,
+        sha: request.sha.toLowerCase(),
+      };
+    } catch {
+      return null;
+    }
   }
 
   public async prepareTextDiff(left: vscode.Uri, right: vscode.Uri): Promise<void> {
@@ -142,7 +170,7 @@ function parseRequest(payload: string): RevisionRequest {
     typeof request.repositoryRoot !== "string" ||
     !isAbsolute(request.repositoryRoot) ||
     typeof request.sha !== "string" ||
-    !/^[0-9a-f]{40,64}$/i.test(request.sha) ||
+    !isGitObjectId(request.sha) ||
     typeof request.filePath !== "string"
   ) {
     throw new Error("RefHaven revision URI is invalid.");

@@ -73,6 +73,44 @@ suite("rich blame hover", () => {
     assert.match(markdown, /command:refhaven\.openGitLabFile\?/u);
   });
 
+  test("offers time-travel to the revision before the blamed commit", () => {
+    const markdown = richBlameHoverMarkdown(data(), NOW);
+    const beforeLink =
+      /\[Before This Change\]\(command:refhaven\.openFileAtRevision\?([^)\s]+)\)/u.exec(markdown);
+    assert.ok(beforeLink?.[1]);
+    assert.deepEqual(JSON.parse(decodeURIComponent(beforeLink[1])), [
+      "C:\\repo",
+      PARENT_SHA,
+      "src/older-example.ts",
+    ]);
+
+    const blame = data().blame;
+    const withoutPrevious = data({
+      blame: {
+        authorDate: blame.authorDate,
+        authorName: blame.authorName,
+        isCommitted: blame.isCommitted,
+        path: blame.path,
+        sha: blame.sha,
+        summary: blame.summary,
+      },
+    });
+    assert.doesNotMatch(richBlameHoverMarkdown(withoutPrevious, NOW), /Before This Change/u);
+  });
+
+  test("autolinks GitLab references in the commit summary", () => {
+    const markdown = richBlameHoverMarkdown(
+      data({ blame: { ...data().blame, summary: "fix login flow (#12, !34)" } }),
+      NOW,
+    );
+
+    const references = [
+      ...markdown.matchAll(/\]\(command:refhaven\.openGitLabReference\?([^)\s]+)\)/gu),
+    ];
+    assert.equal(references.length, 2);
+    assert.deepEqual(JSON.parse(decodeURIComponent(references[0]?.[1] ?? "")), ["C:\\repo", "#12"]);
+  });
+
   test("escapes Git metadata and contains backticks safely inside the diff fence", () => {
     const malicious = data({
       blame: {

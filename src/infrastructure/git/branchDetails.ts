@@ -1,8 +1,8 @@
 import type { BranchDetails } from "../../domain/repositoryNavigation";
+import { isGitObjectId } from "../../domain/gitObjectId";
 
 const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\0";
-const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/u;
 
 export const BRANCH_DETAILS_FORMAT =
   "%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)%00%(upstream:track)%00%(authorname)%00%(authordate:unix)%00%(subject)%1e";
@@ -19,7 +19,7 @@ export function parseBranchDetails(output: string): BranchDetails[] {
       !fullName ||
       !displayName ||
       !sha ||
-      !OBJECT_ID_PATTERN.test(sha) ||
+      !isGitObjectId(sha) ||
       authorName === undefined ||
       epoch === undefined ||
       subject === undefined ||

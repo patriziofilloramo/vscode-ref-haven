@@ -6,12 +6,19 @@ RefHaven is designed for repositories whose data may be processed only on the
 workstation or by repository services explicitly approved by the organisation.
 The installed extension has no telemetry, analytics, hosted backend, HTTP
 client, API authentication, runtime dependency, or automatic fetch.
+RefHaven declares untrusted and virtual workspaces unsupported because its
+features execute the local Git binary and require a trusted filesystem-backed
+repository.
 
 The sole remote-aware feature builds GitLab browser URLs after an explicit user
-command. The allowlist defaults to empty and accepts only exact HTTP(S) origins
-without paths or credentials. RefHaven reads remote URLs locally, strips any
-remote user information by construction, resolves refs to local immutable
-SHAs, validates the final URL origin again, and then passes it to
+command. Copy actions place the same validated URL on the operating-system
+clipboard without contacting it. With the default empty origin setting,
+RefHaven derives an exact
+browser origin from a validated local remote: HTTP(S) keeps its origin and SSH
+defaults to HTTPS on the same hostname. A non-empty setting becomes a strict
+allowlist of exact HTTP(S) origins without paths or credentials. RefHaven
+strips remote user information by construction, resolves refs to local
+immutable SHAs, validates the final URL origin again, and then passes it to
 `vscode.env.openExternal`. It never contacts a host merely because a remote
 exists, never makes an HTTP/API request, never follows a redirect, and never
 stores or logs remote URLs, project paths, file paths, or response data.
@@ -55,7 +62,8 @@ remain outside scope. RefHaven also makes the mutation non-cancellable after
 it starts: terminating Git while it is updating objects, refs, or the real
 index would be less safe than allowing the bounded local operation to finish.
 
-For the same reason, the Branches and Worktrees views are read-only. They can
+For the same reason, the Branches and Worktrees sections in the Repository
+view are read-only. They can
 copy metadata, create RefHaven comparison records, and ask VS Code to open an
 already enumerated local worktree, but they never checkout/create/delete a
 branch or add/remove a worktree. Command arguments are checked against fresh
@@ -96,9 +104,33 @@ patch output is capped at 64 KiB and the displayed preview is capped again;
 neither hover metadata nor patch content is persisted or logged.
 
 GitLab links in line hovers are inert command URIs until clicked. Hover loading
-does not enumerate remotes, open a browser, or perform network activity.
+does not enumerate remotes, open a browser, or perform network activity. The
+same applies to autolinked `#issue`/`!merge-request` shorthand in commit
+summaries and Commit Details messages: the trusted-Markdown allowlist for
+those surfaces contains only the reference-opening command, whose arguments
+are revalidated against the workspace and the active origin policy when
+clicked.
 
-Logs exclude file contents and redact credential-, secret-, environment-, token-, and remote-related metadata. Copy commands write only the explicitly selected value to the operating-system clipboard.
+Rich line hovers also work on RefHaven revision documents. A revision document
+is trusted only when its URI's session HMAC verifies and its repository is
+still part of the workspace; blame then runs at the pinned SHA through the
+same transport-blocked Git policy.
+
+Patch export writes a locally produced unified diff to the clipboard or to a
+local-filesystem location the user picks in a save dialog. RefHaven rejects
+non-file URI schemes, never writes patches to implicit locations, and does not
+persist or log patch content. An optional comparison display name is stored in
+`workspaceState` alongside the comparison specification; it is trimmed, capped
+at 100 characters, and rejected when it contains non-printable
+characters. The same rules are reapplied when persisted state is loaded.
+
+Operational logs contain stable event text, bounded operation identifiers,
+counts/durations, and sanitized error kinds. Exception messages are never
+copied into logs. Metadata keys associated with authors, branches, commit
+messages, email addresses, paths, refs, repositories, SHAs, remotes,
+credentials, secrets, environment values, tokens, or file content are
+redacted. Copy commands write only the explicitly selected value to the
+operating-system clipboard.
 
 ## Trust boundaries
 
@@ -121,13 +153,24 @@ process from running a different Git command.
 
 For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; RefHaven itself neither enables nor calls remote Git operations.
 
-For GitLab links, approve only organisation-controlled origins. RefHaven
-validates the URL handed to the operating system but cannot constrain what an
-external browser does after navigation, including server-directed redirects.
-No GitLab API token or browser credential is read by the extension.
+For strict GitLab deployments, configure only organisation-controlled origins.
+The **Configure Restricted GitLab Origin...** command writes one exact origin
+to the current workspace (or to the user profile when no workspace is open);
+an empty value restores zero-config inference. Configure the JSON array
+directly only when several exact origins are required.
+When the setting is empty, review repository remotes before using GitLab
+actions; an SSH remote with a non-default browser port should be mapped through
+the explicit setting. RefHaven validates the URL handed to the operating system
+but cannot constrain what an external browser does after navigation, including
+server-directed redirects. No GitLab API token or browser credential is read
+by the extension.
 
 ## Supply-chain policy
 
 The VSIX contains compiled extension code and documentation only; development dependencies are excluded with `vsce package --no-dependencies`. Production dependencies are prohibited. Development dependencies are exact-pinned in `package.json`, integrity-pinned in `package-lock.json`, kept minimal, and checked with `npm audit` before release.
+
+The dependency-free `npm run quality` guard rejects production dependencies,
+non-exact direct development pins, missing branding assets, duplicated setting
+literals, oversized source files, and direct exception-message logging.
 
 Security updates take precedence over feature updates. A newer development package is not adopted when it requires an unsupported runtime or introduces a known advisory; the newest compatible audit-clean version is retained until a safe upgrade is available.

@@ -6,8 +6,7 @@ import { formatRelativeTime } from "../format";
 import { escapeMarkdown } from "../markdown";
 import { COMMAND_IDS } from "../commands/commandIds";
 
-export const FILE_HISTORY_VIEW_ID = "refhaven.fileHistory";
-export const FILE_HISTORY_FOCUS_COMMAND = `${FILE_HISTORY_VIEW_ID}.focus`;
+export const FILE_HISTORY_FOCUS_COMMAND = "refhaven.inspector.focus";
 
 export interface FileHistoryNode {
   readonly entry: FileHistoryEntry;
@@ -42,6 +41,14 @@ export class FileHistoryTreeProvider
 
   public getFilter(): string {
     return this.filter;
+  }
+
+  public getTargetLabel(): string | undefined {
+    return this.target?.filePath.split("/").at(-1);
+  }
+
+  public hasTarget(): boolean {
+    return this.target !== undefined;
   }
 
   public setFilter(filter: string): void {

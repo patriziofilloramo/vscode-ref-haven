@@ -11,13 +11,16 @@ import {
   readWorktreeState,
 } from "../infrastructure/git/GitCli";
 import type { BranchNode, BranchesTreeProvider } from "../ui/tree/BranchesTreeProvider";
+import type { RepositoryTreeNode } from "../ui/tree/RepositoryTreeProvider";
 import type { WorktreeNode, WorktreesTreeProvider } from "../ui/tree/WorktreesTreeProvider";
 import { pathIdentityKey } from "../domain/pathValidation";
 import type { WorktreeInfo } from "../domain/worktree";
+import { showTransientSuccess } from "../ui/feedback";
 
 export class RepositoryNavigationController {
   public constructor(
     private readonly branchesProvider: BranchesTreeProvider,
+    private readonly repositoryTreeView: vscode.TreeView<RepositoryTreeNode>,
     private readonly worktreesProvider: WorktreesTreeProvider,
     private readonly comparisonController: ComparisonController,
     private readonly logger: Logger,
@@ -41,9 +44,50 @@ export class RepositoryNavigationController {
     await this.comparisonController.compareReferenceWithCurrent(node.repository, node.branch);
   }
 
+  public async compareSelectedBranches(): Promise<void> {
+    const branches = this.repositoryTreeView.selection.filter(
+      (node): node is BranchNode => node.kind === "branch",
+    );
+    if (branches.length !== 2) {
+      throw new Error("Select exactly two branches under Repository first.");
+    }
+    const [first, second] = branches;
+    if (!first || !second) throw new Error("Select exactly two branches first.");
+    if (
+      pathIdentityKey(first.repository.rootPath) !== pathIdentityKey(second.repository.rootPath)
+    ) {
+      throw new Error("Select two branches from the same repository.");
+    }
+    const selected = await vscode.window.showQuickPick(
+      [
+        {
+          branch: first,
+          description: `${second.branch.displayName} becomes the base`,
+          label: first.branch.displayName,
+        },
+        {
+          branch: second,
+          description: `${first.branch.displayName} becomes the base`,
+          label: second.branch.displayName,
+        },
+      ],
+      {
+        placeHolder: "The other selected branch will be used as the base",
+        title: "RefHaven: Select the Target Branch",
+      },
+    );
+    if (!selected) return;
+    const base = selected.branch === first ? second : first;
+    await this.comparisonController.compareReferences(
+      selected.branch.repository,
+      base.branch,
+      selected.branch.branch,
+    );
+  }
+
   public async copyBranchName(node: BranchNode): Promise<void> {
     await vscode.env.clipboard.writeText(node.branch.displayName);
-    void vscode.window.showInformationMessage("Branch name copied to the clipboard.");
+    showTransientSuccess("Branch name copied");
   }
 
   public async openWorktree(node: WorktreeNode): Promise<void> {
@@ -56,7 +100,7 @@ export class RepositoryNavigationController {
   public async copyWorktreePath(node: WorktreeNode): Promise<void> {
     const worktree = await this.verifyWorktree(node);
     await vscode.env.clipboard.writeText(worktree.path);
-    void vscode.window.showInformationMessage("Worktree path copied to the clipboard.");
+    showTransientSuccess("Worktree path copied");
   }
 
   public installLoaders(): void {

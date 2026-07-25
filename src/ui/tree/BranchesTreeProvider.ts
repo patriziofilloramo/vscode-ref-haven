@@ -8,8 +8,6 @@ import { COMMAND_IDS } from "../commands/commandIds";
 import { formatRelativeTime } from "../format";
 import { escapeMarkdown } from "../markdown";
 
-export const BRANCHES_VIEW_ID = "refhaven.branches";
-
 export interface BranchRepositoryNode {
   readonly kind: "branchRepository";
   readonly repository: RepositoryIdentity;

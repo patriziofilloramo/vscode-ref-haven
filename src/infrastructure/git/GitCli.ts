@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import * as vscode from "vscode";
 
@@ -11,7 +9,9 @@ import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
 import type { CommitDetails, CommitSearchKind } from "../../domain/commitDetails";
 import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
 import type { FileHistoryEntry } from "../../domain/history";
+import { MAX_INTERACTIVE_INPUT_LENGTH, MAX_STASH_MESSAGE_LENGTH } from "../../domain/inputLimits";
 import type { ChangedLineRange } from "../../domain/fileAnnotations";
+import { isGitObjectId, requireGitObjectId } from "../../domain/gitObjectId";
 import type { GitRemoteUrl } from "../../domain/gitLab";
 import type { BranchDetails, WorktreeState } from "../../domain/repositoryNavigation";
 import {
@@ -34,30 +34,18 @@ import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
 import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
 import { parseWorktreeList } from "./worktreeList";
 import { parseWorktreeStatus } from "./worktreeStatus";
-import { GitScheduler } from "./GitScheduler";
-import { buildLocalOnlyGitArguments, buildLocalOnlyGitEnvironment } from "./gitProcessPolicy";
+import {
+  GitOperationError,
+  normalizeGitError,
+  runGit,
+  runGitBuffer,
+  runGitWithInput,
+  runGitWithTemporaryIndex,
+} from "./GitProcess";
 import { buildRepositoryIdentities } from "./repositoryDiscovery";
 
-const execFileAsync = promisify(execFile);
-const MAX_GIT_OUTPUT_BYTES = 5 * 1024 * 1024;
 const MAX_HOVER_DIFF_BYTES = 64 * 1024;
-const MAX_GIT_INPUT_BYTES = 5 * 1024 * 1024;
-const DEFAULT_GIT_TIMEOUT_SECONDS = 30;
-const MAX_GIT_TIMEOUT_SECONDS = 300;
-const scheduler = new GitScheduler(4, 2);
-
-export type GitOperationErrorCode = "commandCancelled" | "commandTimedOut" | "outputTooLarge";
-
-export class GitOperationError extends Error {
-  public constructor(
-    public readonly code: GitOperationErrorCode,
-    message: string,
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.name = "GitOperationError";
-  }
-}
+export { GitOperationError } from "./GitProcess";
 
 interface GitApiRepository {
   readonly rootUri: vscode.Uri;
@@ -586,7 +574,7 @@ export async function stashTrackedFile(
   const normalizedMessage = message.trim();
   if (
     normalizedMessage.length === 0 ||
-    normalizedMessage.length > 500 ||
+    normalizedMessage.length > MAX_STASH_MESSAGE_LENGTH ||
     normalizedMessage.includes("\0")
   ) {
     throw new Error("The stash message must contain between 1 and 500 characters.");
@@ -757,14 +745,22 @@ export async function blameLine(
   line: number,
   contents?: string,
   signal?: AbortSignal,
+  revision?: string,
 ): Promise<LineBlame | null> {
   assertRepositoryRelativeGitPath(filePath);
+  if (revision !== undefined) {
+    if (!isGitObjectId(revision)) throw new Error("The blame revision is invalid.");
+    if (contents !== undefined) {
+      throw new Error("Blame accepts either buffer contents or a revision, not both.");
+    }
+  }
   const args = [
     "blame",
     "--porcelain",
     "-L",
     `${line.toString()},${line.toString()}`,
     ...(contents === undefined ? [] : ["--contents", "-"]),
+    ...(revision === undefined ? [] : [revision]),
     "--",
     filePath,
   ];
@@ -805,7 +801,7 @@ export async function listChangedLineRanges(
   signal?: AbortSignal,
 ): Promise<ChangedLineRange[]> {
   assertRepositoryRelativeGitPath(filePath);
-  if (!/^[0-9a-f]{40,64}$/u.test(baseSha)) throw new Error("The base commit SHA is invalid.");
+  if (!isGitObjectId(baseSha)) throw new Error("The base commit SHA is invalid.");
   const stdout = await runGit(
     repositoryRoot,
     ["diff", "--no-ext-diff", "--no-textconv", "--unified=0", baseSha, "--", filePath],
@@ -838,7 +834,7 @@ export async function fileExistsAtRevision(
   signal?: AbortSignal,
 ): Promise<boolean> {
   assertRepositoryRelativeGitPath(filePath);
-  if (!/^[0-9a-f]{40,64}$/u.test(sha)) throw new Error("The file revision SHA is invalid.");
+  if (!isGitObjectId(sha)) throw new Error("The file revision SHA is invalid.");
   const output = await runGit(
     repositoryRoot,
     ["ls-tree", "-z", "--full-tree", sha, "--", filePath],
@@ -884,6 +880,57 @@ export async function readCommitDiffPreview(
   }
 }
 
+/**
+ * Reads a shareable unified diff between two immutable revisions, a revision
+ * and the working tree (`toSha === null`), or a root commit and the empty
+ * tree (`fromSha === null`). Optionally limited to specific literal paths.
+ */
+export async function readComparisonPatch(
+  repositoryRoot: string,
+  fromSha: string | null,
+  toSha: string | null,
+  filePaths: readonly string[] = [],
+  signal?: AbortSignal,
+): Promise<string> {
+  for (const filePath of filePaths) assertRepositoryRelativeGitPath(filePath);
+  for (const sha of [fromSha, toSha]) {
+    if (sha !== null && !isGitObjectId(sha)) {
+      throw new Error("The patch revision is invalid.");
+    }
+  }
+  const pathspecArgs = filePaths.length > 0 ? ["--", ...filePaths] : [];
+  let args: string[];
+  if (fromSha !== null) {
+    args = [
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--find-renames",
+      "--patch",
+      fromSha,
+      ...(toSha === null ? [] : [toSha]),
+      ...pathspecArgs,
+    ];
+  } else if (toSha !== null) {
+    args = [
+      "show",
+      "--format=",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--find-renames",
+      "--patch",
+      toSha,
+      ...pathspecArgs,
+    ];
+  } else {
+    throw new Error("A patch needs at least one resolved revision.");
+  }
+  const stdout = await runGit(repositoryRoot, args, signal).catch((error: unknown) =>
+    failGitOperation(error, "Git could not produce a patch for this selection."),
+  );
+  return stdout;
+}
+
 export async function resolveGitMetadataPaths(
   repositoryRoot: string,
   signal?: AbortSignal,
@@ -900,136 +947,6 @@ export async function resolveGitMetadataPaths(
       }),
     ).values(),
   ];
-}
-
-async function runGit(
-  cwd: string,
-  args: readonly string[],
-  signal?: AbortSignal,
-  maxOutputBytes = MAX_GIT_OUTPUT_BYTES,
-): Promise<string> {
-  return scheduler.run(
-    pathIdentityKey(cwd),
-    async () => {
-      try {
-        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
-          cwd,
-          env: buildLocalOnlyGitEnvironment(process.env),
-          maxBuffer: maxOutputBytes,
-          signal,
-          timeout: gitTimeoutMs(),
-          windowsHide: true,
-        });
-        return stdout;
-      } catch (error) {
-        throw normalizeGitError(error);
-      }
-    },
-    signal,
-  );
-}
-
-async function runGitWithTemporaryIndex(
-  cwd: string,
-  args: readonly string[],
-  temporaryIndex: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  return scheduler.run(
-    pathIdentityKey(cwd),
-    async () => {
-      try {
-        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
-          cwd,
-          env: {
-            ...buildLocalOnlyGitEnvironment(process.env),
-            GIT_INDEX_FILE: temporaryIndex,
-          },
-          maxBuffer: MAX_GIT_OUTPUT_BYTES,
-          signal,
-          timeout: gitTimeoutMs(),
-          windowsHide: true,
-        });
-        return stdout;
-      } catch (error) {
-        throw normalizeGitError(error);
-      }
-    },
-    signal,
-  );
-}
-
-async function runGitBuffer(
-  cwd: string,
-  args: readonly string[],
-  signal?: AbortSignal,
-): Promise<Buffer> {
-  return scheduler.run(
-    pathIdentityKey(cwd),
-    async () => {
-      try {
-        const { stdout } = await execFileAsync("git", buildLocalOnlyGitArguments(args), {
-          cwd,
-          encoding: "buffer",
-          env: buildLocalOnlyGitEnvironment(process.env),
-          maxBuffer: MAX_GIT_OUTPUT_BYTES,
-          signal,
-          timeout: gitTimeoutMs(),
-          windowsHide: true,
-        });
-        return stdout;
-      } catch (error) {
-        throw normalizeGitError(error);
-      }
-    },
-    signal,
-  );
-}
-
-/** Like {@link runGit}, but optionally feeds `input` to Git's stdin. */
-function runGitWithInput(
-  cwd: string,
-  args: readonly string[],
-  input: string | undefined,
-  signal?: AbortSignal,
-  temporaryIndex?: string,
-): Promise<string> {
-  if (input !== undefined && Buffer.byteLength(input, "utf8") > MAX_GIT_INPUT_BYTES) {
-    return Promise.reject(new Error("The Git operation input is too large to process safely."));
-  }
-  return scheduler.run(
-    pathIdentityKey(cwd),
-    () =>
-      new Promise((resolve, reject) => {
-        const child = execFile(
-          "git",
-          buildLocalOnlyGitArguments(args),
-          {
-            cwd,
-            env: {
-              ...buildLocalOnlyGitEnvironment(process.env),
-              ...(temporaryIndex ? { GIT_INDEX_FILE: temporaryIndex } : {}),
-            },
-            maxBuffer: MAX_GIT_OUTPUT_BYTES,
-            signal,
-            timeout: gitTimeoutMs(),
-            windowsHide: true,
-          },
-          (error, stdout) => {
-            if (error) {
-              reject(normalizeGitError(error));
-            } else resolve(stdout);
-          },
-        );
-        if (input !== undefined && child.stdin) {
-          child.stdin.on("error", () => {
-            // Git may exit before consuming stdin; the exec callback reports it.
-          });
-          child.stdin.end(input);
-        }
-      }),
-    signal,
-  );
 }
 
 function hasActiveGitFilter(output: string): boolean {
@@ -1214,7 +1131,9 @@ function withoutGitHooks(hooksPath: string, args: readonly string[]): string[] {
 }
 
 function isSafeRemoteName(value: string): boolean {
-  if (value.length === 0 || value.length > 256 || value.startsWith("-")) return false;
+  if (value.length === 0 || value.length > MAX_INTERACTIVE_INPUT_LENGTH || value.startsWith("-")) {
+    return false;
+  }
   for (const character of value) {
     if (character.charCodeAt(0) <= 0x20 || character.charCodeAt(0) === 0x7f) return false;
   }
@@ -1222,9 +1141,7 @@ function isSafeRemoteName(value: string): boolean {
 }
 
 function parseObjectId(stdout: string, errorMessage: string): string {
-  const objectId = stdout.trim();
-  if (!/^[0-9a-f]{40,64}$/i.test(objectId)) throw new Error(errorMessage);
-  return objectId;
+  return requireGitObjectId(stdout.trim(), errorMessage);
 }
 
 async function resolveOptionalCommit(repositoryRoot: string, ref: string): Promise<string | null> {
@@ -1247,43 +1164,6 @@ function discoverFromGitExtension(): string[] {
   } catch {
     return [];
   }
-}
-
-function gitTimeoutMs(): number {
-  const configured = vscode.workspace
-    .getConfiguration("refhaven")
-    .get<number>("git.timeoutSeconds", DEFAULT_GIT_TIMEOUT_SECONDS);
-  const seconds = Number.isFinite(configured)
-    ? Math.min(MAX_GIT_TIMEOUT_SECONDS, Math.max(1, configured))
-    : DEFAULT_GIT_TIMEOUT_SECONDS;
-  return seconds * 1000;
-}
-
-function normalizeGitError(error: unknown): Error {
-  if (error instanceof GitOperationError) return error;
-  const candidate = error as {
-    readonly code?: unknown;
-    readonly killed?: unknown;
-    readonly name?: unknown;
-  };
-  if (candidate.name === "AbortError") {
-    return new GitOperationError("commandCancelled", "The Git operation was cancelled.", {
-      cause: error,
-    });
-  }
-  if (candidate.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
-    return new GitOperationError(
-      "outputTooLarge",
-      "Git produced more output than RefHaven can safely process.",
-      { cause: error },
-    );
-  }
-  if (candidate.killed === true) {
-    return new GitOperationError("commandTimedOut", "The Git operation timed out.", {
-      cause: error,
-    });
-  }
-  return error instanceof Error ? error : new Error("Git invocation failed.");
 }
 
 function failGitOperation(error: unknown, safeMessage: string): never {

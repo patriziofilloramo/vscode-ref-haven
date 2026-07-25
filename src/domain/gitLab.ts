@@ -1,8 +1,9 @@
-const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/iu;
+import { requireGitObjectId } from "./gitObjectId";
+
 const WINDOWS_DRIVE_PATH = /^[a-z]:[\\/]/iu;
 const SCP_REMOTE_PATTERN = /^(?:[^@/\s]+@)?(\[[^\]]+\]|[^:/\s]+):(.+)$/u;
 
-export interface ApprovedGitLabOrigin {
+export interface GitLabBrowserOrigin {
   readonly hostname: string;
   readonly origin: string;
 }
@@ -13,7 +14,7 @@ export interface GitRemoteUrl {
 }
 
 export interface GitLabProject {
-  readonly approvedOrigin: ApprovedGitLabOrigin;
+  readonly browserOrigin: GitLabBrowserOrigin;
   readonly projectPath: string;
   readonly remoteName: string;
 }
@@ -33,9 +34,9 @@ export type GitLabTarget =
   | { readonly kind: "project" }
   | { readonly kind: "tree"; readonly sha: string };
 
-export function parseApprovedGitLabOrigins(values: readonly unknown[]): ApprovedGitLabOrigin[] {
+export function parseApprovedGitLabOrigins(values: readonly unknown[]): GitLabBrowserOrigin[] {
   if (values.length > 20) throw new Error("At most 20 GitLab origins may be approved.");
-  const origins = new Map<string, ApprovedGitLabOrigin>();
+  const origins = new Map<string, GitLabBrowserOrigin>();
   for (const [index, value] of values.entries()) {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error(
@@ -70,7 +71,7 @@ export function parseApprovedGitLabOrigins(values: readonly unknown[]): Approved
 
 export function matchApprovedGitLabProjects(
   remotes: readonly GitRemoteUrl[],
-  approvedOrigins: readonly ApprovedGitLabOrigin[],
+  approvedOrigins: readonly GitLabBrowserOrigin[],
 ): GitLabProject[] {
   const projects = new Map<string, GitLabProject>();
   for (const remote of remotes) {
@@ -81,17 +82,43 @@ export function matchApprovedGitLabProjects(
         ? approvedOrigins.filter(({ origin }) => origin === parsed.remoteOrigin)
         : approvedOrigins.filter(({ hostname }) => hostname === parsed.hostname);
     for (const approvedOrigin of matchingOrigins) {
-      const key = `${approvedOrigin.origin}\0${parsed.projectPath}`;
-      const existing = projects.get(key);
-      if (!existing || (remote.name === "origin" && existing.remoteName !== "origin")) {
-        projects.set(key, {
-          approvedOrigin,
-          projectPath: parsed.projectPath,
-          remoteName: remote.name,
-        });
-      }
+      addProject(projects, approvedOrigin, parsed.projectPath, remote.name);
     }
   }
+  return sortProjects(projects);
+}
+
+/**
+ * Derives browser projects from validated local remotes when no organisation
+ * allowlist is configured. HTTP(S) keeps its exact origin; SSH defaults to
+ * HTTPS on the same hostname. Invalid and local-path remotes are ignored.
+ */
+export function inferGitLabProjects(remotes: readonly GitRemoteUrl[]): GitLabProject[] {
+  const projects = new Map<string, GitLabProject>();
+  for (const remote of remotes) {
+    const parsed = parseRemote(remote.url);
+    if (!parsed) continue;
+    const inferredOrigin =
+      parsed.transport === "http"
+        ? browserOriginFromUrl(parsed.remoteOrigin)
+        : browserOriginFromUrl(`https://${parsed.hostname}`);
+    if (!inferredOrigin) continue;
+    addProject(projects, inferredOrigin, parsed.projectPath, remote.name);
+  }
+  return sortProjects(projects);
+}
+
+/** Applies zero-config inference or strict allowlist matching as one policy boundary. */
+export function resolveGitLabProjects(
+  remotes: readonly GitRemoteUrl[],
+  approvedOrigins: readonly GitLabBrowserOrigin[],
+): GitLabProject[] {
+  return approvedOrigins.length > 0
+    ? matchApprovedGitLabProjects(remotes, approvedOrigins)
+    : inferGitLabProjects(remotes);
+}
+
+function sortProjects(projects: ReadonlyMap<string, GitLabProject>): GitLabProject[] {
   return [...projects.values()].sort(
     (left, right) =>
       Number(right.remoteName === "origin") - Number(left.remoteName === "origin") ||
@@ -99,12 +126,12 @@ export function matchApprovedGitLabProjects(
         numeric: true,
         sensitivity: "base",
       }) ||
-      left.approvedOrigin.origin.localeCompare(right.approvedOrigin.origin),
+      left.browserOrigin.origin.localeCompare(right.browserOrigin.origin),
   );
 }
 
-export function buildApprovedGitLabUrl(project: GitLabProject, target: GitLabTarget): string {
-  const projectUrl = `${project.approvedOrigin.origin}/${encodeProjectPath(project.projectPath)}`;
+export function buildGitLabUrl(project: GitLabProject, target: GitLabTarget): string {
+  const projectUrl = `${project.browserOrigin.origin}/${encodeProjectPath(project.projectPath)}`;
   let value: string;
   switch (target.kind) {
     case "project":
@@ -136,11 +163,11 @@ export function buildApprovedGitLabUrl(project: GitLabProject, target: GitLabTar
   }
   const url = new URL(value);
   if (
-    url.origin !== project.approvedOrigin.origin ||
+    url.origin !== project.browserOrigin.origin ||
     url.username.length > 0 ||
     url.password.length > 0
   ) {
-    throw new Error("RefHaven refused a GitLab URL outside the approved origin.");
+    throw new Error("RefHaven refused a GitLab URL outside the allowed origin.");
   }
   return url.toString();
 }
@@ -206,6 +233,27 @@ function parseRemote(urlValue: string):
   }
 }
 
+function browserOriginFromUrl(value: string): GitLabBrowserOrigin | null {
+  try {
+    return parseApprovedGitLabOrigins([value])[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function addProject(
+  projects: Map<string, GitLabProject>,
+  browserOrigin: GitLabBrowserOrigin,
+  projectPath: string,
+  remoteName: string,
+): void {
+  const key = `${browserOrigin.origin}\0${projectPath}`;
+  const existing = projects.get(key);
+  if (!existing || (remoteName === "origin" && existing.remoteName !== "origin")) {
+    projects.set(key, { browserOrigin, projectPath, remoteName });
+  }
+}
+
 function normalizeProjectPath(value: string, encoded: boolean): string | null {
   const rawSegments = value.replace(/^\/+|\/+$/gu, "").split("/");
   if (rawSegments.length < 2) return null;
@@ -267,8 +315,7 @@ function lineFragment(startLine: number | undefined, endLine: number | undefined
 }
 
 function requireObjectId(value: string): string {
-  if (!OBJECT_ID_PATTERN.test(value)) throw new Error("The GitLab revision is invalid.");
-  return value.toLowerCase();
+  return requireGitObjectId(value, "The GitLab revision is invalid.");
 }
 
 function requirePositiveInteger(value: number | undefined): string {

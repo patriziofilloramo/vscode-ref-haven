@@ -1,4 +1,5 @@
 import type { CommitInfo } from "../../domain/comparisonResult";
+import { isGitObjectId } from "../../domain/gitObjectId";
 
 const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\u001f";
@@ -27,7 +28,7 @@ export function parseCommitLog(stdout: string): CommitInfo[] {
     if (sha === undefined || authorName === undefined || epochSeconds === undefined) {
       throw new GitCommitLogParseError("Malformed Git commit log record.");
     }
-    if (!/^[0-9a-f]{40,64}$/i.test(sha)) {
+    if (!isGitObjectId(sha)) {
       throw new GitCommitLogParseError(`Invalid commit SHA in Git log output: ${sha}.`);
     }
     const authorDateSeconds = Number.parseInt(epochSeconds, 10);

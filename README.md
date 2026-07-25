@@ -1,192 +1,313 @@
 # RefHaven
 
-**RefHaven for Git. Your refs stay home.**
+> **Your Git context, inside VS Code. Your repository data, under your control.**
 
-A private Visual Studio Code extension for persistent branch comparisons,
-history, blame, and stash inspection. It uses an entirely native UI (no
-webviews), has no telemetry, and keeps Git processing local. The only
-remote-aware behavior is an explicit browser handoff to an exact,
-organisation-approved GitLab origin.
+RefHaven brings branch comparisons, line intelligence, history, stashes, and
+repository navigation into one fast, native VS Code experience.
 
-## Features
+It is built for private and security-sensitive repositories:
 
-### Branch Comparisons view (Source Control sidebar)
+**No telemetry** · **No backend** · **No webviews** · **No runtime
+dependencies** · **No background network activity**
 
-- Create comparisons such as `feature/oauth relative to main` and keep them
-  across reloads; pin, swap direction, refresh, or close each one.
-- **Ahead/Behind** sections list the commits unique to each side; expand a
-  commit to see the files it changed and open each file's diff.
-- **Files changed** shows the merge-base diff as a flat list or compacted
-  folder tree with status badges, `+added −deleted` stats, and rich tooltips.
-- Two diff modes per comparison (right-click → **Change Comparison Mode...**):
-  **branch changes** (three-dot: only what the target added since the merge
-  base) and **tip to tip** (two-dot: every difference between the branches).
-  A fully merged target legitimately shows `0 files changed` in branch-changes
-  mode — the view now explains why and suggests swapping or switching mode.
-- Every file opens in VS Code's native readonly diff editor.
-- Mark files reviewed/unreviewed, see progress on the comparison and Files
-  section, and jump to the next or previous unreviewed file.
-- Filter to all/reviewed/unreviewed files, sort by path/status/change size, or
-  use Quick Open for keyboard-first review. Non-path sorting uses the flat list
-  so hierarchy cannot silently override the requested order.
+---
 
-### Stashes view
+## See what changed. Understand why. Keep moving.
 
-- Lists and locally filters stashes by message, branch, selector, or SHA.
-- Expand a stash to browse and diff its files.
-- Expanded stashes show changed-file counts and diff statistics; context
-  actions copy the message/SHA or open the stash commit in Commit Details.
-- **Stash This File...** is available from editor, Explorer, Source Control,
-  and the file-actions quick menu. It stashes tracked staged and unstaged state
-  for only that file, including partial staging, deletes, and renames, while
-  preserving unrelated worktree and index changes.
-- Stash files support Open at Stash Revision, Compare with HEAD, Compare with
-  Working Tree, File History, and a cancellable search across the 50 most
-  recent other stashes.
-- Untracked files, conflicted files, repository metadata, and files with an
-  active Git content filter are rejected. Apply, pop, and drop remain outside
-  RefHaven.
+|                     | What you need                            | What RefHaven gives you                                             |
+| ------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| 🔀 **Compare**      | Understand a feature branch              | Commits, changed files, statistics, native diffs, review progress   |
+| 🧭 **Investigate**  | Understand a suspicious line             | Author, commit, dates, previous diff, file history, line history    |
+| 📚 **Time travel**  | Inspect a file at an older revision      | Readonly historical documents and native revision comparisons       |
+| 📦 **Protect work** | Stash one file without touching the rest | A path-limited stash that preserves every unrelated local change    |
+| 🌿 **Navigate**     | Inspect branches and worktrees           | Local metadata, divergence, recent commits, state, quick actions    |
+| 🔗 **Open safely**  | Continue on your GitLab repository       | Explicit links to validated repository origins—never a RefHaven API |
 
-### Line blame
+All of this uses VS Code's native trees, editors, hovers, menus, quick picks,
+and Source Control sidebar.
 
-- Dimmed inline blame at the end of the current line — `You, 2 hours ago ·
-fix: prevent duplicates` — including in unsaved buffers.
-- Hover anywhere on a file line for author/email, exact and relative dates,
-  full SHA, original path/line, commit/file statistics, and a compact previous
-  revision diff.
-- Hover actions include commit details, previous/working-tree diffs, file and
-  line history, open-at-revision, and copy actions; the status bar remains a
-  compact entry point to the same workflows.
-- Toggle via the `RefHaven: Toggle Inline Blame` command or settings.
+## Start in under a minute
 
-### File annotations
+1. Install the RefHaven VSIX.
+2. Open a trusted folder containing a Git repository.
+3. Open **Source Control**.
+4. Run **RefHaven: New Comparison** from `Ctrl+Shift+P`.
+5. Pick the branch you want to review and its base.
 
-- **Whole-file blame** adds a gutter marker and hover to every line, including
-  unsaved buffers.
-- **File heatmap** colors lines by the age of their last commit.
-- **Changes relative to…** marks saved working-tree lines against any locally
-  available reference. All modes are native, cancellable, and off by default.
+RefHaven focuses the Source Control sidebar, reveals the new comparison,
+expands it, and loads its differences locally.
 
-### File and line history
+No account, token, server, repository configuration, or onboarding wizard is
+required.
 
-- The **File History** Source Control view follows the active file across
-  renames and opens each historical change in VS Code's native diff editor.
-- Filter visible revisions by commit/path metadata and navigate directly to
-  the newer or older visible revision.
-- History commits show parent and rename information and support copy
-  SHA/message, commit details, and open-at-revision actions.
-- **Show Line History** traces the current selection locally with `git log -L`.
+## A typical review
 
-### References and commit search
+Imagine you are reviewing `feature/oauth` against `main`.
 
-- Comparisons support local/remote branches, tags, HEAD, typed revisions that
-  resolve locally, and the live Working Tree.
-- **Search Commits** finds local history by message, author, SHA, or changed
-  content and opens a native **Commit Details** view with metadata and files.
-- Commit Details supports copying individual metadata values, opening a parent
-  commit, and comparing any changed file with that parent.
+1. Create `feature/oauth relative to main`.
+2. Expand **Ahead** to understand the feature's commits.
+3. Expand **Files changed** and open native diffs.
+4. Mark files reviewed as you progress.
+5. Filter to **Unreviewed** and jump to the next remaining file.
+6. Copy or save a bounded unified patch when you need to share the result.
 
-### Branches and worktrees
+The comparison survives reloads. You can rename it to something meaningful
+like `OAuth release audit`, pin it, reverse its direction, or switch between:
 
-- Read-only **Branches** view with upstream, ahead/behind, tip metadata, copy
-  and compare actions; local branches expand to a bounded recent history.
-- Read-only **Worktrees** view with branch/detached/HEAD/lock details and a
-  staged, unstaged, untracked, or conflicted working-state summary.
-  RefHaven deliberately provides no repository-mutating branch or worktree
-  commands.
+- **Branch changes** — what the target introduced since the merge base.
+- **Tip to tip** — every difference between the two branch tips.
+- **Working Tree** — an immutable base compared with current tracked changes.
 
-### Approved GitLab links
+## Feature tour
 
-- Configure exact origins such as `https://gitlab.company.example` or
-  `https://gitlab.company.example:8443`; the default allowlist is empty.
-- Explicit actions open the approved project, immutable commit, branch/tag/HEAD
-  revision, comparison, file/selected lines, `#issue`, or `!merge-request`.
-- HTTP remotes must match the approved origin exactly. SSH remotes match only
-  by hostname and require a choice when more than one approved browser origin
-  is possible.
-- RefHaven reads remote configuration locally and resolves refs to local SHAs.
-  It performs no HTTP request, API call, authentication, automatic discovery,
-  redirect following, or background network activity.
+<details open>
+<summary><strong>🔀 Branch comparisons</strong></summary>
 
-### Everywhere
+The **Branch Comparisons** view is the central review workspace.
 
-- The Explorer, editor, and Source Control file context menus share one native
-  **RefHaven** submenu for stash, history, annotations, open-at-revision, and
-  compare-with-revision actions.
-- The editor title exposes a compact **RefHaven: Show File Actions** quick
-  menu; the line-blame status entry exposes the same daily file workflows.
-- Changed-file nodes support **Open File**, **Open File at Compared Revision**,
-  **Show File History**, **Copy Path**, and **Copy Relative Path**; commits
-  support **Copy SHA** / **Copy Commit Message**.
-- **Open File at Revision...** opens the active file as it was on any branch.
-- **Compare File with Revision...** opens a path-limited, native diff between
-  a chosen local reference and the working-tree file.
-- Views refresh automatically after commits, branch switches, fetches, and
-  stash operations.
+- Compare local branches, remote-tracking branches, tags, `HEAD`, typed local
+  revisions, or the Working Tree.
+- Browse ahead/behind commits and expand a commit into its changed files.
+- View changed files as a flat list or compacted folder tree.
+- See status, additions, deletions, tooltips, and clear empty-state
+  explanations.
+- Open every change in VS Code's native readonly diff editor.
+- Filter, sort, Quick Open, mark reviewed, and navigate remaining files.
+- Pin, rename, refresh, swap, change mode, or close saved comparisons.
+- Copy a complete comparison patch or a patch for one selected file.
 
-## Commands
+</details>
 
-Open the Command Palette and type `RefHaven:` to see all commands. The
-most common entry points:
+<details>
+<summary><strong>🧠 Rich line intelligence</strong></summary>
 
-| Command                          | Description                                      |
-| -------------------------------- | ------------------------------------------------ |
-| `New Comparison`                 | Pick a repository, target, and base branch       |
-| `Compare Current Branch With...` | Compare the checked-out branch against a base    |
-| `Change Comparison Mode...`      | Switch between three-dot and two-dot diffs       |
-| `Quick Open Comparison File...`  | Find and open a file in a saved comparison       |
-| `Open Next Unreviewed File`      | Continue the current comparison review           |
-| `Change Comparison File Filter`  | Show all, reviewed, or unreviewed files          |
-| `Search Commits...`              | Search commits already available locally         |
-| `Open File at Revision...`       | Open the active file at a chosen branch revision |
-| `Compare File with Revision...`  | Diff the active file against a local reference   |
-| `Stash This File...`             | Stash only the selected tracked file             |
-| `Open Project on GitLab`         | Open the matching explicitly approved project    |
-| `Open Local Reference on GitLab` | Pick HEAD, a branch, or a tag and open its SHA   |
-| `Open GitLab Issue or MR...`     | Open an approved `#issue` or `!merge-request`    |
-| `Show File Actions`              | Open the context-sensitive native file menu      |
-| `Toggle Inline Blame`            | Show or hide current-line blame                  |
-| `Change File Annotations...`     | Blame, heatmap, changes, or off                  |
+Hover any tracked line to answer more than “who changed this?”
+
+- Author and email.
+- Exact and relative commit dates.
+- Full commit SHA and message.
+- Original file path and line.
+- Commit and file statistics.
+- A compact previous-revision diff.
+- Actions for commit details, previous/working-tree diffs, file history, line
+  history, open-at-revision, and copy.
+
+Optional inline blame keeps the current line concise:
+
+```text
+You, 2 hours ago · fix: reject unsafe revision paths
+```
+
+The same hover works in RefHaven's historical readonly documents, so you can
+walk a line backwards through time.
+
+</details>
+
+<details>
+<summary><strong>🎨 Whole-file annotations</strong></summary>
+
+Use **RefHaven: Change File Annotations...** when you need a wider view:
+
+- **Blame** — author and age markers for every line.
+- **Heatmap** — color lines by the age of their last commit.
+- **Changes relative to...** — mark working-tree lines changed from a selected
+  local revision.
+- **Off** — the default; no whole-file annotation cost.
+
+Annotations are native, cancellable, bounded, and never persisted.
+
+</details>
+
+<details>
+<summary><strong>📚 File and line history</strong></summary>
+
+- The **Inspector → File History** section follows the active file across
+  renames.
+- Filter revisions by commit, author, SHA, or path metadata.
+- Open historical changes as native diffs.
+- Navigate older and newer visible revisions.
+- Run **Show Line History** for the current editor selection.
+- Open any tracked file at a locally available revision.
+- Compare the working-tree file with a selected revision.
+
+</details>
+
+<details>
+<summary><strong>📦 Single-file stash</strong></summary>
+
+Right-click a file in the editor, Explorer, or Source Control and choose:
+
+**RefHaven → Stash This File...**
+
+RefHaven stashes only that tracked file while preserving unrelated worktree
+and index state—including partial staging, deletions, and renames.
+
+For safety, it rejects:
+
+- untracked or conflicted files;
+- repository metadata paths;
+- files with active Git content filters;
+- stale or invalid repository inputs.
+
+The **Stashes** view lets you inspect stash files, statistics, revisions,
+history, and native comparisons. Apply, pop, drop, multi-file stash, and
+include-untracked mutations are deliberately outside RefHaven.
+
+</details>
+
+<details>
+<summary><strong>🌿 Branches, worktrees, and commits</strong></summary>
+
+- **Repository → Branches** shows upstream state, ahead/behind counts, tip metadata, and
+  bounded recent local history. Select two branches and run **Compare Selected
+  Branches** to choose the target and create the comparison directly.
+- **Repository → Worktrees** shows branch/detached state, HEAD, lock state, and local working
+  status.
+- **Search Commits** searches already available local history by message,
+  author, SHA, or changed content.
+- **Inspector → Commit Details** shows complete metadata, parents, changed files, and
+  parent comparisons.
+
+Branch and worktree views remain read-only: RefHaven does not checkout,
+create, delete, or rewrite them.
+
+</details>
+
+<details>
+<summary><strong>🔗 Validated GitLab links</strong></summary>
+
+RefHaven can open a project, commit, comparison, branch revision, file, issue,
+or merge request on the repository's GitLab host. Project, commit, branch,
+comparison, and file actions can also copy the same fully validated URL
+without opening a browser.
+
+By default it derives a validated browser origin from the repository's local
+remote configuration. For strict organisation policy, configure an exact
+allowlist:
+
+Run **RefHaven: Configure Restricted GitLab Origin...** from `Ctrl+Shift+P` for
+the fast path. Enter one exact origin, or submit an empty value to restore the
+zero-configuration behavior. The JSON setting remains available for advanced
+multi-origin policies:
+
+```json
+"refhaven.gitLab.approvedOrigins": [
+  "https://gitlab.company.example:8443"
+]
+```
+
+An empty list means zero-configuration validated remotes. A non-empty list
+becomes a strict allowlist.
+
+RefHaven performs no HTTP request, API call, authentication, redirect
+following, or background discovery. The browser opens only after an explicit
+user command.
+
+</details>
+
+## Where your data goes
+
+| Destination                                      | RefHaven behavior                                          |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| 💻 **Your workstation**                          | Git processing, comparisons, history, blame, caches        |
+| 🗂️ **VS Code workspace state**                   | Saved comparison definitions and bounded review markers    |
+| 📋 **Operating-system clipboard**                | Only values you explicitly choose to copy                  |
+| 🌐 **Your validated GitLab origin**              | Only a browser URL opened after your explicit command      |
+| 🚫 **RefHaven servers, analytics, AI providers** | Never—RefHaven has no such service, client, token, or path |
+
+Every Git process:
+
+- runs without a shell;
+- blocks transports and partial-clone lazy fetch;
+- disables prompts, tracing, pagers, fsmonitor, external diff, and textconv;
+- uses literal validated paths;
+- has bounded concurrency, input/output limits, timeouts, and cancellation.
+
+Operational logs exclude exception messages and redact repository-derived or
+sensitive metadata.
+
+See `SECURITY.md` for the complete threat model and trust boundaries.
+
+## Everyday commands
+
+Open `Ctrl+Shift+P` and type `RefHaven`.
+
+| Command                                 | Use it when you want to...                          |
+| --------------------------------------- | --------------------------------------------------- |
+| `New Comparison`                        | Review any two locally available refs               |
+| `Compare Current Branch With...`        | Start from the checked-out branch                   |
+| `Compare Selected Branches`             | Compare two branches selected under Repository      |
+| `Open All Changes`                      | Review every text change in one native editor       |
+| `Quick Open Comparison File...`         | Find a changed file without navigating the tree     |
+| `Open Next Unreviewed File`             | Continue a comparison review                        |
+| `Search Commits`                        | Find local history by metadata or changed content   |
+| `Show File History`                     | Follow the active file across revisions and renames |
+| `Show Line History`                     | Trace the current selection                         |
+| `Inspect Current Line`                  | Open rich blame actions for the cursor line         |
+| `Open File at Revision...`              | Read a historical version                           |
+| `Compare File with Revision...`         | Diff the current file against a local ref           |
+| `Stash This File...`                    | Stash only one tracked file                         |
+| `Reveal File in Branch Comparison`      | Find the active file in a saved comparison          |
+| `Change File Annotations...`            | Enable blame, heatmap, or changes markers           |
+| `Show File Actions`                     | Open the context-sensitive native action menu       |
+| `Open Local Reference on GitLab...`     | Open a validated immutable revision in the browser  |
+| `Open GitLab Issue or Merge Request...` | Open a `#issue` or `!merge-request` on your GitLab  |
+| `Configure Restricted GitLab Origin...` | Enable or clear the strict GitLab origin policy     |
+
+The editor, Explorer, Source Control resources, tree nodes, and blame status
+entry also expose context-sensitive RefHaven actions.
 
 ## Settings
 
-| Setting                           | Default | Description                           |
-| --------------------------------- | ------- | ------------------------------------- |
-| `refhaven.inlineBlame.enabled`    | `true`  | Inline blame text on the current line |
-| `refhaven.statusBarBlame.enabled` | `true`  | Blame entry in the status bar         |
-| `refhaven.lineHover.enabled`      | `true`  | Rich local hover for any file line    |
-| `refhaven.fileAnnotations.mode`   | `off`   | Whole-file blame or heatmap mode      |
-| `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
-| `refhaven.gitLab.approvedOrigins` | `[]`    | Exact GitLab browser origins allowed  |
+RefHaven works immediately with its defaults.
 
-## Development
+| Setting                           | Default | Purpose                                      |
+| --------------------------------- | ------- | -------------------------------------------- |
+| `refhaven.inlineBlame.enabled`    | `true`  | Current-line inline blame                    |
+| `refhaven.statusBarBlame.enabled` | `true`  | Current-line blame in the status bar         |
+| `refhaven.lineHover.enabled`      | `true`  | Rich local hover on tracked lines            |
+| `refhaven.fileAnnotations.mode`   | `off`   | Default whole-file annotation mode           |
+| `refhaven.git.timeoutSeconds`     | `30`    | Per-command Git timeout, from 1 to 300 s     |
+| `refhaven.gitLab.approvedOrigins` | `[]`    | Optional strict GitLab browser-origin policy |
 
-Requires Node 20 and VS Code ≥ 1.105.
+## Installation
+
+To install an internally supplied build:
+
+1. Open the VS Code **Extensions** view.
+2. Select the `...` menu.
+3. Choose **Install from VSIX...**
+4. Select `refhaven-<version>.vsix`.
+
+RefHaven requires Node 20 for development and VS Code 1.105 or newer.
+
+## Development and release gates
 
 ```bash
 npm install
-npm run compile        # type-check and build to dist/
-npm run lint           # ESLint (strict, type-checked)
-npm run format:check   # Prettier
-npm run test:unit      # mocha unit tests (parsers, domain, manifest)
-npm run test:extension # integration tests in a real VS Code instance
-npm run package        # build refhaven-<version>.vsix
+npm run compile
+npm run lint
+npm run quality
+npm run format:check
+npm run test:unit
+npm run test:extension
+npm audit --audit-level=low
+npm audit signatures
+npm run package
 ```
 
-The VS Code task **RefHaven: Install Local VSIX** packages and installs the
-extension into your running VS Code via the `code` CLI.
+The project ships with zero production dependencies. Development dependencies
+are minimal, exact-pinned, lockfile-integrity pinned, and excluded from the
+VSIX.
 
-## Security
+## Documentation
 
-The installed extension has no runtime dependencies, HTTP client, telemetry,
-or background networking. Every Git process blocks transports and lazy-fetch,
-disables prompts, tracing, fsmonitor, external diff, and text conversion
-helpers, and runs without a shell. The only remote-aware behavior is an
-explicit `openExternal` handoff of a validated URL to an exact approved GitLab
-origin. See `SECURITY.md` in the extension package for the complete guarantee
-and trust boundaries.
-
-Documentation lives in the `docs/` folder: `PRODUCT.md` (product definition),
-`ARCHITECTURE.md` (layers and components), `GIT-SEMANTICS.md` (normative Git
-ranges), `DEPENDENCIES.md` (supply-chain policy), `TEST-MATRIX.md`, and
-`ROADMAP.md` (delivered and planned feature batches).
+- Product definition — `docs/PRODUCT.md`
+- Architecture — `docs/ARCHITECTURE.md`
+- Security model — `SECURITY.md`
+- Git comparison semantics — `docs/GIT-SEMANTICS.md`
+- Dependency policy — `docs/DEPENDENCIES.md`
+- Maintainability standards — `docs/MAINTAINABILITY.md`
+- Test matrix — `docs/TEST-MATRIX.md`
+- Roadmap — `docs/ROADMAP.md`
+- Contributing — `CONTRIBUTING.md`

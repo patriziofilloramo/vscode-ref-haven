@@ -1,4 +1,7 @@
 export const COMPARISON_STORAGE_KEY = "refhaven.comparisons.v1";
+export const MAX_CUSTOM_LABEL_LENGTH = 100;
+
+const NON_PRINTABLE_LABEL_PATTERN = /\p{C}/u;
 
 export interface BranchRef {
   readonly displayName: string;
@@ -39,6 +42,21 @@ export function comparisonLabel(comparison: SavedComparisonV1): string {
   );
 }
 
+/**
+ * Validates the canonical persisted representation of a custom label.
+ * Labels are stored trimmed, non-empty, length-bounded, and free from
+ * non-printable characters that could make tree labels misleading.
+ */
+export function isValidCustomLabel(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value === value.trim() &&
+    value.length <= MAX_CUSTOM_LABEL_LENGTH &&
+    !NON_PRINTABLE_LABEL_PATTERN.test(value)
+  );
+}
+
 export function withSwappedRefs(comparison: SavedComparisonV1, now: number): SavedComparisonV1 {
   return {
     ...comparison,
@@ -54,6 +72,30 @@ export function withPinned(
   now: number,
 ): SavedComparisonV1 {
   return { ...comparison, pinned, updatedAt: now };
+}
+
+/** Sets or clears the user-chosen display label; `undefined` restores the default. */
+export function withCustomLabel(
+  comparison: SavedComparisonV1,
+  customLabel: string | undefined,
+  now: number,
+): SavedComparisonV1 {
+  if (customLabel !== undefined && !isValidCustomLabel(customLabel)) {
+    throw new Error("The comparison name is invalid.");
+  }
+  return {
+    baseRef: comparison.baseRef,
+    createdAt: comparison.createdAt,
+    ...(customLabel === undefined ? {} : { customLabel }),
+    id: comparison.id,
+    mode: comparison.mode,
+    order: comparison.order,
+    pinned: comparison.pinned,
+    repository: comparison.repository,
+    schemaVersion: comparison.schemaVersion,
+    targetRef: comparison.targetRef,
+    updatedAt: now,
+  };
 }
 
 export function withMode(

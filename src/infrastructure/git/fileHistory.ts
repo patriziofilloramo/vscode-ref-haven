@@ -1,5 +1,6 @@
 import type { FileHistoryEntry } from "../../domain/history";
 import type { FileChange } from "../../domain/comparisonResult";
+import { isGitObjectId } from "../../domain/gitObjectId";
 import { parseNameStatusZ } from "./nameStatus";
 
 const RECORD_SEPARATOR = "\u001e";
@@ -27,7 +28,7 @@ export function parseFileHistory(stdout: string): FileHistoryEntry[] {
       parents === undefined ||
       authorName === undefined ||
       epochSeconds === undefined ||
-      !/^[0-9a-f]{40,64}$/iu.test(sha)
+      !isGitObjectId(sha)
     ) {
       throw new GitFileHistoryParseError("Malformed file history metadata.");
     }
@@ -37,7 +38,7 @@ export function parseFileHistory(stdout: string): FileHistoryEntry[] {
     }
     const firstParent = parents.split(" ")[0] ?? "";
     const parentSha = firstParent === "" ? null : firstParent;
-    if (parentSha !== null && !/^[0-9a-f]{40,64}$/iu.test(parentSha)) {
+    if (parentSha !== null && !isGitObjectId(parentSha)) {
       throw new GitFileHistoryParseError("Invalid file history parent.");
     }
     const statusFields = fields.filter((field) => field.length > 0);

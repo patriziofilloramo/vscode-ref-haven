@@ -4,7 +4,7 @@ import type { Logger, LogLevel, LogMetadata, LogMetadataValue } from "../../appl
 
 const REDACTED_VALUE = "[REDACTED]";
 const SENSITIVE_METADATA_KEY =
-  /authorization|content|credential|environment|password|remote.?url|secret|token/i;
+  /author|authorization|branch|content|credential|email|environment|message|password|path|ref|remote|repository|secret|sha|subject|token/i;
 
 type OutputChannel = Pick<vscode.OutputChannel, "appendLine" | "dispose">;
 

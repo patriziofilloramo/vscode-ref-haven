@@ -1,7 +1,8 @@
-import { basename, dirname, relative } from "node:path";
+import { dirname, relative } from "node:path";
 
 import * as vscode from "vscode";
 
+import { MAX_INTERACTIVE_INPUT_LENGTH } from "../domain/inputLimits";
 import type { Logger } from "./Logger";
 import type { ComparisonController } from "./ComparisonController";
 import { findRepositoryRoot, listLineHistory } from "../infrastructure/git/GitCli";
@@ -18,7 +19,6 @@ export class FileHistoryController implements vscode.Disposable {
 
   public constructor(
     private readonly treeProvider: FileHistoryTreeProvider,
-    private readonly treeView: vscode.TreeView<FileHistoryNode>,
     private readonly comparisonController: ComparisonController,
     private readonly logger: Logger,
   ) {}
@@ -39,8 +39,6 @@ export class FileHistoryController implements vscode.Disposable {
     const filePath = relative(repositoryRoot, editor.document.uri.fsPath).replaceAll("\\", "/");
     this.treeProvider.setTarget({ filePath, repositoryRoot });
     if (force) this.treeProvider.refresh();
-    this.treeView.description = basename(filePath);
-    this.treeView.message = "Following renames locally with git log --follow.";
     this.logger.info("Refreshed file history target", { operation: "refreshFileHistory" });
   }
 
@@ -99,8 +97,6 @@ export class FileHistoryController implements vscode.Disposable {
   ): Promise<void> {
     this.treeProvider.setTarget({ filePath, repositoryRoot });
     if (force) this.treeProvider.refresh();
-    this.treeView.description = basename(filePath);
-    this.treeView.message = "Following renames locally with git log --follow.";
     await vscode.commands.executeCommand(FILE_HISTORY_FOCUS_COMMAND);
     this.logger.info("Opened file history", { operation: "showFileHistory" });
   }
@@ -132,7 +128,8 @@ export class FileHistoryController implements vscode.Disposable {
       prompt: "Leave empty to show the complete file history",
       title: "RefHaven: Filter File History",
       value: this.treeProvider.getFilter(),
-      validateInput: (value) => (value.length > 256 ? "Filter is too long." : undefined),
+      validateInput: (value) =>
+        value.length > MAX_INTERACTIVE_INPUT_LENGTH ? "Filter is too long." : undefined,
     });
     if (filter === undefined) return;
     this.treeProvider.setFilter(filter);
@@ -158,7 +155,5 @@ export class FileHistoryController implements vscode.Disposable {
 
   private applyTarget(target: undefined): void {
     this.treeProvider.setTarget(target);
-    this.treeView.description = "";
-    this.treeView.message = "Open a tracked file to view its history.";
   }
 }

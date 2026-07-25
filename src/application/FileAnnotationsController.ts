@@ -2,6 +2,14 @@ import { dirname, isAbsolute, relative, sep } from "node:path";
 
 import * as vscode from "vscode";
 
+import {
+  EXTENSION_SETTING_DEFAULTS,
+  EXTENSION_SETTINGS,
+  extensionSettingPath,
+  getExtensionConfiguration,
+  readExtensionSetting,
+} from "../config/extensionConfiguration";
+import { runInBackground } from "./errorHandling";
 import type { Logger } from "./Logger";
 import type { FileBlameLine } from "../domain/blame";
 import {
@@ -24,8 +32,6 @@ import { formatRelativeTime } from "../ui/format";
 import { escapeMarkdown } from "../ui/markdown";
 import { pickBranch } from "../ui/pickers/comparisonPickers";
 
-const CONFIG_SECTION = "refhaven";
-const MODE_SETTING = "fileAnnotations.mode";
 const MAX_ANNOTATED_LINES = 5_000;
 const UPDATE_DEBOUNCE_MS = 300;
 const GUTTER_ICON = vscode.Uri.parse(
@@ -99,7 +105,11 @@ export class FileAnnotationsController implements vscode.Disposable {
         if (document === vscode.window.activeTextEditor?.document) this.scheduleUpdate();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (!event.affectsConfiguration(`${CONFIG_SECTION}.${MODE_SETTING}`)) return;
+        if (
+          !event.affectsConfiguration(extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsMode))
+        ) {
+          return;
+        }
         if (this.mode !== "changes") this.mode = readConfiguredMode();
         this.scheduleUpdate();
       }),
@@ -184,9 +194,11 @@ export class FileAnnotationsController implements vscode.Disposable {
     } else {
       this.mode = selected.annotationMode;
       this.changesBase = undefined;
-      await vscode.workspace
-        .getConfiguration(CONFIG_SECTION)
-        .update(MODE_SETTING, this.mode, vscode.ConfigurationTarget.Global);
+      await getExtensionConfiguration().update(
+        EXTENSION_SETTINGS.fileAnnotationsMode,
+        this.mode,
+        vscode.ConfigurationTarget.Global,
+      );
     }
 
     await this.update(true);
@@ -195,12 +207,12 @@ export class FileAnnotationsController implements vscode.Disposable {
   private scheduleUpdate(): void {
     if (this.updateTimer) clearTimeout(this.updateTimer);
     this.updateTimer = setTimeout(() => {
-      this.update(false).catch((error: unknown) => {
-        this.logger.error("File annotations update failed", {
-          message: error instanceof Error ? error.message : String(error),
-          operation: "fileAnnotations",
-        });
-      });
+      runInBackground(
+        this.update(false),
+        this.logger,
+        "File annotations update failed",
+        "fileAnnotations",
+      );
     }, UPDATE_DEBOUNCE_MS);
   }
 
@@ -417,6 +429,9 @@ function blameHover(line: FileBlameLine, userName: string | null): vscode.Markdo
 }
 
 function readConfiguredMode(): Exclude<FileAnnotationMode, "changes"> {
-  const value = vscode.workspace.getConfiguration(CONFIG_SECTION).get<unknown>(MODE_SETTING, "off");
+  const value = readExtensionSetting<unknown>(
+    EXTENSION_SETTINGS.fileAnnotationsMode,
+    EXTENSION_SETTING_DEFAULTS.fileAnnotationsMode,
+  );
   return value === "blame" || value === "heatmap" ? value : "off";
 }

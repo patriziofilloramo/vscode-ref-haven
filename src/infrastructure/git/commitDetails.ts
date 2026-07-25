@@ -1,4 +1,5 @@
 import type { CommitDetails } from "../../domain/commitDetails";
+import { isGitObjectId } from "../../domain/gitObjectId";
 
 export const COMMIT_DETAILS_FORMAT = "%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%ct%x00%B%x00";
 
@@ -24,7 +25,7 @@ export function parseCommitDetails(stdout: string): CommitDetails {
     committerEmail === undefined ||
     committerEpoch === undefined ||
     fullMessage === undefined ||
-    !/^[0-9a-f]{40,64}$/iu.test(sha)
+    !isGitObjectId(sha)
   ) {
     throw new Error("Git returned malformed commit details.");
   }
@@ -34,7 +35,7 @@ export function parseCommitDetails(stdout: string): CommitDetails {
     throw new Error("Git returned invalid commit dates.");
   }
   const parentShas = parents === "" ? [] : parents.split(" ");
-  if (parentShas.some((parent) => !/^[0-9a-f]{40,64}$/iu.test(parent))) {
+  if (parentShas.some((parent) => !isGitObjectId(parent))) {
     throw new Error("Git returned an invalid commit parent.");
   }
   const normalizedMessage = fullMessage.replace(/\r?\n$/u, "");

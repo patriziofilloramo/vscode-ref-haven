@@ -1,0 +1,73 @@
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { extname, join, relative, resolve } from "node:path";
+
+const root = resolve(import.meta.dirname, "..");
+const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const sourceFiles = collectFiles(join(root, "src"), ".ts");
+const violations = [];
+const MAX_SOURCE_FILE_LINES = 1_200;
+
+if (manifest.dependencies !== undefined) {
+  violations.push("package.json must not declare runtime dependencies.");
+}
+
+for (const [name, version] of Object.entries(manifest.devDependencies ?? {})) {
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) {
+    violations.push(`Development dependency ${name} is not exact-pinned.`);
+  }
+}
+
+const iconPath = join(root, manifest.icon ?? "");
+if (!manifest.icon || !existsSync(iconPath) || statSync(iconPath).size === 0) {
+  violations.push("The extension icon is missing or empty.");
+}
+
+for (const file of sourceFiles) {
+  const content = readFileSync(file, "utf8");
+  const relativePath = relative(root, file).replaceAll("\\", "/");
+  const lineCount = content.split(/\r?\n/u).length;
+  if (lineCount > MAX_SOURCE_FILE_LINES) {
+    violations.push(
+      `${relativePath} has ${lineCount.toString()} lines; split files above ${MAX_SOURCE_FILE_LINES.toString()}.`,
+    );
+  }
+  if (/logger\.(?:debug|info|warn|error)\([^\n]*(?:error|err)\.message/iu.test(content)) {
+    violations.push(`${relativePath} logs an exception message directly.`);
+  }
+}
+
+const configurationOwners = new Set([
+  "src/config/extensionConfiguration.ts",
+  "src/config/extensionConfigurationSchema.ts",
+]);
+const configurationPrefix = `${manifest.name}.`;
+const settingLiterals = Object.keys(manifest.contributes?.configuration?.properties ?? {})
+  .filter((setting) => setting.startsWith(configurationPrefix))
+  .map((setting) => setting.slice(configurationPrefix.length));
+for (const file of sourceFiles) {
+  const relativePath = relative(root, file).replaceAll("\\", "/");
+  if (configurationOwners.has(relativePath)) continue;
+  const content = readFileSync(file, "utf8");
+  for (const setting of settingLiterals) {
+    if (content.includes(`"${setting}"`) || content.includes(`'${setting}'`)) {
+      violations.push(`${relativePath} duplicates the setting name ${setting}.`);
+    }
+  }
+}
+
+if (violations.length > 0) {
+  console.error(`Quality checks failed:\n- ${violations.join("\n- ")}`);
+  process.exitCode = 1;
+} else {
+  console.log(
+    `Quality checks passed for ${sourceFiles.length.toString()} TypeScript source files and ${Object.keys(manifest.devDependencies ?? {}).length.toString()} exact-pinned development dependencies.`,
+  );
+}
+
+function collectFiles(directory, extension) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return collectFiles(path, extension);
+    return extname(entry.name) === extension ? [path] : [];
+  });
+}

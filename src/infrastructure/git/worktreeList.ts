@@ -1,6 +1,5 @@
 import type { WorktreeInfo } from "../../domain/worktree";
-
-const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/u;
+import { isGitObjectId } from "../../domain/gitObjectId";
 
 export function parseWorktreeList(output: string): WorktreeInfo[] {
   if (output.length === 0) return [];
@@ -39,7 +38,7 @@ function parseRecord(fields: readonly string[]): WorktreeInfo {
 
   const path = values.get("worktree");
   const headSha = values.get("HEAD");
-  if (!path || !headSha || !OBJECT_ID_PATTERN.test(headSha)) {
+  if (!path || !headSha || !isGitObjectId(headSha)) {
     throw new Error("Git returned invalid worktree metadata.");
   }
   const branchFullName = values.get("branch");

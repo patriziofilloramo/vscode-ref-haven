@@ -9,8 +9,6 @@ import { shortSha } from "../../domain/comparisonResult";
 import type { WorktreeState } from "../../domain/repositoryNavigation";
 import { pluralize } from "../format";
 
-export const WORKTREES_VIEW_ID = "refhaven.worktrees";
-
 export interface WorktreeRepositoryNode {
   readonly kind: "worktreeRepository";
   readonly repository: RepositoryIdentity;

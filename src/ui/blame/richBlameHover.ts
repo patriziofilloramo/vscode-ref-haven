@@ -3,6 +3,7 @@ import { shortSha } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatDiffStats, formatRelativeTime, pluralize } from "../format";
+import { GITLAB_AUTOLINK_COMMANDS, escapeMarkdownWithGitLabAutolinks } from "../gitLabAutolinks";
 import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 import { blameAuthorLabel, blameCommitInfo } from "./blamePresentation";
 
@@ -19,6 +20,7 @@ export const RICH_BLAME_HOVER_COMMANDS: readonly string[] = [
   COMMAND_IDS.showCommitDetails,
   COMMAND_IDS.showFileHistory,
   COMMAND_IDS.showLineHistory,
+  ...GITLAB_AUTOLINK_COMMANDS,
 ];
 
 export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()): string {
@@ -34,7 +36,11 @@ export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()):
   const lines = [
     `**${author}**${details?.authorEmail ? ` <${escapeMarkdown(details.authorEmail)}>` : ""}`,
     `${formatRelativeTime(blame.authorDate, nowMs)} · ${new Date(blame.authorDate).toLocaleString()}${blame.authorTimeZone ? ` · Git timezone \`${escapeMarkdown(blame.authorTimeZone)}\`` : ""}`,
-    `**${escapeMarkdown(blame.summary || "(no commit message)")}**`,
+    `**${
+      blame.summary.length > 0
+        ? escapeMarkdownWithGitLabAutolinks(blame.summary, data.repositoryRoot)
+        : escapeMarkdown("(no commit message)")
+    }**`,
     `$(git-commit) \`${blame.sha}\``,
   ];
 
@@ -81,6 +87,17 @@ function primaryActions(data: RichLineHover, commitNode: object): string {
       toSha: data.blame.sha,
     };
     actions.splice(1, 0, link("Diff Previous", COMMAND_IDS.openLineDiff, [scope, data.fileChange]));
+  }
+  if (data.blame.previousSha && data.blame.previousPath) {
+    // Opens the file just before the blamed commit; hovering there continues
+    // the blame chain further back (time-travel blame).
+    actions.push(
+      link("Before This Change", COMMAND_IDS.openFileAtRevision, [
+        data.repositoryRoot,
+        data.blame.previousSha,
+        data.blame.previousPath,
+      ]),
+    );
   }
   actions.push(
     link("Diff Working Tree", COMMAND_IDS.compareFileWithRevision, [

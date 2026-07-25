@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import type { BlameController } from "../../application/BlameController";
 import type { CommitDetailsController } from "../../application/CommitDetailsController";
 import type { ComparisonController } from "../../application/ComparisonController";
+import { errorLogMetadata, userFacingErrorMessage } from "../../application/errorHandling";
 import type { FileHistoryController } from "../../application/FileHistoryController";
 import type { FileActionsController } from "../../application/FileActionsController";
 import type { GitLabController } from "../../application/GitLabController";
@@ -44,6 +45,8 @@ export function registerCommands(
     [COMMAND_IDS.changeFileHistoryFilter]: () => fileHistoryController.changeFilter(),
     [COMMAND_IDS.changeStashFilter]: () => stashController.changeFilter(),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
+    [COMMAND_IDS.compareSelectedBranches]: () =>
+      repositoryNavigationController.compareSelectedBranches(),
     [COMMAND_IDS.compareCommitWithParent]: (node) =>
       commitDetailsController.compareWithParent(requireCommitDetail(node)),
     [COMMAND_IDS.compareStashFileWithHead]: (node) =>
@@ -55,6 +58,7 @@ export function registerCommands(
         ? fileActionsController.compareFileWithRevisionAt(resource, sha, filePath, label)
         : fileActionsController.compareFileWithRevision(resource),
     [COMMAND_IDS.compareCurrentBranch]: () => controller.compareCurrentBranch(),
+    [COMMAND_IDS.configureGitLabOrigin]: () => gitLabController.configureApprovedOrigin(),
     [COMMAND_IDS.compareBranchWithCurrent]: (node) =>
       repositoryNavigationController.compareBranchWithCurrent(requireBranch(node)),
     [COMMAND_IDS.copyBranchName]: (node) =>
@@ -63,8 +67,26 @@ export function registerCommands(
     [COMMAND_IDS.copyCommitSha]: (node) => controller.copyCommitSha(requireCommit(node)),
     [COMMAND_IDS.copyCommitDetail]: (node) =>
       commitDetailsController.copyDetail(requireCommitDetail(node)),
+    [COMMAND_IDS.copyComparisonPatch]: (node) =>
+      controller.exportComparisonPatch(requireComparison(node), "clipboard"),
     [COMMAND_IDS.copyComparisonSummary]: (node) =>
       controller.copyComparisonSummary(requireComparison(node)),
+    [COMMAND_IDS.copyGitLabBranchUrl]: (node) => {
+      const branch = requireBranch(node);
+      return gitLabController.copyBranchUrl(branch.repository.rootPath, branch.branch);
+    },
+    [COMMAND_IDS.copyGitLabCommitUrl]: (node) => {
+      const selection = requireCommitSelection(node);
+      return gitLabController.copyCommitUrl(selection.repositoryRoot, selection.commit);
+    },
+    [COMMAND_IDS.copyGitLabComparisonUrl]: (node) =>
+      gitLabController.copyComparisonUrl(requireComparison(node)),
+    [COMMAND_IDS.copyGitLabFileUrl]: (resource) => gitLabController.copyFileUrl(resource),
+    [COMMAND_IDS.copyGitLabProjectUrl]: (resource) => gitLabController.copyProjectUrl(resource),
+    [COMMAND_IDS.copyFilePatch]: (node) => {
+      const file = requireFile(node);
+      return controller.copyFilePatch(file.scope, file.file);
+    },
     [COMMAND_IDS.copyFilePath]: (node) => {
       const file = requireFile(node);
       return controller.copyFilePath(file.scope, file.file);
@@ -91,6 +113,8 @@ export function registerCommands(
       controller.openAdjacentUnreviewedFile("next", reviewNavigationCandidate(node)),
     [COMMAND_IDS.openChangedFileAtRevision]: (node) =>
       fileActionsController.openFileAtRevision(node),
+    [COMMAND_IDS.openAllComparisonChanges]: (node) =>
+      controller.openAllComparisonChanges(requireComparison(node)),
     [COMMAND_IDS.openFile]: (node) => {
       const file = requireFile(node);
       return controller.openWorkingTreeFile(file.scope, file.file);
@@ -128,7 +152,10 @@ export function registerCommands(
     [COMMAND_IDS.openGitLabLocalReference]: (resource) =>
       gitLabController.openLocalReference(resource),
     [COMMAND_IDS.openGitLabProject]: (resource) => gitLabController.openProject(resource),
-    [COMMAND_IDS.openGitLabReference]: (resource) => gitLabController.openReference(resource),
+    [COMMAND_IDS.openGitLabReference]: (resource, reference) =>
+      typeof resource === "string" && typeof reference === "string"
+        ? gitLabController.openReferenceAt(resource, reference)
+        : gitLabController.openReference(resource),
     [COMMAND_IDS.openLineDiff]: (scope, file) => fileActionsController.openLineDiff(scope, file),
     [COMMAND_IDS.openStashFileAtRevision]: (node) => fileActionsController.openFileAtRevision(node),
     [COMMAND_IDS.openFileDiff]: (scope, file) =>
@@ -152,8 +179,13 @@ export function registerCommands(
     [COMMAND_IDS.refreshFileHistory]: () => fileHistoryController.refresh(true),
     [COMMAND_IDS.refreshRepositoryNavigation]: () => repositoryNavigationController.refresh(),
     [COMMAND_IDS.refreshStashes]: () => stashController.refresh(),
+    [COMMAND_IDS.renameComparison]: (node) => controller.renameComparison(requireComparison(node)),
     [COMMAND_IDS.resetComparisonReview]: (node) =>
       controller.setAllComparisonFilesReviewed(requireComparison(node), false),
+    [COMMAND_IDS.revealFileInComparison]: (resource) =>
+      fileActionsController.revealFileInComparison(resource),
+    [COMMAND_IDS.saveComparisonPatch]: (node) =>
+      controller.exportComparisonPatch(requireComparison(node), "file"),
     [COMMAND_IDS.searchCommits]: () => commitDetailsController.search(),
     [COMMAND_IDS.showCommitDetails]: (node) => {
       const selection = requireCommitSelection(node);
@@ -173,6 +205,7 @@ export function registerCommands(
         ? fileActionsController.showFileHistoryAt(resource, filePath)
         : fileActionsController.showFileHistory(resource),
     [COMMAND_IDS.showLineBlameActions]: () => blameController.showLineBlameActions(),
+    [COMMAND_IDS.inspectCurrentLine]: () => blameController.showLineBlameActions(),
     [COMMAND_IDS.showLineHistory]: (resource, filePath, lineNumber) =>
       typeof resource === "string" && typeof filePath === "string"
         ? fileActionsController.showLineHistoryAt(resource, filePath, lineNumber)
@@ -192,13 +225,8 @@ export function registerCommands(
       try {
         await handler(...args);
       } catch (error) {
-        logger.error("Command failed", {
-          message: error instanceof Error ? error.message : String(error),
-          operation: commandId,
-        });
-        void vscode.window.showErrorMessage(
-          error instanceof Error ? error.message : "RefHaven command failed.",
-        );
+        logger.error("Command failed", errorLogMetadata(error, commandId));
+        void vscode.window.showErrorMessage(userFacingErrorMessage(error));
       }
     });
 
@@ -211,7 +239,7 @@ function requireBranch(node: unknown): BranchNode {
   if (candidate?.kind === "branch" && candidate.branch && candidate.repository) {
     return candidate as BranchNode;
   }
-  throw new Error("Select a branch in the Branches view first.");
+  throw new Error("Select a branch under Repository first.");
 }
 
 function requireComparison(node: unknown): SavedComparisonV1 {
@@ -276,7 +304,7 @@ function requireFileHistoryNode(node: unknown): FileHistoryNode {
   ) {
     return candidate as FileHistoryNode;
   }
-  throw new Error("Select a commit in the File History view first.");
+  throw new Error("Select a commit under Inspector > File History first.");
 }
 
 function requireCommitDetail(node: unknown): DetailNode {
@@ -337,5 +365,5 @@ function requireWorktree(node: unknown): WorktreeNode {
   if (candidate?.kind === "worktree" && candidate.worktree && candidate.repository) {
     return candidate as WorktreeNode;
   }
-  throw new Error("Select a worktree in the Worktrees view first.");
+  throw new Error("Select a worktree under Repository first.");
 }

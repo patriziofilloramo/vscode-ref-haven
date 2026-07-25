@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 
+import { MAX_INTERACTIVE_INPUT_LENGTH } from "../domain/inputLimits";
 import type { Logger } from "./Logger";
+import { showTransientSuccess } from "../ui/feedback";
 import type { StashEntry } from "../domain/stash";
 import { discoverRepositories, stashTrackedFile } from "../infrastructure/git/GitCli";
 import type { StashTreeProvider } from "../ui/tree/StashTreeProvider";
@@ -26,12 +28,12 @@ export class StashController {
 
   public async copyStashMessage(stash: StashEntry): Promise<void> {
     await vscode.env.clipboard.writeText(stash.message);
-    void vscode.window.showInformationMessage("Stash message copied to the clipboard.");
+    showTransientSuccess("Stash message copied");
   }
 
   public async copyStashSha(stash: StashEntry): Promise<void> {
     await vscode.env.clipboard.writeText(stash.sha);
-    void vscode.window.showInformationMessage("Stash SHA copied to the clipboard.");
+    showTransientSuccess("Stash SHA copied");
   }
 
   public async changeFilter(): Promise<void> {
@@ -41,7 +43,8 @@ export class StashController {
       prompt: "Leave empty to show every stash",
       title: "RefHaven: Filter Stashes",
       value: this.treeProvider.getFilter(),
-      validateInput: (value) => (value.length > 256 ? "Filter is too long." : undefined),
+      validateInput: (value) =>
+        value.length > MAX_INTERACTIVE_INPUT_LENGTH ? "Filter is too long." : undefined,
     });
     if (filter === undefined) return;
     this.treeProvider.setFilter(filter);

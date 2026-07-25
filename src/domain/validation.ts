@@ -1,14 +1,13 @@
 import { isAbsolute } from "node:path";
 
-import type { BranchRef, SavedComparisonV1 } from "./comparison";
+import { isValidCustomLabel, type BranchRef, type SavedComparisonV1 } from "./comparison";
 import type { FileChange } from "./comparisonResult";
 import type { FileDiffScope } from "./fileDiffScope";
+import { isGitObjectId } from "./gitObjectId";
 import { isRepositoryRelativeGitPath } from "./pathValidation";
 
-const OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/i;
-
 export function isObjectId(value: unknown): value is string {
-  return typeof value === "string" && OBJECT_ID_PATTERN.test(value);
+  return isGitObjectId(value);
 }
 
 export function isBranchRef(value: unknown): value is BranchRef {
@@ -46,7 +45,7 @@ export function isSavedComparisonV1(value: unknown): value is SavedComparisonV1 
     isNonEmptyString(candidate.repository.workspaceFolderUri) &&
     isNonEmptyString(candidate.repository.relativeRepositoryPath) &&
     isNonEmptyString(candidate.repository.label) &&
-    (candidate.customLabel === undefined || isNonEmptyString(candidate.customLabel)) &&
+    (candidate.customLabel === undefined || isValidCustomLabel(candidate.customLabel)) &&
     isBranchRef(candidate.baseRef) &&
     isBranchRef(candidate.targetRef) &&
     ((candidate.mode === "workingTree" && candidate.targetRef.kind === "workingTree") ||

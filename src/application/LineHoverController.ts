@@ -9,8 +9,12 @@ import {
   readCommitDiffPreview,
   readGitUserName,
 } from "../infrastructure/git/GitCli";
-import { resolveFileContextTarget } from "../ui/commands/fileContext";
+import { resolveFileContextTarget, resolveKnownFileTarget } from "../ui/commands/fileContext";
 import type { FileContextTarget } from "../ui/commands/fileContext";
+import type {
+  GitRevisionContentProvider,
+  RevisionDocumentIdentity,
+} from "../ui/documents/GitRevisionContentProvider";
 import type { Logger } from "./Logger";
 
 const MAX_CACHE_ENTRIES = 64;
@@ -20,7 +24,10 @@ export class LineHoverController {
   private readonly targets = new Map<string, Promise<FileContextTarget | null>>();
   private readonly userNames = new Map<string, Promise<string | null>>();
 
-  public constructor(private readonly logger: Logger) {}
+  public constructor(
+    private readonly revisionProvider: GitRevisionContentProvider,
+    private readonly logger: Logger,
+  ) {}
 
   public refresh(): void {
     this.cache.clear();
@@ -34,7 +41,12 @@ export class LineHoverController {
     signal: AbortSignal,
   ): Promise<RichLineHover | null> {
     if (zeroBasedLine < 0 || zeroBasedLine >= document.lineCount) return null;
-    const target = await this.getTarget(document.uri);
+    // Signed revision documents blame at their pinned revision, which lets a
+    // hover chain walk backwards through history (time-travel blame).
+    const revision = this.revisionProvider.parseVerifiedRevisionUri(document.uri);
+    const target = revision
+      ? await this.getRevisionTarget(document.uri, revision)
+      : await this.getTarget(document.uri);
     if (!target || signal.aborted) return null;
 
     const key = [
@@ -53,8 +65,9 @@ export class LineHoverController {
       target.repositoryRoot,
       target.filePath,
       zeroBasedLine + 1,
-      document.isDirty ? document.getText() : undefined,
+      revision || !document.isDirty ? undefined : document.getText(),
       signal,
+      revision?.sha,
     );
     if (!blame) return null;
 
@@ -107,6 +120,20 @@ export class LineHoverController {
     let pending = this.targets.get(key);
     if (!pending) {
       pending = resolveFileContextTarget(uri);
+      this.targets.set(key, pending);
+      void pending.catch(() => this.targets.delete(key));
+    }
+    return pending;
+  }
+
+  private getRevisionTarget(
+    uri: vscode.Uri,
+    revision: RevisionDocumentIdentity,
+  ): Promise<FileContextTarget | null> {
+    const key = uri.toString();
+    let pending = this.targets.get(key);
+    if (!pending) {
+      pending = resolveKnownFileTarget(revision.repositoryRoot, revision.filePath);
       this.targets.set(key, pending);
       void pending.catch(() => this.targets.delete(key));
     }

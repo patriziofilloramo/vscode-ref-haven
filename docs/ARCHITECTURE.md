@@ -27,6 +27,9 @@ Domain types have no VS Code dependency. Application services depend on domain i
 src/
   extension.ts             // activation entry point
   compositionRoot.ts       // manual dependency injection and wiring
+  config/                  // extension settings and runtime bounds
+    extensionConfiguration.ts
+    extensionConfigurationSchema.ts
   domain/                  // VS Code-free types and pure logic
     blame.ts
     commitDetails.ts
@@ -51,9 +54,11 @@ src/
     RepositoryNavigationController.ts
     RepositoryWatcher.ts
     StashController.ts
+    errorHandling.ts       // privacy-safe background task/error helpers
   infrastructure/
     git/                   // typed git CLI operations and tested parsers
       GitCli.ts
+      GitProcess.ts        // bounded process execution
       blamePorcelain.ts
       branchRefs.ts
       commitLog.ts
@@ -83,6 +88,8 @@ src/
       ComparisonTreeProvider.ts
       CommitDetailsTreeProvider.ts
       FileHistoryTreeProvider.ts
+      InspectorTreeProvider.ts
+      RepositoryTreeProvider.ts
       StashTreeProvider.ts
       WorktreesTreeProvider.ts
       changeNodes.ts       // file/folder/message nodes shared by all trees
@@ -91,6 +98,11 @@ test/
   unit/
   extension/
 ```
+
+The Source Control surface has four permanent views. `InspectorTreeProvider`
+composes File History and Commit Details; `RepositoryTreeProvider` composes
+Branches and Worktrees. They delegate loading and rendering to the existing
+providers, so consolidation does not duplicate Git queries or parsing logic.
 
 ## Domain and runtime state
 
@@ -131,7 +143,16 @@ Process-control failures use stable codes for `commandTimedOut`, `commandCancell
 
 ### Git CLI and scheduler
 
-`GitCli.ts` launches `git` with `execFile`, argument arrays, and no shell. Every operation runs through `GitScheduler`, which enforces four global and two per-repository processes. The adapter owns cancellation, configurable timeouts, encoding, 5 MiB stdout/stderr limits, and safe error mapping. It returns buffers only for immutable file content and decoded output for typed parsers.
+`GitProcess.ts` is the only child-process execution adapter. It launches `git`
+with `execFile`, argument arrays, and no shell. Every operation runs through
+`GitScheduler`, which enforces four global and two per-repository processes.
+The adapter owns cancellation, centrally configured timeouts, encoding, 5 MiB
+stdout/stderr limits, stdin bounds, and stable process-control errors.
+
+`GitCli.ts` owns typed Git operations, command construction, validation, and
+parser selection. Keeping process mechanics separate prevents the command
+adapter from becoming the implicit owner of configuration, scheduling, and
+platform error normalization.
 
 `gitProcessPolicy.ts` is the single local-only process boundary. It blocks every Git transport and lazy object fetch, disables prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes inherited repository and command-config redirection, enables literal pathspec handling, and prevents external diff/textconv execution. The policy is applied to string, buffer, and stdin invocations and is covered by exact regression tests.
 
@@ -189,6 +210,16 @@ state. The controller owns filter/sort preferences, quick open, review
 navigation anchors, and native diff opening. Status/change-size sorts
 automatically select the flat file layout; selecting tree layout restores path
 sorting so the requested order remains truthful.
+
+Rename Comparison stores a trimmed, length-capped, non-printable-character-free
+display name in the persisted comparison's optional `customLabel`; an empty
+input restores the ref-derived default. The storage boundary reapplies the
+same invariant before accepting workspace state. Patch export re-resolves the
+current result and asks `readComparisonPatch` for a bounded local `git
+diff`/`git show --patch` between the already-immutable endpoint SHAs,
+optionally limited to a single validated file from a known workspace
+repository; output goes only to the clipboard or a user-chosen local
+filesystem location.
 
 ### FileActionsController
 
@@ -271,21 +302,33 @@ when expanded. Actions copy identifiers, create a saved comparison, or ask VS
 Code to open an already enumerated worktree. Command inputs are re-enumerated
 before use. Branch and worktree mutation is intentionally absent.
 
-### GitLabController and approved-link domain
+### GitLabController and browser-link domain
 
-`domain/gitLab.ts` is a VS Code-free trust boundary for exact approved-origin
-parsing, HTTP/SSH remote matching, project-path normalization, immutable target
-validation, and final URL construction. HTTP remotes match scheme, hostname,
-and effective port exactly. SSH/scp-style remotes can map only to configured
-origins with the same normalized hostname; ambiguous mappings remain a user
+`domain/gitLab.ts` is a VS Code-free trust boundary for exact origin parsing,
+HTTP/SSH remote matching, project-path normalization, immutable target
+validation, and final URL construction. With an empty setting, validated
+HTTP(S) remotes retain their exact origin and SSH/scp-style remotes infer HTTPS
+on the normalized hostname. With a non-empty setting, HTTP remotes match
+scheme, hostname, and effective port exactly; SSH remotes can map only to
+configured origins with the same hostname. Ambiguous mappings remain a user
 choice.
 
 `GitLabController` revalidates the workspace repository, reads at most 32
 remote names and eight URLs per remote through local transport-blocked Git,
-resolves every ref target to a local SHA, and calls `vscode.env.openExternal`
-only from an explicit command. It has no HTTP client, redirect handler, token
-storage, background refresh, or cache. Quick picks display approved origin,
-project path, and remote name, never the configured remote URL or credentials.
+resolves every ref target to a local SHA, and uses one URL-resolution path for
+both `vscode.env.openExternal` and explicit clipboard-copy commands. The
+Command Palette configuration flow validates and normalizes one exact origin
+before updating workspace configuration; empty input restores local-remote
+inference. The controller has no HTTP client, redirect handler, token storage,
+background refresh, or cache. Quick picks display browser origin, project
+path, and remote name, never the configured remote URL or credentials.
+
+`ui/gitLabAutolinks.ts` renders commit-controlled text for trusted Markdown:
+it escapes everything and turns boundary-checked `#123`/`!123` shorthand into
+command links carrying only the repository root and reference text. The trust
+list for autolinked surfaces contains the single reference-opening command,
+and `openReferenceAt` revalidates both arguments before running the ordinary
+origin-policy flow, so rendering can never contact a host by itself.
 
 ### BlameController
 
@@ -304,6 +347,13 @@ The UI provider bridges VS Code cancellation to `AbortSignal`, renders escaped
 trusted Markdown with an explicit command allowlist, limits patch presentation
 to 24 lines/4,000 characters, and returns no hover after cancellation or a
 safe local Git failure.
+
+The hover also serves RefHaven's readonly revision documents (time-travel
+blame). The controller accepts a revision document only after the content
+provider verifies the URI's HMAC signature and the repository is still part of
+the workspace, then blames at that pinned SHA instead of reading the buffer.
+The "Before This Change" hover action opens the file at the blame `previous`
+revision, so successive hovers walk a line's history backwards.
 
 ### FileAnnotationsController
 
@@ -324,6 +374,12 @@ Activation performs only composition, command/provider registration, repository 
 
 Disposables, cancellation sources, process handles, event subscriptions, and content providers are owned by the composition root or their parent service and are disposed on workspace/extension shutdown.
 
+Runtime settings are read only through
+`config/extensionConfiguration.ts`. Package-manifest defaults and bounds must
+remain aligned with that module and are protected by manifest tests. Operational
+errors are logged through `application/errorHandling.ts`; exception messages
+remain user-facing only and are never copied into logs.
+
 ## Security and resource controls
 
 - Enumerated refs originate from Git. Typed revisions are syntax-limited,
@@ -336,7 +392,7 @@ Disposables, cancellation sources, process handles, event subscriptions, and con
 - Logs redact repository identity and exclude credentials, environment, tokens, remote URLs, and file data.
 - There is no telemetry, HTTP/API client, Git remote operation, or automatic
   fetch; Git transports and partial-clone lazy fetch are blocked at process
-  level. Explicit GitLab commands may hand one fully validated approved-origin
+  level. Explicit GitLab commands may hand one fully validated, policy-matched
   URL to the external browser.
 
 ## Decisions requiring an ADR

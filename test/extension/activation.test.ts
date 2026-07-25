@@ -18,7 +18,9 @@ suite("RefHaven extension", () => {
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes("refhaven.newComparison"));
+    assert.ok(commands.includes("refhaven.openAllComparisonChanges"));
     assert.ok(commands.includes("refhaven.compareCurrentBranch"));
+    assert.ok(commands.includes("refhaven.compareSelectedBranches"));
     assert.ok(commands.includes("refhaven.openFileDiff"));
     assert.ok(commands.includes("refhaven.showRefHavenMenu"));
     assert.ok(commands.includes("refhaven.showFileHistory"));
@@ -29,14 +31,24 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.openGitLabFile"));
     assert.ok(commands.includes("refhaven.openGitLabComparison"));
     assert.ok(commands.includes("refhaven.openGitLabLocalReference"));
+    assert.ok(commands.includes("refhaven.configureGitLabOrigin"));
+    assert.ok(commands.includes("refhaven.copyGitLabFileUrl"));
+    assert.ok(commands.includes("refhaven.inspectCurrentLine"));
+    assert.ok(commands.includes("refhaven.revealFileInComparison"));
     assert.ok(commands.includes("refhaven.quickOpenComparisonFile"));
     assert.ok(commands.includes("refhaven.markFileReviewed"));
     assert.ok(commands.includes("refhaven.nextUnreviewedFile"));
     assert.ok(commands.includes("refhaven.changeStashFilter"));
     assert.ok(commands.includes("refhaven.changeFileHistoryFilter"));
     assert.ok(commands.includes("refhaven.compareCommitWithParent"));
+    assert.ok(commands.includes("refhaven.renameComparison"));
+    assert.ok(commands.includes("refhaven.copyComparisonPatch"));
+    assert.ok(commands.includes("refhaven.saveComparisonPatch"));
+    assert.ok(commands.includes("refhaven.copyFilePatch"));
     assert.ok(commands.includes("refhaven.refreshAll"));
     assert.ok(commands.includes("refhaven.comparisons.focus"));
+    assert.ok(commands.includes("refhaven.inspector.focus"));
+    assert.ok(commands.includes("refhaven.repository.focus"));
     await vscode.commands.executeCommand("refhaven.comparisons.focus");
   });
 

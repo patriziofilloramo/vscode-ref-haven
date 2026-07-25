@@ -6,6 +6,12 @@ import * as vscode from "vscode";
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
 import type { ComparisonResult } from "../../src/domain/comparisonResult";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
+import { BranchesTreeProvider } from "../../src/ui/tree/BranchesTreeProvider";
+import { CommitDetailsTreeProvider } from "../../src/ui/tree/CommitDetailsTreeProvider";
+import { FileHistoryTreeProvider } from "../../src/ui/tree/FileHistoryTreeProvider";
+import { InspectorTreeProvider } from "../../src/ui/tree/InspectorTreeProvider";
+import { RepositoryTreeProvider } from "../../src/ui/tree/RepositoryTreeProvider";
+import { WorktreesTreeProvider } from "../../src/ui/tree/WorktreesTreeProvider";
 
 suite("comparison tree lifecycle", () => {
   test("exposes the exact root node used by the tree for reveal", async () => {
@@ -116,6 +122,42 @@ suite("comparison tree lifecycle", () => {
     }
   });
 
+  test("shows loading, fresh, stale, and review-badge state explicitly", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    let complete: ((result: ComparisonResult) => void) | undefined;
+    provider.setComparisons([comparison]);
+    provider.setComparisonLoader(
+      () =>
+        new Promise<ComparisonResult>((resolveResult) => {
+          complete = resolveResult;
+        }),
+    );
+
+    try {
+      const root = provider.getComparisonNode(comparison.id);
+      assert.ok(root);
+      const pending = provider.getChildren(root);
+      await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+      assert.match(String(provider.getTreeItem(root).description), /Loading/u);
+
+      complete?.(
+        createResult(comparison, {
+          computedAt: Date.now(),
+          files: [{ additions: 1, deletions: 0, newPath: "pending.ts", status: "modified" }],
+        }),
+      );
+      await pending;
+      assert.match(String(provider.getTreeItem(root).description), /updated/u);
+      assert.equal(provider.getUnreviewedCount(), 1);
+
+      provider.invalidateResult(comparison.id);
+      assert.match(String(provider.getTreeItem(root).description), /Stale/u);
+    } finally {
+      provider.dispose();
+    }
+  });
+
   test("renders review progress and filters comparison files without affecting other nodes", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();
@@ -165,6 +207,45 @@ suite("comparison tree lifecycle", () => {
     }
   });
 
+  test("resolves a comparison file and its full reveal parent chain", async () => {
+    const provider = new ComparisonTreeProvider();
+    const comparison = createComparison();
+    provider.setComparisons([comparison]);
+    provider.setComparisonLoader(() =>
+      Promise.resolve(
+        createResult(comparison, {
+          files: [
+            {
+              additions: 3,
+              deletions: 1,
+              newPath: "src/application/controller.ts",
+              status: "modified",
+            },
+          ],
+        }),
+      ),
+    );
+
+    try {
+      const file = await provider.findComparisonFileNode(
+        comparison.id,
+        "src/application/controller.ts",
+      );
+      assert.ok(file);
+      const folder = provider.getParent(file);
+      assert.ok(folder?.kind === "folder");
+      const filesSection = provider.getParent(folder);
+      assert.ok(filesSection?.kind === "section");
+      assert.equal(filesSection.section, "files");
+      assert.strictEqual(
+        provider.getParent(filesSection),
+        provider.getComparisonNode(comparison.id),
+      );
+    } finally {
+      provider.dispose();
+    }
+  });
+
   test("aborts in-flight calculation when its comparison is removed", async () => {
     const provider = new ComparisonTreeProvider();
     const comparison = createComparison();
@@ -194,6 +275,37 @@ suite("comparison tree lifecycle", () => {
       assert.equal(aborted, true);
     } finally {
       provider.dispose();
+    }
+  });
+});
+
+suite("composite native views", () => {
+  test("consolidates inspector and repository providers into four top-level sections", async () => {
+    const fileHistory = new FileHistoryTreeProvider();
+    const commitDetails = new CommitDetailsTreeProvider();
+    const branches = new BranchesTreeProvider();
+    const worktrees = new WorktreesTreeProvider();
+    const inspector = new InspectorTreeProvider(fileHistory, commitDetails);
+    const repository = new RepositoryTreeProvider(branches, worktrees);
+
+    try {
+      const inspectorSections = await inspector.getChildren();
+      assert.deepEqual(
+        inspectorSections.map((node) => inspector.getTreeItem(node).label),
+        ["File History", "Commit Details"],
+      );
+      const repositorySections = await repository.getChildren();
+      assert.deepEqual(
+        repositorySections.map((node) => repository.getTreeItem(node).label),
+        ["Branches", "Worktrees"],
+      );
+    } finally {
+      inspector.dispose();
+      repository.dispose();
+      fileHistory.dispose();
+      commitDetails.dispose();
+      branches.dispose();
+      worktrees.dispose();
     }
   });
 });

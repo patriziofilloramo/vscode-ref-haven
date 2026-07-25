@@ -100,6 +100,10 @@ The product has since grown toward a GitLens-style feature set while keeping the
   tip metadata, and bounded expandable history; Worktrees show a local
   staged/unstaged/untracked/conflicted summary.
 - **Native file-action surfaces:** the Explorer and editor share a RefHaven submenu for file/line history, annotations, open-at-revision, and compare-with-revision. The editor title and status-bar blame provide compact quick picks, while changed-file nodes expose revision, history, open, and copy actions consistently.
+- **Contextual workflows:** Source Control exposes direct single-file stash,
+  editor line inspection, active-file reveal in saved comparisons, and
+  two-branch selection. These flows reuse the same validated controllers as
+  the Command Palette instead of introducing parallel implementations.
 - **Line blame and hover:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, full commit identity, local commit statistics, a bounded previous-revision patch, and native actions for details, diffs, history, revision opening, and copy.
 - **File annotations:** opt-in whole-file gutter blame, a five-bucket commit-age heatmap, and saved-working-tree change ranges relative to a locally resolved reference. Computation is cancellable, bounded to 5,000 editor lines, and never persisted.
 - **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
@@ -108,16 +112,35 @@ The product has since grown toward a GitLens-style feature set while keeping the
 - **Commit search and details:** local history can be searched by message, author, SHA, or changed content, with full metadata and changed files shown in a native tree view.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
 - **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
-- **Approved GitLab links:** exact configured origins enable explicit browser
-  actions for project, commit, local branch/tag/HEAD revision, comparison,
-  file/line, issue, and merge request. All ref links use locally resolved SHAs;
-  no HTTP request, API token, background discovery, or RefHaven service exists.
+- **GitLab browser links:** validated local remotes enable zero-config explicit
+  browser actions for project, commit, local branch/tag/HEAD revision,
+  comparison, file/line, issue, and merge request. Validated target URLs may
+  also be copied without opening a browser. A non-empty exact-origin list
+  activates strict allowlist enforcement, and one origin can be configured or
+  cleared from the Command Palette. All ref links use locally resolved SHAs;
+  no HTTP request, API token, background discovery, or RefHaven service
+  exists.
+- **GitLab autolinks:** `#issue` and `!merge-request` shorthand in commit
+  summaries and full commit messages becomes inert command links that run the
+  validated origin-policy flow only when clicked. Word-adjacent, zero-padded,
+  path-like, and HTML-entity-like candidates never linkify.
+- **Time-travel blame:** the rich line hover also works on readonly revision
+  documents and blames at their pinned SHA. _Before This Change_ opens the file
+  just prior to the blamed commit, so repeated hovers walk a line's history.
+- **Comparison names and patch export:** _Rename Comparison..._ stores a
+  per-comparison display name (empty restores the default), while
+  _Copy Patch_ / _Save Patch..._ and the per-file _Copy File Patch_ export
+  locally produced unified diffs for sharing outside the workspace.
 
 All file diffs — comparison, commit, and stash — open through one shared `FileDiffScope` describing the two revisions, so every surface reuses the same native readonly diff pipeline.
 
 ## User experience
 
-The extension contributes the native `refhaven.comparisons` Tree View to the Source Control container. It uses native commands, context menus, theme icons, keyboard navigation, and accessibility support; it does not use a Webview.
+The extension contributes four native Source Control views: Branch
+Comparisons, Stashes, Inspector (File History and Commit Details), and
+Repository (Branches and Worktrees). It uses native commands, context menus,
+theme icons, keyboard navigation, and accessibility support; it does not use a
+Webview.
 
 Comparisons are grouped by repository only when more than one repository is present. A comparison node displays its directional label and a compact summary such as `↑8 ↓2 · 14 files`. Its tooltip includes repository, full refs, mode, resolved SHAs, merge base, and update time, without credentials or file contents.
 
@@ -169,14 +192,20 @@ active content filters before changing the real index or worktree. Missing
 local objects fail closed. Typed revisions pass strict syntax validation and
 must resolve through the transport-blocked local Git boundary before use.
 
-GitLab browser actions are disabled until at least one exact HTTP(S) origin is
-approved. Remote discovery is local; authenticated remote user information is
-never included in the generated URL. RefHaven validates the final origin and
-hands the URL to the external browser only after a user command. Browser
-networking and redirects are outside the extension trust boundary. The
-complete threat model is in [SECURITY.md](../SECURITY.md).
+GitLab browser actions work from validated local remotes without setup.
+HTTP(S) remotes retain their exact origin and SSH remotes infer HTTPS on the
+same hostname. A configured non-empty origin list switches to strict allowlist
+enforcement and supports custom browser ports. Authenticated remote user
+information is never included in the generated URL. RefHaven validates the
+final origin and hands the URL to the external browser only after a user
+command. Browser networking and redirects are outside the extension trust
+boundary. The complete threat model is in [SECURITY.md](../SECURITY.md).
 
-Logs contain command category and non-sensitive operational metadata. Metadata keys associated with credentials, environment, remote URLs, secrets, tokens, and file content are redacted; Git file content is never logged.
+Logs contain stable event categories and non-sensitive operational metadata.
+Exception messages are excluded. Metadata keys associated with authors,
+branches, commit messages, emails, paths, refs, repositories, SHAs, remotes,
+credentials, environment values, secrets, tokens, and file content are
+redacted; Git file content is never logged.
 
 Commands have cancellation, a configurable 1–300 second timeout, four-global/two-per-repository concurrency limits, and 5 MiB stdout/stderr limits. Unsaved blame input is capped at 5 MiB. Revision content is read only when a user opens a revision or diff, authenticated with a session-scoped URI signature, and retained in a cache bounded to 64 entries and 16 MiB.
 
