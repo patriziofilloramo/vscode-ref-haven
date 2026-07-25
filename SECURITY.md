@@ -43,6 +43,13 @@ private empty temporary path, preventing repository or global Git hooks from
 running. The temporary index stores Git object IDs and paths, not file
 contents, and is deleted after the operation.
 
+After the stash ref is created, RefHaven re-snapshots both the selected real
+index entries and selected working-tree paths into the isolated index and
+revalidates the captured HEAD. Cleanup proceeds as one Git restore only if all
+three states still match. If an editor, terminal, or other process changes
+them during preparation, the stash remains available but RefHaven leaves the
+newer repository state untouched and reports the partial outcome.
+
 Apply, pop, drop, multi-file stash, include-untracked, and keep-index variants
 remain outside scope. RefHaven also makes the mutation non-cancellable after
 it starts: terminating Git while it is updating objects, refs, or the real

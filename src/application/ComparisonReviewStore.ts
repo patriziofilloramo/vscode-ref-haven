@@ -23,6 +23,7 @@ export class ComparisonReviewStore {
     ComparisonResult,
     { readonly currentPaths: ReadonlySet<string>; readonly revisionKey: string }
   >();
+  private writeQueue: Promise<void> = Promise.resolve();
 
   public constructor(private readonly workspaceState: WorkspaceState) {}
 
@@ -55,6 +56,7 @@ export class ComparisonReviewStore {
     result: ComparisonResult,
     filePath: string,
     reviewed: boolean,
+    expectedRevisionKey?: string,
   ): Promise<ComparisonReviewSummary> {
     if (!result.files.some(({ newPath }) => newPath === filePath)) {
       throw new Error("The selected file is no longer part of this comparison.");
@@ -62,12 +64,19 @@ export class ComparisonReviewStore {
     if (filePath.length > MAX_REVIEW_PATH_LENGTH) {
       throw new Error("The selected file path is too long to persist as review state.");
     }
-    const summary = this.getSummary(result);
-    const reviewedPaths = new Set(summary.reviewedPaths);
-    if (reviewed) reviewedPaths.add(filePath);
-    else reviewedPaths.delete(filePath);
-    await this.persistRecord(result.comparison.id, summary.revisionKey, reviewedPaths);
-    return { ...summary, reviewedCount: reviewedPaths.size, reviewedPaths };
+    return this.enqueueWrite(async () => {
+      const summary = this.getSummary(result);
+      if (expectedRevisionKey !== undefined && expectedRevisionKey !== summary.revisionKey) {
+        throw new Error(
+          "The comparison changed after this file was displayed. Refresh the view and try again.",
+        );
+      }
+      const reviewedPaths = new Set(summary.reviewedPaths);
+      if (reviewed) reviewedPaths.add(filePath);
+      else reviewedPaths.delete(filePath);
+      await this.persistRecord(result.comparison.id, summary.revisionKey, reviewedPaths);
+      return { ...summary, reviewedCount: reviewedPaths.size, reviewedPaths };
+    });
   }
 
   public async setAllReviewed(
@@ -82,25 +91,40 @@ export class ComparisonReviewStore {
     if (reviewed && result.files.some(({ newPath }) => newPath.length > MAX_REVIEW_PATH_LENGTH)) {
       throw new Error("One or more file paths are too long to persist as review state.");
     }
-    const revisionKey = this.getSummary(result).revisionKey;
-    const reviewedPaths = new Set(reviewed ? result.files.map(({ newPath }) => newPath) : []);
-    await this.persistRecord(result.comparison.id, revisionKey, reviewedPaths);
-    return {
-      reviewedCount: reviewedPaths.size,
-      reviewedPaths,
-      revisionKey,
-      totalCount: result.files.length,
-    };
+    return this.enqueueWrite(async () => {
+      const revisionKey = this.getSummary(result).revisionKey;
+      const reviewedPaths = new Set(reviewed ? result.files.map(({ newPath }) => newPath) : []);
+      await this.persistRecord(result.comparison.id, revisionKey, reviewedPaths);
+      return {
+        reviewedCount: reviewedPaths.size,
+        reviewedPaths,
+        revisionKey,
+        totalCount: result.files.length,
+      };
+    });
   }
 
   public async removeComparison(comparisonId: string): Promise<void> {
-    await this.persist(this.getRecords().filter((record) => record.comparisonId !== comparisonId));
+    await this.enqueueWrite(() =>
+      this.persist(this.getRecords().filter((record) => record.comparisonId !== comparisonId)),
+    );
   }
 
   public async prune(validComparisonIds: ReadonlySet<string>): Promise<void> {
-    const current = this.getRecords();
-    const retained = current.filter((record) => validComparisonIds.has(record.comparisonId));
-    if (retained.length !== current.length) await this.persist(retained);
+    await this.enqueueWrite(async () => {
+      const current = this.getRecords();
+      const retained = current.filter((record) => validComparisonIds.has(record.comparisonId));
+      if (retained.length !== current.length) await this.persist(retained);
+    });
+  }
+
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.writeQueue.then(operation, operation);
+    this.writeQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
   }
 
   private getRecords(): ComparisonReviewRecordV1[] {

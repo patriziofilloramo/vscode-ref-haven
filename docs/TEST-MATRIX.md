@@ -69,6 +69,12 @@ metadata, gone-upstream handling, porcelain-v2 worktree state including rename
 continuations, real branch tip/history/status reads, exact command/manifest
 registration, and local-only lazy loading. Filters are in-memory presentation
 state and introduce no persistence or network path.
+Maintenance-hardening coverage includes trusted Markdown command arguments
+containing unbalanced parentheses, unchanged blame-origin suppression,
+fallback inline hover behavior, separate selected-index/worktree stash
+snapshots, and rejection of review writes carrying a stale revision key.
+Concurrent review-write tests force asynchronous workspace-state updates and
+verify that both file marks survive.
 
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |

@@ -80,6 +80,20 @@ suite("blame presentation", () => {
     assert.equal(markdown, "**You** · Uncommitted changes");
   });
 
+  test("keeps command links intact when arguments contain parentheses", () => {
+    const parenthesized: LineBlame = { ...COMMITTED, path: "src/(group/file.ts" };
+    const markdown = blameHoverMarkdown(parenthesized, null, "C:\\repo (work)", NOW);
+
+    for (const destination of markdown.matchAll(/\]\(command:([^)\s]*)\)/gu)) {
+      const query = destination[1]?.split("?")[1] ?? "";
+      assert.doesNotMatch(query, /[()]/u, "command arguments must not contain raw parentheses");
+      assert.doesNotThrow(() => JSON.parse(decodeURIComponent(query)));
+    }
+    const linkCount = [...markdown.matchAll(/\]\(command:/gu)].length;
+    assert.equal([...markdown.matchAll(/\]\(command:[^()\s]+\)/gu)].length, linkCount);
+    assert.equal(linkCount, 4);
+  });
+
   test("escapes Git-controlled Markdown in trusted hovers", () => {
     const malicious: LineBlame = {
       ...COMMITTED,

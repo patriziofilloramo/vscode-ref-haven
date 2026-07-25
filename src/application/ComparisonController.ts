@@ -483,7 +483,12 @@ export class ComparisonController {
   public async markFileReviewed(node: FileNode, reviewed: boolean): Promise<void> {
     if (!node.review) throw new Error("Select a file from a saved comparison first.");
     const result = await this.treeProvider.loadComparisonResult(node.review.comparisonId);
-    await this.reviewStore.setReviewed(result, node.file.newPath, reviewed);
+    await this.reviewStore.setReviewed(
+      result,
+      node.file.newPath,
+      reviewed,
+      node.review.revisionKey,
+    );
     this.reviewNavigationAnchors.set(result.comparison.id, node.file.newPath);
     this.treeProvider.refreshReviewState(result.comparison.id);
   }
@@ -519,7 +524,11 @@ export class ComparisonController {
       "all",
       this.treeProvider.getFileSort(),
     );
-    if (files.length === 0 || review.reviewedCount === review.totalCount) {
+    if (files.length === 0) {
+      void vscode.window.showInformationMessage("This comparison has no changed files.");
+      return;
+    }
+    if (review.reviewedCount === review.totalCount) {
       void vscode.window.showInformationMessage("All files in this comparison are reviewed.");
       return;
     }

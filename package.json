@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "local-development",
   "license": "UNLICENSED",
   "private": true,
@@ -908,12 +908,12 @@
         },
         {
           "command": "refhaven.nextUnreviewedFile",
-          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.file\\./",
+          "when": "view == refhaven.comparisons && viewItem =~ /\\.(reviewed|unreviewed)$/",
           "group": "1_review@2"
         },
         {
           "command": "refhaven.previousUnreviewedFile",
-          "when": "view == refhaven.comparisons && viewItem =~ /^refhaven\\.file\\./",
+          "when": "view == refhaven.comparisons && viewItem =~ /\\.(reviewed|unreviewed)$/",
           "group": "1_review@3"
         },
         {

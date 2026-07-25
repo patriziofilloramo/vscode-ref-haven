@@ -26,6 +26,8 @@ import type { FileHistoryController } from "./FileHistoryController";
 import type { Logger } from "./Logger";
 import type { StashController } from "./StashController";
 
+const MAX_SEARCHED_STASHES = 50;
+
 interface FileActionItem extends vscode.QuickPickItem {
   readonly run: () => Thenable<unknown>;
 }
@@ -200,15 +202,22 @@ export class FileActionsController {
 
   public async findOtherStashesContainingFile(candidate: unknown): Promise<void> {
     const node = await this.requireStashFileNode(candidate);
-    const stashes = (await listStashes(node.scope.repositoryRootPath))
-      .filter(({ sha }) => sha !== node.scope.toSha)
-      .slice(0, 50);
+    const otherStashes = (await listStashes(node.scope.repositoryRootPath)).filter(
+      ({ sha }) => sha !== node.scope.toSha,
+    );
+    const stashes = otherStashes.slice(0, MAX_SEARCHED_STASHES);
+    // The search runs two Git diffs per stash, so it is capped; say so
+    // instead of implying every stash was searched.
+    const searchScope =
+      otherStashes.length > stashes.length
+        ? `the ${stashes.length.toString()} most recent of ${otherStashes.length.toString()} stashes`
+        : "recent stashes";
     const paths = stashFilePaths(node.file);
     const matches = await vscode.window.withProgress(
       {
         cancellable: true,
         location: vscode.ProgressLocation.Notification,
-        title: `RefHaven: Searching recent stashes for ${node.file.newPath}`,
+        title: `RefHaven: Searching ${searchScope} for ${node.file.newPath}`,
       },
       async (_progress, token) => {
         const abortController = new AbortController();
@@ -244,7 +253,7 @@ export class FileActionsController {
     if (matches === null) return;
     if (matches.length === 0) {
       void vscode.window.showInformationMessage(
-        `No other recent stash contains ${node.file.newPath}.`,
+        `None of ${searchScope} contains ${node.file.newPath}.`,
       );
       return;
     }

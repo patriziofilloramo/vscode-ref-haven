@@ -253,10 +253,14 @@ The Git adapter validates the literal repository-relative path, detects a
 rename pair, rejects conflicts and active content filters, and creates standard
 stash index/worktree commits from an isolated temporary index. `refs/stash` is
 updated with a compare-and-swap expected value before only the selected paths
-are restored to `HEAD`. Every plumbing command that can update an index or ref
-uses a private empty `core.hooksPath`; unrelated real index and worktree state
-is never copied into the stash or reset. The progress notification becomes
-non-cancellable once this bounded mutation begins.
+are restored to `HEAD`. Immediately before cleanup, the selected real-index
+entries and worktree paths are independently re-snapshotted and compared with
+the captured index/worktree trees, and HEAD is re-resolved. A mismatch leaves
+the newer state untouched; a match proceeds through one path-limited restore.
+Every plumbing command that can update an index or ref uses a private empty
+`core.hooksPath`; unrelated real index and worktree state is never copied into
+the stash or reset. The progress notification becomes non-cancellable once
+this bounded mutation begins.
 
 ### Repository navigation
 

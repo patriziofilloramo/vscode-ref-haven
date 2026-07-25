@@ -1,5 +1,15 @@
 const MARKDOWN_CHARACTERS = new Set("\\`*_{}[]()<>#+-.!|");
 
+/**
+ * Encodes command-link arguments for a trusted MarkdownString.
+ * encodeURIComponent leaves `(` and `)` unencoded, but an unbalanced `)`
+ * inside a Markdown link destination terminates the link early, so both
+ * are percent-encoded explicitly.
+ */
+export function encodeCommandArguments(args: readonly unknown[]): string {
+  return encodeURIComponent(JSON.stringify(args)).replaceAll("(", "%28").replaceAll(")", "%29");
+}
+
 /** Escapes untrusted text before interpolation into VS Code MarkdownString content. */
 export function escapeMarkdown(value: string): string {
   let escaped = "";

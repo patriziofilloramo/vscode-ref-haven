@@ -52,7 +52,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "local-development");
-    assert.equal(manifest.version, "0.7.0");
+    assert.equal(manifest.version, "0.7.1");
     assert.match(manifest.description, /local processing/u);
   });
 
@@ -218,6 +218,14 @@ suite("extension manifest", () => {
           command === "refhaven.markFileUnreviewed" && when?.includes("\\.reviewed$"),
       ),
     );
+    for (const command of ["refhaven.nextUnreviewedFile", "refhaven.previousUnreviewedFile"]) {
+      assert.ok(
+        itemMenus.some(
+          ({ command: candidate, when }) =>
+            candidate === command && when?.includes("(reviewed|unreviewed)"),
+        ),
+      );
+    }
   });
 
   test("packages only compiled runtime files", () => {

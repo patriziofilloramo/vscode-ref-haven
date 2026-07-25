@@ -3,7 +3,7 @@ import { shortSha } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatDiffStats, formatRelativeTime, pluralize } from "../format";
-import { escapeMarkdown } from "../markdown";
+import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 import { blameAuthorLabel, blameCommitInfo } from "./blamePresentation";
 
 const MAX_PREVIEW_CHARACTERS = 4_000;
@@ -115,12 +115,13 @@ function secondaryActions(data: RichLineHover, commitNode: object): string {
 function originalLocation(data: RichLineHover): string | null {
   const path = data.blame.path;
   const line = data.blame.originalLineNumber;
-  if (!line && path === data.filePath) return null;
+  const samePath = path === data.filePath;
+  if (samePath && (line === undefined || line === data.lineNumber)) return null;
   return `Originally \`${escapeMarkdown(path)}${line ? `:${line.toString()}` : ""}\``;
 }
 
 function link(label: string, command: string, args: readonly unknown[]): string {
-  return `[${label}](command:${command}?${encodeURIComponent(JSON.stringify(args))})`;
+  return `[${label}](command:${command}?${encodeCommandArguments(args)})`;
 }
 
 function diffPreviewMarkdown(patch: string | null | undefined): string | null {

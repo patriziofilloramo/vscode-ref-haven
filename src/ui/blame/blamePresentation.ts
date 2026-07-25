@@ -2,7 +2,7 @@ import type { LineBlame } from "../../domain/blame";
 import { shortSha, type CommitInfo } from "../../domain/comparisonResult";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatRelativeTime } from "../format";
-import { escapeMarkdown } from "../markdown";
+import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 
 /** Commands that blame hover links may execute; used for MarkdownString trust. */
 export const BLAME_HOVER_COMMANDS: readonly string[] = [
@@ -66,20 +66,16 @@ export function blameHoverMarkdown(
     return `**${author}** · Uncommitted changes`;
   }
 
-  const commitArguments = encodeURIComponent(
-    JSON.stringify([{ commit: blameCommitInfo(blame), kind: "commit" }]),
-  );
-  const revisionArguments = encodeURIComponent(
-    JSON.stringify([repositoryRootPath, blame.sha, blame.path]),
-  );
-  const gitLabArguments = encodeURIComponent(
-    JSON.stringify([
-      repositoryRootPath,
-      blame.sha,
-      blame.path,
-      ...(blame.originalLineNumber === undefined ? [] : [blame.originalLineNumber]),
-    ]),
-  );
+  const commitArguments = encodeCommandArguments([
+    { commit: blameCommitInfo(blame), kind: "commit" },
+  ]);
+  const revisionArguments = encodeCommandArguments([repositoryRootPath, blame.sha, blame.path]);
+  const gitLabArguments = encodeCommandArguments([
+    repositoryRootPath,
+    blame.sha,
+    blame.path,
+    ...(blame.originalLineNumber === undefined ? [] : [blame.originalLineNumber]),
+  ]);
   return [
     `**${author}**, ${formatRelativeTime(blame.authorDate, nowMs)} (${new Date(blame.authorDate).toLocaleString()})`,
     escapeMarkdown(blame.summary),

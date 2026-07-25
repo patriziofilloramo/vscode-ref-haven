@@ -236,6 +236,20 @@ Stash statistics and branch history load only when expanded; filters reuse
 already loaded data. All metadata comes from bounded transport-blocked local
 Git commands, and the Branches and Worktrees surfaces remain read-only.
 
+### Maintenance hardening 0.7.1
+
+- Hardened trusted Markdown command links for repository paths and commit
+  metadata containing parentheses.
+- Restored the compact inline-blame hover when rich line hover is disabled.
+- Corrected unchanged original-location presentation and made the 50-stash
+  search ceiling explicit.
+- Revalidated both selected index and worktree snapshots immediately before
+  single-file stash cleanup.
+- Rejected review actions from stale comparison tree nodes instead of applying
+  them to a newly calculated result.
+- Serialized comparison-review writes so rapid mark/unmark actions cannot
+  overwrite one another.
+
 ## Next priorities
 
 The planned low/medium-complexity native UI roadmap is complete. Select the

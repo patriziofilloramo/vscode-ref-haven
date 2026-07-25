@@ -105,15 +105,32 @@ suite("ComparisonReviewStore", () => {
     const result = createResult();
 
     await assert.rejects(() => store.setReviewed(result, "missing.ts", true), /no longer part/iu);
+    await assert.rejects(
+      () => store.setReviewed(result, "src/a.ts", true, "f".repeat(64)),
+      /comparison changed/iu,
+    );
     await store.setAllReviewed(result, true);
     assert.equal(store.getSummary(result).reviewedCount, result.files.length);
     await store.removeComparison(result.comparison.id);
     assert.equal(store.getSummary(result).reviewedCount, 0);
   });
+
+  test("serializes concurrent review writes without losing paths", async () => {
+    const state = new YieldingWorkspaceState();
+    const store = new ComparisonReviewStore(state.asWorkspaceState());
+    const result = createResult();
+
+    await Promise.all([
+      store.setReviewed(result, "src/a.ts", true),
+      store.setReviewed(result, "src/b.ts", true),
+    ]);
+
+    assert.deepEqual([...store.getSummary(result).reviewedPaths].sort(), ["src/a.ts", "src/b.ts"]);
+  });
 });
 
 class FakeWorkspaceState {
-  private readonly values = new Map<string, unknown>();
+  protected readonly values = new Map<string, unknown>();
 
   public get(key: string, defaultValue?: unknown): unknown {
     return this.values.has(key) ? this.values.get(key) : defaultValue;
@@ -126,6 +143,13 @@ class FakeWorkspaceState {
 
   public asWorkspaceState(): Pick<vscode.ExtensionContext["workspaceState"], "get" | "update"> {
     return this as Pick<vscode.ExtensionContext["workspaceState"], "get" | "update">;
+  }
+}
+
+class YieldingWorkspaceState extends FakeWorkspaceState {
+  public override async update(key: string, value: unknown): Promise<void> {
+    await new Promise<void>((resolveUpdate) => setImmediate(resolveUpdate));
+    this.values.set(key, value);
   }
 }
 

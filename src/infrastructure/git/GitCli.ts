@@ -637,7 +637,7 @@ export async function stashTrackedFile(
   const temporaryIndex = join(temporaryDirectory, "index");
   const disabledHooksPath = join(temporaryDirectory, "hooks-disabled");
   try {
-    const stashCommit = await createPathLimitedStashCommit(
+    const { indexTree, stashCommit, worktreeTree } = await createPathLimitedStashCommit(
       repositoryRoot,
       headSha,
       branchName,
@@ -669,6 +669,55 @@ export async function stashTrackedFile(
         "Another process changed the stash list. RefHaven left the selected file untouched.",
       ),
     );
+
+    // The index or worktree may have gained new edits while the stash commit
+    // was being built. Re-snapshot both selected states and only clean them
+    // when they still match the captured trees.
+    const verificationIndexTree = await snapshotSelectedIndexTree(
+      repositoryRoot,
+      headSha,
+      pathspecs,
+      temporaryIndex,
+      disabledHooksPath,
+    ).catch((error: unknown) =>
+      failGitOperation(
+        error,
+        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not re-verify the selected index state. The file was left untouched.`,
+      ),
+    );
+    if (verificationIndexTree !== indexTree) {
+      throw new Error(
+        `The stash was created as ${stashCommit.slice(0, 8)}, but the selected index state changed while stashing. RefHaven left the newer state untouched; review both states before retrying.`,
+      );
+    }
+
+    const verificationWorktreeTree = await snapshotWorktreeTree(
+      repositoryRoot,
+      pathspecs,
+      temporaryIndex,
+      disabledHooksPath,
+    ).catch((error: unknown) =>
+      failGitOperation(
+        error,
+        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not re-verify the selected file. The file was left untouched.`,
+      ),
+    );
+    if (verificationWorktreeTree !== worktreeTree) {
+      throw new Error(
+        `The stash was created as ${stashCommit.slice(0, 8)}, but the selected file changed while stashing. RefHaven left the newer content untouched; review both states before retrying.`,
+      );
+    }
+    const verificationHeadSha = await resolveRef(repositoryRoot, "HEAD").catch((error: unknown) =>
+      failGitOperation(
+        error,
+        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not re-verify HEAD. The file was left untouched.`,
+      ),
+    );
+    if (verificationHeadSha !== headSha) {
+      throw new Error(
+        `The stash was created as ${stashCommit.slice(0, 8)}, but HEAD changed while stashing. RefHaven left the newer repository state untouched; review both states before retrying.`,
+      );
+    }
 
     try {
       await restorePathsFromHead(repositoryRoot, headSha, pathspecs, disabledHooksPath);
@@ -1002,6 +1051,58 @@ async function createPathLimitedStashCommit(
   pathspecs: readonly string[],
   temporaryIndex: string,
   disabledHooksPath: string,
+): Promise<{
+  readonly indexTree: string;
+  readonly stashCommit: string;
+  readonly worktreeTree: string;
+}> {
+  const indexTree = await snapshotSelectedIndexTree(
+    repositoryRoot,
+    headSha,
+    pathspecs,
+    temporaryIndex,
+    disabledHooksPath,
+  );
+  const indexCommit = parseObjectId(
+    await runGitWithInput(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, ["commit-tree", indexTree, "-p", headSha]),
+      `index on ${branchName}: ${headSha.slice(0, 8)} ${message}\n`,
+    ),
+    "Git returned an invalid stash index commit.",
+  );
+
+  const worktreeTree = await snapshotWorktreeTree(
+    repositoryRoot,
+    pathspecs,
+    temporaryIndex,
+    disabledHooksPath,
+  );
+  const stashCommit = parseObjectId(
+    await runGitWithInput(
+      repositoryRoot,
+      withoutGitHooks(disabledHooksPath, [
+        "commit-tree",
+        worktreeTree,
+        "-p",
+        headSha,
+        "-p",
+        indexCommit,
+      ]),
+      `On ${branchName}: ${message}\n`,
+    ),
+    "Git returned an invalid stash commit.",
+  );
+  return { indexTree, stashCommit, worktreeTree };
+}
+
+/** Snapshots only the selected real-index entries on top of HEAD. */
+async function snapshotSelectedIndexTree(
+  repositoryRoot: string,
+  headSha: string,
+  pathspecs: readonly string[],
+  temporaryIndex: string,
+  disabledHooksPath: string,
 ): Promise<string> {
   await runGitWithTemporaryIndex(
     repositoryRoot,
@@ -1037,43 +1138,29 @@ async function createPathLimitedStashCommit(
     ),
     "Git returned an invalid temporary index tree.",
   );
-  const indexCommit = parseObjectId(
-    await runGitWithInput(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, ["commit-tree", indexTree, "-p", headSha]),
-      `index on ${branchName}: ${headSha.slice(0, 8)} ${message}\n`,
-    ),
-    "Git returned an invalid stash index commit.",
-  );
+  return indexTree;
+}
 
+/** Snapshots the selected worktree paths into the temporary index and returns their tree. */
+async function snapshotWorktreeTree(
+  repositoryRoot: string,
+  pathspecs: readonly string[],
+  temporaryIndex: string,
+  disabledHooksPath: string,
+): Promise<string> {
   await updateTemporaryIndexFromWorktree(
     repositoryRoot,
     pathspecs,
     temporaryIndex,
     disabledHooksPath,
   );
-  const worktreeTree = parseObjectId(
+  return parseObjectId(
     await runGitWithTemporaryIndex(
       repositoryRoot,
       withoutGitHooks(disabledHooksPath, ["write-tree"]),
       temporaryIndex,
     ),
     "Git returned an invalid temporary worktree tree.",
-  );
-  return parseObjectId(
-    await runGitWithInput(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, [
-        "commit-tree",
-        worktreeTree,
-        "-p",
-        headSha,
-        "-p",
-        indexCommit,
-      ]),
-      `On ${branchName}: ${message}\n`,
-    ),
-    "Git returned an invalid stash commit.",
   );
 }
 
@@ -1109,38 +1196,17 @@ async function restorePathsFromHead(
   pathspecs: readonly string[],
   disabledHooksPath: string,
 ): Promise<void> {
-  const present: string[] = [];
-  const absent: string[] = [];
-  for (const filePath of pathspecs) {
-    const output = await runGit(repositoryRoot, [
-      "ls-tree",
-      "-z",
-      "--name-only",
-      headSha,
+  await runGit(
+    repositoryRoot,
+    withoutGitHooks(disabledHooksPath, [
+      "restore",
+      `--source=${headSha}`,
+      "--staged",
+      "--worktree",
       "--",
-      filePath,
-    ]);
-    (output.length > 0 ? present : absent).push(filePath);
-  }
-  if (absent.length > 0) {
-    await runGit(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, ["rm", "--force", "--ignore-unmatch", "--", ...absent]),
-    );
-  }
-  if (present.length > 0) {
-    await runGit(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, [
-        "restore",
-        `--source=${headSha}`,
-        "--staged",
-        "--worktree",
-        "--",
-        ...present,
-      ]),
-    );
-  }
+      ...pathspecs,
+    ]),
+  );
 }
 
 function withoutGitHooks(hooksPath: string, args: readonly string[]): string[] {

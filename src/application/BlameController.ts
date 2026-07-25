@@ -17,6 +17,7 @@ import { COMMAND_IDS } from "../ui/commands/commandIds";
 
 const CONFIG_SECTION = "refhaven";
 const INLINE_BLAME_SETTING = "inlineBlame.enabled";
+const LINE_HOVER_SETTING = "lineHover.enabled";
 const STATUS_BAR_BLAME_SETTING = "statusBarBlame.enabled";
 const UPDATE_DEBOUNCE_MS = 250;
 
@@ -189,6 +190,7 @@ export class BlameController implements vscode.Disposable {
     const generation = ++this.generation;
     const configuration = vscode.workspace.getConfiguration(CONFIG_SECTION);
     const inlineEnabled = configuration.get<boolean>(INLINE_BLAME_SETTING, true);
+    const richHoverEnabled = configuration.get<boolean>(LINE_HOVER_SETTING, true);
     const statusBarEnabled = configuration.get<boolean>(STATUS_BAR_BLAME_SETTING, true);
 
     const editor = vscode.window.activeTextEditor;
@@ -248,6 +250,9 @@ export class BlameController implements vscode.Disposable {
       const lineRange = document.lineAt(line).range;
       editor.setDecorations(this.decorationType, [
         {
+          // The rich line hover supersedes this hover; keep the legacy one
+          // so disabling refhaven.lineHover.enabled does not lose all hover.
+          ...(richHoverEnabled ? {} : { hoverMessage: hover }),
           range: lineRange,
           renderOptions: {
             after: { contentText: inlineBlameText(blame, userName, now) },

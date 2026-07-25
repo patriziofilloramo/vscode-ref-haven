@@ -90,6 +90,36 @@ suite("rich blame hover", () => {
     assert.doesNotMatch(markdown, /\*\*\[Run\]\(command:/u);
   });
 
+  test("keeps command links intact when metadata contains unbalanced parentheses", () => {
+    const markdown = richBlameHoverMarkdown(
+      data({
+        blame: { ...data().blame, summary: "fix: handle smiley :)" },
+        filePath: "src/pages/(auth/login.ts",
+      }),
+      NOW,
+    );
+
+    for (const destination of markdown.matchAll(/\]\(command:([^)\s]*)\)/gu)) {
+      const query = destination[1]?.split("?")[1] ?? "";
+      assert.doesNotMatch(query, /[()]/u, "command arguments must not contain raw parentheses");
+      assert.doesNotThrow(() => JSON.parse(decodeURIComponent(query)));
+    }
+    const linkCount = [...markdown.matchAll(/\]\(command:/gu)].length;
+    assert.equal([...markdown.matchAll(/\]\(command:[^()\s]+\)/gu)].length, linkCount);
+  });
+
+  test("hides the original location when the path and line are unchanged", () => {
+    const unchanged = data({
+      blame: { ...data().blame, originalLineNumber: 12, path: "src/example.ts" },
+    });
+    assert.doesNotMatch(richBlameHoverMarkdown(unchanged, NOW), /Originally/u);
+
+    const movedLine = data({
+      blame: { ...data().blame, originalLineNumber: 8, path: "src/example.ts" },
+    });
+    assert.match(richBlameHoverMarkdown(movedLine, NOW), /Originally `src\/example\\\.ts:8`/u);
+  });
+
   test("keeps uncommitted hovers concise and action-free", () => {
     const markdown = richBlameHoverMarkdown({
       blame: {
