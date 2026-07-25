@@ -68,7 +68,20 @@ Version 0.1 includes:
 - not-computed, loading, ready, stale, missing repository/ref, no-common-ancestor, and Git-failure states;
 - cancellation, stale-result prevention, bounded concurrency, and SHA-keyed caching.
 
-Version 0.1 explicitly excludes N-way comparisons, working-tree comparisons, merge/rebase/cherry-pick/patch operations, staging or file modification, hosted-forge integration, pull requests, automatic fetch or authentication, unfetched remote branches, custom diff/editor UI, AI review, cross-repository comparison, recursive submodule handling, general commit search, blame, and a full repository graph.
+Version 0.1 explicitly excluded N-way comparisons, working-tree comparisons, merge/rebase/cherry-pick/patch operations, staging or file modification, hosted-forge integration, pull requests, automatic fetch or authentication, unfetched remote branches, custom diff/editor UI, AI review, cross-repository comparison, recursive submodule handling, general commit search, blame, and a full repository graph. Several of these exclusions have since been delivered deliberately; the current plan lives in [ROADMAP.md](ROADMAP.md).
+
+## Beyond version 0.1
+
+The product has since grown toward a GitLens-style feature set while keeping the native-UI, no-webview, no-telemetry principles:
+
+- **Commit drill-down:** commits in the Ahead/Behind sections expand to the files they changed and open per-commit diffs (first parent; root commits diff against the empty tree).
+- **Stash management:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees and native diffs, apply/pop/drop (drop confirms; destructive operations verify the stash SHA against stale `stash@{n}` selectors), stash-all with an untracked option, and copy-message.
+- **File and commit context actions:** Open File, Copy Path, Copy Relative Path, Copy Commit SHA, and Copy Commit Message from any file or commit node.
+- **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `branchCompare.inlineBlame.enabled` and `branchCompare.statusBarBlame.enabled`.
+- **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
+- **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
+
+All file diffs — comparison, commit, and stash — open through one shared `FileDiffScope` describing the two revisions, so every surface reuses the same native readonly diff pipeline.
 
 ## User experience
 

@@ -4,9 +4,11 @@ import { promisify } from "node:util";
 
 import * as vscode from "vscode";
 
+import type { LineBlame } from "../../domain/blame";
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
 import type { CommitInfo, FileChange } from "../../domain/comparisonResult";
 import type { StashEntry } from "../../domain/stash";
+import { parseBlamePorcelain } from "./blamePorcelain";
 import { parseBranchRefs } from "./branchRefs";
 import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
 import { parseNameStatusZ } from "./nameStatus";
@@ -212,6 +214,48 @@ export async function pushStash(
   return stdout.trim().split("\n")[0]?.trim() ?? "";
 }
 
+/** Resolves the repository root containing `directory`, or null outside a repo. */
+export async function findRepositoryRoot(directory: string): Promise<string | null> {
+  const stdout = await runGit(directory, ["rev-parse", "--show-toplevel"]).catch(() => null);
+  const rootPath = stdout?.trim();
+  return rootPath && rootPath.length > 0 ? rootPath : null;
+}
+
+export async function readGitUserName(repositoryRoot: string): Promise<string | null> {
+  const stdout = await runGit(repositoryRoot, ["config", "user.name"]).catch(() => null);
+  const userName = stdout?.trim();
+  return userName && userName.length > 0 ? userName : null;
+}
+
+/**
+ * Blames a single one-based line of a repository-relative file. Pass
+ * `contents` to blame an unsaved buffer instead of the on-disk file. Returns
+ * null when Git cannot blame the line (e.g. untracked files).
+ */
+export async function blameLine(
+  repositoryRoot: string,
+  filePath: string,
+  line: number,
+  contents?: string,
+): Promise<LineBlame | null> {
+  const args = [
+    "blame",
+    "--porcelain",
+    "-L",
+    `${line.toString()},${line.toString()}`,
+    ...(contents === undefined ? [] : ["--contents", "-"]),
+    "--",
+    filePath,
+  ];
+  const stdout = await runGitWithInput(repositoryRoot, args, contents).catch(() => null);
+  if (stdout === null) return null;
+  try {
+    return parseBlamePorcelain(stdout);
+  } catch {
+    return null;
+  }
+}
+
 export async function readFileAtRevision(
   repositoryRoot: string,
   sha: string,
@@ -237,6 +281,31 @@ async function runGit(cwd: string, args: readonly string[]): Promise<string> {
     windowsHide: true,
   });
   return stdout;
+}
+
+/** Like {@link runGit}, but optionally feeds `input` to Git's stdin. */
+function runGitWithInput(
+  cwd: string,
+  args: readonly string[],
+  input: string | undefined,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      "git",
+      [...args],
+      { cwd, maxBuffer: MAX_GIT_OUTPUT_BYTES, windowsHide: true },
+      (error, stdout) => {
+        if (error) reject(error instanceof Error ? error : new Error("Git invocation failed."));
+        else resolve(stdout);
+      },
+    );
+    if (input !== undefined && child.stdin) {
+      child.stdin.on("error", () => {
+        // Git may exit before consuming stdin; the exec callback reports it.
+      });
+      child.stdin.end(input);
+    }
+  });
 }
 
 /** Runs a mutating stash command, surfacing Git's stderr (e.g. conflicts). */

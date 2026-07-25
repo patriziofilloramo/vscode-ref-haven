@@ -1,9 +1,16 @@
 import * as vscode from "vscode";
 
+import { BlameController } from "./application/BlameController";
 import { ComparisonController } from "./application/ComparisonController";
 import { ComparisonStore } from "./application/ComparisonStore";
+import { RepositoryWatcher } from "./application/RepositoryWatcher";
 import { StashController } from "./application/StashController";
-import { listChangedFiles, listCommitFileChanges, listStashes } from "./infrastructure/git/GitCli";
+import {
+  discoverRepositories,
+  listChangedFiles,
+  listCommitFileChanges,
+  listStashes,
+} from "./infrastructure/git/GitCli";
 import { OutputChannelLogger } from "./infrastructure/logging/OutputChannelLogger";
 import { registerCommands } from "./ui/commands/registerCommands";
 import {
@@ -37,6 +44,21 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     revisionProvider,
   );
   const stashController = new StashController(stashTreeProvider, logger);
+  const blameController = new BlameController(logger);
+  const repositoryWatcher = new RepositoryWatcher(() => {
+    controller.refreshAll();
+    void stashController.refresh();
+    blameController.refresh();
+  });
+  const watchWorkspaceRepositories = (): void => {
+    void discoverRepositories().then((repositories) => {
+      repositoryWatcher.setRepositories(repositories);
+    });
+  };
+  const workspaceFoldersListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    watchWorkspaceRepositories();
+    void stashController.refresh();
+  });
   const revisionProviderRegistration = vscode.workspace.registerTextDocumentContentProvider(
     REVISION_DOCUMENT_SCHEME,
     revisionProvider,
@@ -59,9 +81,13 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     decorationProviderRegistration,
     treeView,
     stashTreeView,
+    blameController,
+    repositoryWatcher,
+    workspaceFoldersListener,
   );
   controller.initialize();
   void stashController.initialize();
-  registerCommands(context, logger, controller, stashController);
+  watchWorkspaceRepositories();
+  registerCommands(context, logger, controller, stashController, blameController);
   logger.info("Extension services registered", { operation: "activate" });
 }

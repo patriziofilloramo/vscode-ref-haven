@@ -21,50 +21,57 @@ VS Code activation and commands
 
 Domain types have no VS Code dependency. Application services depend on domain interfaces. Infrastructure and UI implement ports consumed by the application layer. `extension.ts` is the composition root and performs manual dependency injection.
 
-## Proposed source layout
+## Source layout
 
 ```text
 src/
-  extension.ts
-  domain/
+  extension.ts             // activation entry point
+  compositionRoot.ts       // manual dependency injection and wiring
+  domain/                  // VS Code-free types and pure logic
+    blame.ts
     comparison.ts
     comparisonResult.ts
-    fileChange.ts
-    repository.ts
-    errors.ts
-  application/
+    fileDiffScope.ts
+    stash.ts
+    validation.ts
+  application/             // orchestration; owns runtime state
+    BlameController.ts
     ComparisonController.ts
     ComparisonEngine.ts
-    ComparisonRefreshScheduler.ts
-    ComparisonCache.ts
+    ComparisonStore.ts
+    Logger.ts
+    RepositoryWatcher.ts
+    StashController.ts
   infrastructure/
-    git/
-      GitProcess.ts
-      GitClient.ts
-      GitRepositoryRegistry.ts
-      GitCommandError.ts
-      parsers/
-        parseAheadBehind.ts
-        parseNameStatusZ.ts
-        parseNumStatZ.ts
-        parseLog.ts
-    persistence/
-      ComparisonStore.ts
-      ComparisonMigrations.ts
+    git/                   // typed git CLI operations and tested parsers
+      GitCli.ts
+      blamePorcelain.ts
+      branchRefs.ts
+      commitLog.ts
+      nameStatus.ts
+      numstat.ts
+      stashList.ts
+    logging/
+      OutputChannelLogger.ts
   ui/
-    tree/
-      ComparisonTreeProvider.ts
-      nodes/
+    blame/
+      blamePresentation.ts // pure label/hover builders for line blame
+    commands/
+      commandIds.ts
+      registerCommands.ts
     documents/
       GitRevisionContentProvider.ts
-      revisionUri.ts
-    commands/
-    quickpick/
-  configuration/
-    configuration.ts
+    format.ts
+    pickers/
+      comparisonPickers.ts
+    tree/
+      ChangeDecorationProvider.ts
+      ComparisonTreeProvider.ts
+      StashTreeProvider.ts
+      changeNodes.ts       // file/folder/message nodes shared by all trees
+      fileTree.ts
 test/
   unit/
-  integration/
   extension/
 ```
 
@@ -150,6 +157,22 @@ The controller creates restored nodes synchronously in `notComputed`. Expansion 
 The readonly `branch-compare:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. URIs carry a repository identifier, immutable SHA, and encoded path, never a symbolic ref or credential. An explicit empty-document URI supplies the missing side of added/deleted changes.
 
 Renames use the old path at the from-SHA and the new path at the to-SHA. Binary files do not pass through the text provider; UI actions offer opening available revisions instead of a misleading text diff.
+
+### Shared change nodes and FileDiffScope
+
+`domain/fileDiffScope.ts` defines the pair of revisions a set of file changes was computed between. `ui/tree/changeNodes.ts` renders `FileChange` lists as file/folder/message nodes (flat or compacted tree) with a `FileDiffScope` attached to every file node. Comparisons, expanded commits, and stashes all produce these nodes, so one `openFileDiff` command serves every tree.
+
+### StashController and StashTreeProvider
+
+The stash view lists `git stash list` entries (parsed from a NUL-safe `--format`) per repository and expands each stash into its tracked file changes (first parent → stash commit). Apply, pop, and drop resolve the `stash@{n}` selector and compare the resulting SHA with the entry before mutating, so a stale tree cannot drop the wrong stash; drop additionally requires modal confirmation. Stash-all offers tracked-only or include-untracked and an optional message.
+
+### BlameController
+
+Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory (cached), and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers through `--contents -`. It renders a dimmed end-of-line decoration and a status-bar item; both carry a trusted-markdown hover whose command links reuse the existing copy/open commands. All-zero SHAs render as "You · Uncommitted changes" without actions. Pure label/hover builders live in `ui/blame/blamePresentation.ts` and are unit tested.
+
+### RepositoryWatcher
+
+One `FileSystemWatcher` per repository over `.git/{HEAD,ORIG_HEAD,packed-refs,refs/**,logs/HEAD}` with a debounced callback that refreshes comparisons, stashes, and blame. Workspace-folder changes re-discover repositories and rebuild the watchers.
 
 ## Activation and lifecycle
 

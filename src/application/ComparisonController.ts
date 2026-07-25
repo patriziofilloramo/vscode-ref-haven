@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import * as vscode from "vscode";
 
@@ -24,9 +24,11 @@ import type { FileDiffScope } from "../domain/fileDiffScope";
 import { formatDiffStats, pluralize } from "../ui/format";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
+  findRepositoryRoot,
   listBranchRefs,
   discoverRepositories,
   readCurrentBranch,
+  resolveRef,
 } from "../infrastructure/git/GitCli";
 import { pickBranch, pickRepository } from "../ui/pickers/comparisonPickers";
 import type { ComparisonTreeProvider, FilesLayout } from "../ui/tree/ComparisonTreeProvider";
@@ -175,6 +177,58 @@ export class ComparisonController {
     }
     await vscode.env.clipboard.writeText(file.newPath);
     void vscode.window.showInformationMessage("Relative file path copied to the clipboard.");
+  }
+
+  /**
+   * Opens a readonly view of a file at a revision. With all three arguments
+   * (e.g. from a blame hover link) it opens directly; without them it prompts
+   * for a branch revision of the active editor's file.
+   */
+  public async openFileAtRevision(
+    repositoryRootPath?: unknown,
+    sha?: unknown,
+    filePath?: unknown,
+  ): Promise<void> {
+    if (
+      typeof repositoryRootPath === "string" &&
+      typeof sha === "string" &&
+      typeof filePath === "string"
+    ) {
+      const uri = this.revisionProvider.createRevisionUri(repositoryRootPath, sha, filePath);
+      await vscode.window.showTextDocument(uri, { preview: true });
+      return;
+    }
+
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.uri.scheme !== "file") {
+      void vscode.window.showWarningMessage("Open a file before opening one of its revisions.");
+      return;
+    }
+    const fsPath = editor.document.uri.fsPath;
+    const repositoryRoot = await findRepositoryRoot(dirname(fsPath));
+    if (!repositoryRoot) {
+      void vscode.window.showWarningMessage("The active file is not inside a Git repository.");
+      return;
+    }
+    const relativePath = relative(repositoryRoot, fsPath).replaceAll("\\", "/");
+
+    const branches = await listBranchRefs(repositoryRoot);
+    if (branches.length === 0) {
+      void vscode.window.showWarningMessage("This repository has no branches to open from.");
+      return;
+    }
+    const currentBranchName = await readCurrentBranch(repositoryRoot);
+    const ref = await pickBranch(
+      branches,
+      `Select the revision of ${relativePath} to open`,
+      currentBranchName,
+    );
+    if (!ref) return;
+
+    const revisionSha = await resolveRef(repositoryRoot, ref.fullName);
+    const uri = this.revisionProvider.createRevisionUri(repositoryRoot, revisionSha, relativePath);
+    await vscode.window.showTextDocument(uri, { preview: true });
+    this.logger.info("Opened file at revision", { operation: "openFileAtRevision" });
   }
 
   public async setFilesLayout(layout: FilesLayout): Promise<void> {

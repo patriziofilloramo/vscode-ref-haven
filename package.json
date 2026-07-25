@@ -144,8 +144,39 @@
         "command": "branchCompare.copyStashMessage",
         "title": "Copy Stash Message",
         "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.openFileAtRevision",
+        "title": "Open File at Revision...",
+        "category": "Branch Compare",
+        "icon": "$(history)"
+      },
+      {
+        "command": "branchCompare.toggleInlineBlame",
+        "title": "Toggle Inline Blame",
+        "category": "Branch Compare"
+      },
+      {
+        "command": "branchCompare.showLineBlameActions",
+        "title": "Show Line Blame Actions",
+        "category": "Branch Compare"
       }
     ],
+    "configuration": {
+      "title": "Branch Compare",
+      "properties": {
+        "branchCompare.inlineBlame.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show blame for the current line as dimmed inline text at the end of the line."
+        },
+        "branchCompare.statusBarBlame.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show blame for the current line in the status bar."
+        }
+      }
+    },
     "views": {
       "scm": [
         {

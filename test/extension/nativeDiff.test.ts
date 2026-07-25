@@ -16,9 +16,14 @@ suite("native branch diff", () => {
   let repositoryRoot: string;
 
   suiteSetup(() => {
-    repositoryRoot = join(tmpdir(), "branch-compare-extension-tests");
+    // Unique per run: Windows can refuse to delete read-only Git objects left
+    // by a previous run, so never reuse an old fixture directory.
+    repositoryRoot = join(
+      tmpdir(),
+      `branch-compare-extension-tests-${process.pid.toString()}-${Date.now().toString()}`,
+    );
     rmSync(repositoryRoot, { force: true, recursive: true });
-    mkdirSync(repositoryRoot);
+    mkdirSync(repositoryRoot, { recursive: true });
     git("init", "--initial-branch=main");
     git("config", "user.name", "Branch Compare Tests");
     git("config", "user.email", "branch-compare@example.invalid");
@@ -38,6 +43,11 @@ suite("native branch diff", () => {
 
   suiteTeardown(async () => {
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    try {
+      rmSync(repositoryRoot, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+    } catch {
+      // Best-effort cleanup; leftovers live in %TEMP% under a unique name.
+    }
   });
 
   test("calculates merge-base changes and opens a native immutable diff", async () => {

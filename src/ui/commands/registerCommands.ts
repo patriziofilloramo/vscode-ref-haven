@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import type { BlameController } from "../../application/BlameController";
 import type { ComparisonController } from "../../application/ComparisonController";
 import type { Logger } from "../../application/Logger";
 import type { StashController } from "../../application/StashController";
@@ -17,6 +18,7 @@ export function registerCommands(
   logger: Logger,
   controller: ComparisonController,
   stashController: StashController,
+  blameController: BlameController,
 ): void {
   const handlers: Readonly<Record<CommandId, CommandHandler>> = {
     [COMMAND_IDS.applyStash]: (node) => stashController.applyStash(requireStash(node)),
@@ -42,6 +44,8 @@ export function registerCommands(
       const file = requireFile(node);
       return controller.openWorkingTreeFile(file.scope, file.file);
     },
+    [COMMAND_IDS.openFileAtRevision]: (repositoryRootPath, sha, filePath) =>
+      controller.openFileAtRevision(repositoryRootPath, sha, filePath),
     [COMMAND_IDS.openFileDiff]: (scope, file) =>
       controller.openFileDiff(
         scope as Parameters<ComparisonController["openFileDiff"]>[0],
@@ -56,8 +60,10 @@ export function registerCommands(
       controller.refreshComparison(requireComparison(node));
     },
     [COMMAND_IDS.refreshStashes]: () => stashController.refresh(),
+    [COMMAND_IDS.showLineBlameActions]: () => blameController.showLineBlameActions(),
     [COMMAND_IDS.stashAllChanges]: () => stashController.stashAllChanges(),
     [COMMAND_IDS.swapComparison]: (node) => controller.swapComparison(requireComparison(node)),
+    [COMMAND_IDS.toggleInlineBlame]: () => blameController.toggleInlineBlame(),
     [COMMAND_IDS.unpinComparison]: (node) => controller.setPinned(requireComparison(node), false),
     [COMMAND_IDS.viewFilesAsList]: () => controller.setFilesLayout("list"),
     [COMMAND_IDS.viewFilesAsTree]: () => controller.setFilesLayout("tree"),
