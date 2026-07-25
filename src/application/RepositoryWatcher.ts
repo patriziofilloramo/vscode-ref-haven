@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
 
 import type { RepositoryIdentity } from "../domain/comparison";
+import { pathIdentityKey } from "../domain/pathValidation";
+import { resolveGitMetadataPaths } from "../infrastructure/git/GitCli";
 
-/** Files inside .git whose changes indicate the repository state moved. */
-const GIT_STATE_PATTERN = ".git/{HEAD,ORIG_HEAD,packed-refs,refs/**,logs/HEAD}";
+/** Files inside resolved Git metadata directories that indicate repository state changes. */
+const GIT_STATE_PATTERN = "{HEAD,ORIG_HEAD,packed-refs,refs/**,logs/HEAD,logs/refs/**}";
 const NOTIFY_DEBOUNCE_MS = 1000;
 
 /**
@@ -12,17 +14,26 @@ const NOTIFY_DEBOUNCE_MS = 1000;
  */
 export class RepositoryWatcher implements vscode.Disposable {
   private notifyTimer: NodeJS.Timeout | undefined;
+  private generation = 0;
   private watchers: vscode.FileSystemWatcher[] = [];
 
   public constructor(private readonly onGitStateChanged: () => void) {}
 
-  public setRepositories(repositories: readonly RepositoryIdentity[]): void {
-    this.disposeWatchers();
-    for (const repository of repositories) {
-      const pattern = new vscode.RelativePattern(
-        vscode.Uri.file(repository.rootPath),
-        GIT_STATE_PATTERN,
-      );
+  public async setRepositories(repositories: readonly RepositoryIdentity[]): Promise<void> {
+    const generation = ++this.generation;
+    const metadataPaths = await Promise.all(
+      repositories.map(({ rootPath }) =>
+        resolveGitMetadataPaths(rootPath).catch((): string[] => []),
+      ),
+    );
+    if (generation !== this.generation) return;
+
+    const watchers: vscode.FileSystemWatcher[] = [];
+    const uniqueMetadataPaths = new Map(
+      metadataPaths.flat().map((metadataPath) => [pathIdentityKey(metadataPath), metadataPath]),
+    );
+    for (const metadataPath of uniqueMetadataPaths.values()) {
+      const pattern = new vscode.RelativePattern(vscode.Uri.file(metadataPath), GIT_STATE_PATTERN);
       const watcher = vscode.workspace.createFileSystemWatcher(pattern);
       const notify = (): void => {
         this.scheduleNotification();
@@ -30,11 +41,14 @@ export class RepositoryWatcher implements vscode.Disposable {
       watcher.onDidChange(notify);
       watcher.onDidCreate(notify);
       watcher.onDidDelete(notify);
-      this.watchers.push(watcher);
+      watchers.push(watcher);
     }
+    this.disposeWatchers();
+    this.watchers = watchers;
   }
 
   public dispose(): void {
+    this.generation += 1;
     if (this.notifyTimer) clearTimeout(this.notifyTimer);
     this.disposeWatchers();
   }

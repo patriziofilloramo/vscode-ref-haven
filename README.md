@@ -2,7 +2,7 @@
 
 A Visual Studio Code extension for persistent, directional Git branch
 comparisons — growing toward a GitLens-style feature set with an entirely
-native UI (no webviews) and no telemetry.
+native UI (no webviews), no telemetry, and enforced local-only Git execution.
 
 ## Features
 
@@ -20,8 +20,8 @@ native UI (no webviews) and no telemetry.
 
 - Lists all stashes per repository with message, `stash@{n}`, branch, and age.
 - Expand a stash to browse and diff its files.
-- Apply, pop, or drop (with confirmation) directly from the tree; create new
-  stashes with **Stash All Changes** (optionally including untracked files).
+- Stash inspection is deliberately read-only so repository-configured filters
+  or merge drivers cannot be executed by a mutating command.
 
 ### Line blame
 
@@ -44,13 +44,12 @@ fix: prevent duplicates` — including in unsaved buffers.
 Open the Command Palette and type `Branch Compare:` to see all commands. The
 most common entry points:
 
-| Command                          | Description                                       |
-| -------------------------------- | ------------------------------------------------- |
-| `New Comparison`                 | Pick a repository, target, and base branch        |
-| `Compare Current Branch With...` | Compare the checked-out branch against a base     |
-| `Stash All Changes`              | Stash the working tree, optionally with untracked |
-| `Open File at Revision...`       | Open the active file at a chosen branch revision  |
-| `Toggle Inline Blame`            | Show or hide current-line blame                   |
+| Command                          | Description                                      |
+| -------------------------------- | ------------------------------------------------ |
+| `New Comparison`                 | Pick a repository, target, and base branch       |
+| `Compare Current Branch With...` | Compare the checked-out branch against a base    |
+| `Open File at Revision...`       | Open the active file at a chosen branch revision |
+| `Toggle Inline Blame`            | Show or hide current-line blame                  |
 
 ## Settings
 
@@ -58,6 +57,7 @@ most common entry points:
 | -------------------------------------- | ------- | ------------------------------------- |
 | `branchCompare.inlineBlame.enabled`    | `true`  | Inline blame text on the current line |
 | `branchCompare.statusBarBlame.enabled` | `true`  | Blame entry in the status bar         |
+| `branchCompare.git.timeoutSeconds`     | `30`    | Per-command Git timeout (1–300 s)     |
 
 ## Development
 
@@ -76,7 +76,16 @@ npm run package        # build branch-compare-<version>.vsix
 The VS Code task **Install VSIX (current window)** packages and installs the
 extension into your running VS Code via the `code` CLI.
 
+## Security
+
+The installed extension has no runtime dependencies or networking code. Every
+Git process blocks transports and lazy-fetch, disables prompts, tracing,
+fsmonitor, external diff, and text conversion helpers, and runs without a
+shell. Missing partial-clone objects fail locally instead of being fetched.
+See `SECURITY.md` in the extension package for the complete guarantee and trust
+boundaries.
+
 Documentation lives in the `docs/` folder: `PRODUCT.md` (product definition),
 `ARCHITECTURE.md` (layers and components), `GIT-SEMANTICS.md` (normative Git
-ranges), `TEST-MATRIX.md`, and `ROADMAP.md` (delivered and planned feature
-batches).
+ranges), `DEPENDENCIES.md` (supply-chain policy), `TEST-MATRIX.md`, and
+`ROADMAP.md` (delivered and planned feature batches).

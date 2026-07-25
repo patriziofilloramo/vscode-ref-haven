@@ -10,10 +10,20 @@ interface PackageManifest {
   readonly activationEvents: readonly string[];
   readonly contributes: {
     readonly commands: readonly CommandContribution[];
+    readonly configuration: {
+      readonly properties: Readonly<
+        Record<
+          string,
+          { readonly default: unknown; readonly maximum?: number; readonly minimum?: number }
+        >
+      >;
+    };
     readonly views: {
       readonly scm: readonly { readonly id: string; readonly name: string }[];
     };
   };
+  readonly dependencies?: Readonly<Record<string, string>>;
+  readonly devDependencies: Readonly<Record<string, string>>;
   readonly files: readonly string[];
 }
 
@@ -42,7 +52,6 @@ suite("extension manifest", () => {
     const commands = manifest.contributes.commands.map(({ command }) => command).sort();
 
     assert.deepEqual(commands, [
-      "branchCompare.applyStash",
       "branchCompare.closeComparison",
       "branchCompare.compareCurrentBranch",
       "branchCompare.copyCommitMessage",
@@ -51,17 +60,14 @@ suite("extension manifest", () => {
       "branchCompare.copyFilePath",
       "branchCompare.copyRelativeFilePath",
       "branchCompare.copyStashMessage",
-      "branchCompare.dropStash",
       "branchCompare.newComparison",
       "branchCompare.openFile",
       "branchCompare.openFileAtRevision",
       "branchCompare.pinComparison",
-      "branchCompare.popStash",
       "branchCompare.refreshAll",
       "branchCompare.refreshComparison",
       "branchCompare.refreshStashes",
       "branchCompare.showLineBlameActions",
-      "branchCompare.stashAllChanges",
       "branchCompare.swapComparison",
       "branchCompare.toggleInlineBlame",
       "branchCompare.unpinComparison",
@@ -73,6 +79,33 @@ suite("extension manifest", () => {
   test("packages only compiled runtime files", () => {
     const manifest = loadManifest();
 
-    assert.deepEqual(manifest.files, ["dist/**"]);
+    assert.deepEqual(manifest.files, ["dist/**", "SECURITY.md"]);
+  });
+
+  test("has no runtime dependencies and exact-pins the minimal development toolchain", () => {
+    const manifest = loadManifest();
+
+    assert.equal(manifest.dependencies, undefined);
+    assert.equal(manifest.devDependencies.rimraf, undefined);
+    assert.equal(manifest.devDependencies["@vscode/test-cli"], undefined);
+    for (const [name, version] of Object.entries(manifest.devDependencies)) {
+      assert.match(version, /^\d+\.\d+\.\d+$/u, `${name} must use an exact version`);
+    }
+  });
+
+  test("declares a bounded Git command timeout", () => {
+    const setting = manifestSetting(loadManifest(), "branchCompare.git.timeoutSeconds");
+    assert.equal(setting.default, 30);
+    assert.equal(setting.minimum, 1);
+    assert.equal(setting.maximum, 300);
   });
 });
+
+function manifestSetting(
+  manifest: PackageManifest,
+  key: string,
+): { readonly default: unknown; readonly maximum?: number; readonly minimum?: number } {
+  const setting = manifest.contributes.configuration.properties[key];
+  assert.ok(setting, `Expected manifest setting ${key}`);
+  return setting;
+}

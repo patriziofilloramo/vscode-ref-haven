@@ -6,13 +6,16 @@ No implementation milestone is complete until its acceptance tests are written f
 
 ```text
 npm test
-npm run test:integration
+npm run test:extension
 npm run lint
 npm run compile
+npm run format:check
 npm run package
 ```
 
-Exact script names may be established by Milestone 1, but they must preserve separate unit, Git-integration, Extension Host, compile, lint, and VSIX packaging gates. Failures block the milestone commit.
+These scripts preserve separate unit, real-Git/Extension Host, compile, lint, format, and VSIX packaging gates. Failures block the milestone commit.
+
+The security-hardening suite additionally covers repository-relative path containment, cross-platform backslash traversal, complete persisted-schema validation, duplicate IDs, trusted-Markdown escaping, scheduler concurrency and queued cancellation, bounded-cache eviction and rejection behaviour, signed revision-URI tampering, in-flight comparison cancellation, nested repository identities, real linked-worktree metadata discovery, and the exact local-only Git environment/config policy. Release gates also require zero production dependencies, an audit-clean lockfile, and inspection of the packaged VSIX contents.
 
 ## CI operating-system matrix
 
@@ -32,7 +35,7 @@ Windows is mandatory for process spawning, path, encoding, and filesystem edge c
 | 0: decision/docs | documentation links, terminology and protected-decision review                         | five foundational documents present and internally consistent         |
 | 1: skeleton      | activation, command registration, empty Tree View, configuration and logging contracts | unit/Extension Host tests, lint, strict compile, package              |
 | 2: Git core      | parser fixtures and real-repository scenarios 1–13 below                               | unit and Git integration green before results UI work                 |
-| 3: persistence   | schema validation, migration, CRUD, pin/order, invalid preservation, five-item restore | unit tests plus Extension Host workspaceState restore                 |
+| 3: persistence   | schema validation, migration, CRUD, pin/order, invalid rejection, five-item restore    | unit tests plus Extension Host workspaceState restore                 |
 | 4: Tree View     | single/multi-repository layout, state nodes, command routing, keyboard flows           | unit view-model and Extension Host command/view tests                 |
 | 5: native diff   | URI round-trip, immutable SHA use, add/delete/rename/copy/binary sides                 | provider unit tests and `vscode.diff` invocation tests                |
 | 6: refresh       | generation race, cancellation, queue limits, cache keys, focus/visibility staleness    | deterministic scheduler/controller tests and integration cancellation |

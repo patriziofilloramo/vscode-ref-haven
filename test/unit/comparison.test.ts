@@ -48,6 +48,16 @@ suite("comparison identity", () => {
       ["first", "different-mode"],
     );
   });
+
+  test("removes duplicate persisted ids to protect tree and cache identity", () => {
+    const first = createComparison({ id: "shared", order: 0 });
+    const conflicting = createComparison({
+      baseFullName: "refs/heads/other-base",
+      id: "shared",
+      order: 1,
+    });
+    assert.deepEqual(deduplicateComparisons([first, conflicting]), [first]);
+  });
 });
 
 suite("comparison helpers", () => {

@@ -17,9 +17,8 @@ tests, and packages before it merges to `master`.
   decorations, diff stats, and rich tooltips.
 - Native readonly diffs through a shared `FileDiffScope`, reused by
   comparisons, single commits, and stashes.
-- Stashes view: list per repository, expand to files, apply/pop/drop
-  (SHA-verified against stale selectors, drop confirms), stash-all with
-  untracked option, copy message.
+- Read-only Stashes view: list per repository, expand to files, native diffs,
+  refresh, and copy actions. Mutations are excluded by the local-only policy.
 - File context actions: Open File, Copy Path, Copy Relative Path; commit
   context actions: Copy SHA, Copy Commit Message.
 

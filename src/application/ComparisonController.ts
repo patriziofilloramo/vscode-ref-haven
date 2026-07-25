@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { dirname, join, relative } from "node:path";
+import { dirname, relative } from "node:path";
 
 import * as vscode from "vscode";
 
@@ -21,6 +21,7 @@ import {
   type FileChange,
 } from "../domain/comparisonResult";
 import type { FileDiffScope } from "../domain/fileDiffScope";
+import { pathIdentityKey, resolvePathWithinRepository } from "../domain/pathValidation";
 import { formatDiffStats, pluralize } from "../ui/format";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
@@ -151,7 +152,9 @@ export class ComparisonController {
       return;
     }
 
-    const uri = vscode.Uri.file(join(scope.repositoryRootPath, file.newPath));
+    const uri = vscode.Uri.file(
+      resolvePathWithinRepository(scope.repositoryRootPath, file.newPath),
+    );
     try {
       await vscode.workspace.fs.stat(uri);
     } catch {
@@ -167,7 +170,9 @@ export class ComparisonController {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("Branch Compare file selection is invalid.");
     }
-    await vscode.env.clipboard.writeText(join(scope.repositoryRootPath, file.newPath));
+    await vscode.env.clipboard.writeText(
+      resolvePathWithinRepository(scope.repositoryRootPath, file.newPath),
+    );
     void vscode.window.showInformationMessage("File path copied to the clipboard.");
   }
 
@@ -194,6 +199,7 @@ export class ComparisonController {
       typeof sha === "string" &&
       typeof filePath === "string"
     ) {
+      await this.assertKnownRepositoryRoot(repositoryRootPath);
       const uri = this.revisionProvider.createRevisionUri(repositoryRootPath, sha, filePath);
       await vscode.window.showTextDocument(uri, { preview: true });
       return;
@@ -236,12 +242,15 @@ export class ComparisonController {
     await this.context.workspaceState.update(FILES_LAYOUT_STORAGE_KEY, layout);
   }
 
-  public calculateComparison(comparison: SavedComparisonV1): Promise<ComparisonResult> {
+  public calculateComparison(
+    comparison: SavedComparisonV1,
+    signal?: AbortSignal,
+  ): Promise<ComparisonResult> {
     this.logger.info("Calculating comparison", {
       mode: comparison.mode,
       operation: "calculateComparison",
     });
-    return calculateComparison(comparison);
+    return calculateComparison(comparison, signal);
   }
 
   public async openFileDiff(scope: FileDiffScope, file: FileChange): Promise<void> {
@@ -277,6 +286,14 @@ export class ComparisonController {
   private applyFilesLayout(layout: FilesLayout): void {
     this.treeProvider.setFilesLayout(layout);
     void vscode.commands.executeCommand("setContext", FILES_LAYOUT_CONTEXT_KEY, layout);
+  }
+
+  private async assertKnownRepositoryRoot(repositoryRootPath: string): Promise<void> {
+    const expected = pathIdentityKey(repositoryRootPath);
+    const repositories = await discoverRepositories();
+    if (!repositories.some(({ rootPath }) => pathIdentityKey(rootPath) === expected)) {
+      throw new Error("The selected repository is not part of the current workspace.");
+    }
   }
 
   private async createComparison(options: {

@@ -85,7 +85,12 @@ export function deduplicateComparisons(
   const unique: SavedComparisonV1[] = [];
 
   for (const comparison of comparisons) {
-    if (!unique.some((candidate) => hasSameComparisonIdentity(candidate, comparison))) {
+    if (
+      !unique.some(
+        (candidate) =>
+          candidate.id === comparison.id || hasSameComparisonIdentity(candidate, comparison),
+      )
+    ) {
       unique.push(comparison);
     }
   }

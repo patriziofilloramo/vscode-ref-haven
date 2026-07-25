@@ -4,6 +4,7 @@ import type { FileChange } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatDiffStats } from "../format";
+import { escapeMarkdown } from "../markdown";
 import { createChangeUri, statusLabel } from "./ChangeDecorationProvider";
 import { buildFileTree, type FileTreeFolder, type FileTreeNode } from "./fileTree";
 
@@ -116,10 +117,10 @@ function fileDescription(node: FileNode, directory: string): string {
 
 function fileTooltip(file: FileChange): vscode.MarkdownString {
   const lines = [
-    `**${file.newPath}**`,
+    `**${escapeMarkdown(file.newPath)}**`,
     "",
     `$(diff) ${statusLabel(file.status)}${file.similarity === undefined ? "" : ` (${file.similarity.toString()}% similar)`}`,
-    ...(file.oldPath ? [`$(arrow-right) from \`${file.oldPath}\``] : []),
+    ...(file.oldPath ? [`$(arrow-right) from \`${escapeMarkdown(file.oldPath)}\``] : []),
     file.additions !== undefined || file.deletions !== undefined
       ? `$(edit) ${formatDiffStats(file.additions ?? 0, file.deletions ?? 0)}`
       : "$(file-binary) binary change",

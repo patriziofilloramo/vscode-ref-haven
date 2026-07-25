@@ -21,7 +21,6 @@ export function registerCommands(
   blameController: BlameController,
 ): void {
   const handlers: Readonly<Record<CommandId, CommandHandler>> = {
-    [COMMAND_IDS.applyStash]: (node) => stashController.applyStash(requireStash(node)),
     [COMMAND_IDS.closeComparison]: (node) => controller.closeComparison(requireComparison(node)),
     [COMMAND_IDS.compareCurrentBranch]: () => controller.compareCurrentBranch(),
     [COMMAND_IDS.copyCommitMessage]: (node) => controller.copyCommitMessage(requireCommit(node)),
@@ -38,7 +37,6 @@ export function registerCommands(
     },
     [COMMAND_IDS.copyStashMessage]: (node) =>
       stashController.copyStashMessage(requireStash(node).stash),
-    [COMMAND_IDS.dropStash]: (node) => stashController.dropStash(requireStash(node)),
     [COMMAND_IDS.newComparison]: () => controller.newComparison(),
     [COMMAND_IDS.openFile]: (node) => {
       const file = requireFile(node);
@@ -52,7 +50,6 @@ export function registerCommands(
         file as Parameters<ComparisonController["openFileDiff"]>[1],
       ),
     [COMMAND_IDS.pinComparison]: (node) => controller.setPinned(requireComparison(node), true),
-    [COMMAND_IDS.popStash]: (node) => stashController.popStash(requireStash(node)),
     [COMMAND_IDS.refreshAll]: () => {
       controller.refreshAll();
     },
@@ -61,7 +58,6 @@ export function registerCommands(
     },
     [COMMAND_IDS.refreshStashes]: () => stashController.refresh(),
     [COMMAND_IDS.showLineBlameActions]: () => blameController.showLineBlameActions(),
-    [COMMAND_IDS.stashAllChanges]: () => stashController.stashAllChanges(),
     [COMMAND_IDS.swapComparison]: (node) => controller.swapComparison(requireComparison(node)),
     [COMMAND_IDS.toggleInlineBlame]: () => blameController.toggleInlineBlame(),
     [COMMAND_IDS.unpinComparison]: (node) => controller.setPinned(requireComparison(node), false),

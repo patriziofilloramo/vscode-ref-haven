@@ -9,7 +9,7 @@ baseRef   = refs/heads/main
 targetRef = refs/heads/feature/oauth
 ```
 
-The extension passes arguments directly to Git without a shell. Before calculation it resolves both selected symbolic refs to immutable commit SHAs. Saved comparisons retain symbolic refs; calculated results and revision documents use SHAs.
+The extension passes arguments directly to Git without a shell. Every command is prefixed with the local-only configuration defined in [SECURITY.md](../SECURITY.md), including blocked transports and lazy fetch. Before calculation it resolves both selected symbolic refs to immutable commit SHAs. Saved comparisons retain symbolic refs; calculated results and revision documents use SHAs.
 
 ## Ahead and behind
 
@@ -67,7 +67,7 @@ It remains available for unrelated histories. The file section always names the 
 File identity and status come from the equivalent of:
 
 ```text
-git diff --name-status -z --find-renames <fromSha> <toSha> --
+git diff --no-ext-diff --no-textconv --name-status -z --find-renames <fromSha> <toSha> --
 ```
 
 `-z` is mandatory. The parser operates on NUL-delimited fields and must not assume one record per line or tab-safe paths. It supports spaces, tabs, newlines, Unicode, and empty output.
@@ -91,7 +91,7 @@ Rename and copy scores are optional numeric similarity values. Unknown or malfor
 Statistics are obtained separately:
 
 ```text
-git diff --numstat -z --find-renames <fromSha> <toSha> --
+git diff --no-ext-diff --no-textconv --numstat -z --find-renames <fromSha> <toSha> --
 ```
 
 The parser also honours NUL-delimited rename/copy path forms. Results are associated with name-status records using normalized path or old/new path pairs without losing original display paths. A binary marker of `-` additions and `-` deletions is represented as binary, never as zero changes.

@@ -2,6 +2,7 @@ import type { LineBlame } from "../../domain/blame";
 import { shortSha, type CommitInfo } from "../../domain/comparisonResult";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatRelativeTime } from "../format";
+import { escapeMarkdown } from "../markdown";
 
 /** Commands that blame hover links may execute; used for MarkdownString trust. */
 export const BLAME_HOVER_COMMANDS: readonly string[] = [
@@ -59,7 +60,7 @@ export function blameHoverMarkdown(
   repositoryRootPath: string,
   nowMs: number,
 ): string {
-  const author = blameAuthorLabel(blame, currentUserName);
+  const author = escapeMarkdown(blameAuthorLabel(blame, currentUserName));
   if (!blame.isCommitted) {
     return `**${author}** · Uncommitted changes`;
   }
@@ -72,7 +73,7 @@ export function blameHoverMarkdown(
   );
   return [
     `**${author}**, ${formatRelativeTime(blame.authorDate, nowMs)} (${new Date(blame.authorDate).toLocaleString()})`,
-    blame.summary,
+    escapeMarkdown(blame.summary),
     `$(git-commit) \`${shortSha(blame.sha)}\``,
     [
       `[Copy SHA](command:${COMMAND_IDS.copyCommitSha}?${commitArguments})`,

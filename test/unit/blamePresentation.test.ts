@@ -78,4 +78,17 @@ suite("blame presentation", () => {
 
     assert.equal(markdown, "**You** · Uncommitted changes");
   });
+
+  test("escapes Git-controlled Markdown in trusted hovers", () => {
+    const malicious: LineBlame = {
+      ...COMMITTED,
+      authorName: "**spoofed**",
+      summary: "[Injected](command:branchCompare.openFileAtRevision?payload)",
+    };
+    const markdown = blameHoverMarkdown(malicious, null, "C:\\repo", NOW);
+
+    assert.doesNotMatch(markdown, /\*\*\*\*spoofed\*\*\*\*/);
+    assert.doesNotMatch(markdown, /\[Injected\]\(command:/);
+    assert.match(markdown, /\\\[Injected\\\]\\\(command:/);
+  });
 });

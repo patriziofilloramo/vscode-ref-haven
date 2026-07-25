@@ -75,7 +75,7 @@ Version 0.1 explicitly excluded N-way comparisons, working-tree comparisons, mer
 The product has since grown toward a GitLens-style feature set while keeping the native-UI, no-webview, no-telemetry principles:
 
 - **Commit drill-down:** commits in the Ahead/Behind sections expand to the files they changed and open per-commit diffs (first parent; root commits diff against the empty tree).
-- **Stash management:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees and native diffs, apply/pop/drop (drop confirms; destructive operations verify the stash SHA against stale `stash@{n}` selectors), stash-all with an untracked option, and copy-message.
+- **Read-only stash inspection:** a dedicated Stashes view in Source Control lists stashes per repository with expandable file trees, native diffs, and copy-message. Mutation is excluded to prevent execution of repository-configured filters or merge drivers.
 - **File and commit context actions:** Open File, Copy Path, Copy Relative Path, Copy Commit SHA, and Copy Commit Message from any file or commit node.
 - **Line blame:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`), a rich hover with copy and open-at-revision actions, and a status-bar entry, all governed by `branchCompare.inlineBlame.enabled` and `branchCompare.statusBarBlame.enabled`.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
@@ -102,15 +102,15 @@ Inline actions are Refresh, Swap, Edit, Pin/Unpin, and Close. The context menu a
 
 Repository events mark affected comparisons stale but are not treated as the sole source of truth. The extension rechecks visible comparisons when the window regains focus or the view becomes visible. Manual refresh is always available. It does not continuously poll while VS Code is in the background.
 
-Refresh is generation-based and cancellable. At most two Git processes run concurrently per repository and four globally. Immutable results are cached by repository identity, resolved SHAs, mode, operation, and pagination.
+Refresh is generation-based and cancellable. At most two Git processes run concurrently per repository and four globally. In-flight work is cancelled when its comparison is refreshed, replaced, or closed. Computed comparison and commit results remain cached while their active tree state is valid; readonly revision content uses a bounded LRU cache.
 
 ## Privacy, safety, and limits
 
-The extension has no telemetry and performs no network communication or automatic fetch. Git is launched without a shell and with argument arrays. Version 0.1 only accepts refs selected from Git-provided lists.
+The extension has no telemetry, runtime dependency, networking API, remote operation, or automatic fetch. Git is launched without a shell and with argument arrays. Every invocation blocks protocols and partial-clone lazy fetch, disables prompts and tracing, removes inherited Git redirection, and prevents configured fsmonitor/diff/textconv helpers. Missing local objects fail closed. Version 0.1 only accepts refs selected from Git-provided lists. The complete threat model is in [SECURITY.md](../SECURITY.md).
 
-Logs contain command category, duration, exit code, anonymised repository identity, output size, and error category. They exclude remote credentials, environment variables, tokens, file contents, and full `git show` output.
+Logs contain command category and non-sensitive operational metadata. Metadata keys associated with credentials, environment, remote URLs, secrets, tokens, and file content are redacted; Git file content is never logged.
 
-Commands have cancellation, configurable timeouts, and stdout/stderr size limits. Results initially display at most 5,000 files and warn when truncated. File contents are read only when a user opens a revision or diff.
+Commands have cancellation, a configurable 1–300 second timeout, four-global/two-per-repository concurrency limits, and 5 MiB stdout/stderr limits. Unsaved blame input is capped at 5 MiB. Revision content is read only when a user opens a revision or diff, authenticated with a session-scoped URI signature, and retained in a cache bounded to 64 entries and 16 MiB.
 
 ## Delivery milestones
 

@@ -108,27 +108,29 @@ interface ComparisonResult {
 
 Resolved refs include full name, display name, and SHA. Saved refs remain symbolic; SHA values exist only in computed results and immutable revision URIs.
 
-Errors use stable codes: `gitNotFound`, `repositoryNotFound`, `baseRefMissing`, `targetRefMissing`, `noCommonAncestor`, `objectMissing`, `shallowRepository`, `commandTimedOut`, `commandCancelled`, `outputTooLarge`, `unsupportedBinary`, and `unknown`. Each error has a safe user message, recoverability, suggested actions, and optional redacted technical details. Raw stderr is never the primary UI message.
+Process-control failures use stable codes for `commandTimedOut`, `commandCancelled`, and `outputTooLarge`. Domain operations replace other Git failures with safe, operation-specific messages before they reach the comparison tree.
 
 ## Components
 
-### GitProcess
+### Git CLI and scheduler
 
-Launches `git` with `spawn` or `execFile`, argument arrays, and no shell. It owns cancellation, timeout, encoding, bounded stdout/stderr capture, exit status, and redacted operational logging. It returns raw buffers or explicitly decoded output as required by the caller. It knows nothing about branch comparisons or Tree View nodes.
+`GitCli.ts` launches `git` with `execFile`, argument arrays, and no shell. Every operation runs through `GitScheduler`, which enforces four global and two per-repository processes. The adapter owns cancellation, configurable timeouts, encoding, 5 MiB stdout/stderr limits, and safe error mapping. It returns buffers only for immutable file content and decoded output for typed parsers.
+
+`gitProcessPolicy.ts` is the single local-only process boundary. It blocks every Git transport and lazy object fetch, disables prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes inherited repository and command-config redirection, and prevents external diff/textconv execution. The policy is applied to string, buffer, and stdin invocations and is covered by exact regression tests.
 
 ### GitClient
 
 Provides typed operations for repository probing, branch listing, ref resolution, merge base, ahead/behind, commit pages, changed files, numstat, and on-demand object content. It owns Git command construction and parser selection while preserving the normative ranges in [GIT-SEMANTICS.md](GIT-SEMANTICS.md).
 
-### GitRepositoryRegistry
+### Repository discovery
 
-Uses the exported API of VS Code's built-in Git extension to discover known repositories, current branches, and broad repository changes. Repository identity combines workspace folder URI and repository path relative to it; worktrees remain distinct even when they share a common Git directory.
+Uses the exported API of VS Code's built-in Git extension only when that extension is already active, discovering known repositories including nested repositories without activating a component that may be configured for autofetch. Repository identity combines workspace folder URI and repository path relative to it; path identity is case-sensitive except on Windows, and worktrees remain distinct even when they share a common Git directory.
 
-If `vscode.git` is unavailable, the registry probes each workspace folder with `git rev-parse --show-toplevel`, supports at least one repository per folder, and exposes reduced auto-refresh capability through a warning. The CLI remains the authority for comparison calculations.
+If `vscode.git` is unavailable, discovery probes each workspace folder with `git rev-parse --show-toplevel` and supports at least one repository per folder. The CLI remains the authority for comparison calculations.
 
 ### ComparisonStore
 
-Reads and atomically writes `branchCompare.comparisons.v1` in `workspaceState`. It validates schema versions, delegates migration, and implements create, update, delete, pin, and reorder operations. It sorts pinned comparisons first while preserving explicit order within pinned and unpinned groups. Invalid repository/ref configurations are retained.
+Reads and atomically writes `branchCompare.comparisons.v1` in `workspaceState`. It strictly validates the complete schema, rejects malformed repository paths and branch refs, removes duplicate logical identities and IDs, and implements create, update, delete, and pin operations. It sorts pinned comparisons first while preserving explicit order within pinned and unpinned groups.
 
 ### ComparisonEngine
 
@@ -136,15 +138,15 @@ Accepts a comparison specification and cancellation token, resolves both refs, c
 
 ### ComparisonController
 
-Owns runtime states and coordinates store, engine, scheduler, cache, commands, and view updates. Creating a comparison persists it before calculation. Editing or swapping persists the new symbolic configuration, cancels prior work, increments its generation, and starts a new calculation when appropriate.
+Coordinates store, engine, commands, and view updates. Creating a comparison persists it before calculation. Swapping persists the new symbolic configuration, cancels prior work, increments its generation, and starts a new calculation when the node is expanded.
 
 Only a result whose captured generation equals the state's current generation may be applied. Closing a comparison cancels its work before removing it. Errors update runtime state but do not delete persisted configuration.
 
 ### Refresh scheduler and cache
 
-The scheduler enforces two concurrent Git processes per repository and four globally, supports cancellation and progress, and prioritises user-visible work. Repository events mark affected state stale. Focus and view-visibility events re-resolve the refs of visible comparisons. No background polling runs while VS Code is unfocused.
+The scheduler enforces two concurrent Git processes per repository and four globally. Queued work is abortable, and `AbortSignal` is passed to running child processes. Repository events invalidate active results; expansion then resolves refs again. There is no background polling.
 
-Cache entries are immutable and keyed by repository identity, resolved base SHA, resolved target SHA, comparison mode, operation, and pagination. Symbolic names are not final cache keys.
+Comparison results are cached by active comparison ID and protected by a generation counter. Commit-file results are keyed by repository and commit SHA. Refresh, replacement, and close abort and remove the affected in-flight state before a stale result can be installed.
 
 ### Tree provider
 
@@ -154,7 +156,7 @@ The controller creates restored nodes synchronously in `notComputed`. Expansion 
 
 ### Revision document provider
 
-The readonly `branch-compare:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. URIs carry a repository identifier, immutable SHA, and encoded path, never a symbolic ref or credential. An explicit empty-document URI supplies the missing side of added/deleted changes.
+The readonly `branch-compare:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be canonical forward-slash Git paths and cannot be absolute, traverse, or change meaning on Windows. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
 
 Renames use the old path at the from-SHA and the new path at the to-SHA. Binary files do not pass through the text provider; UI actions offer opening available revisions instead of a misleading text diff.
 
@@ -164,15 +166,15 @@ Renames use the old path at the from-SHA and the new path at the to-SHA. Binary 
 
 ### StashController and StashTreeProvider
 
-The stash view lists `git stash list` entries (parsed from a NUL-safe `--format`) per repository and expands each stash into its tracked file changes (first parent → stash commit). Apply, pop, and drop resolve the `stash@{n}` selector and compare the resulting SHA with the entry before mutating, so a stale tree cannot drop the wrong stash; drop additionally requires modal confirmation. Stash-all offers tracked-only or include-untracked and an optional message.
+The read-only stash view lists `git stash list` entries (parsed from a NUL-safe `--format`) per repository and expands each stash into its tracked file changes (first parent → stash commit). Mutating stash actions are excluded because Git may invoke repository-configured filters or merge drivers during them; those processes cannot be sandboxed portably.
 
 ### BlameController
 
-Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory (cached), and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers through `--contents -`. It renders a dimmed end-of-line decoration and a status-bar item; both carry a trusted-markdown hover whose command links reuse the existing copy/open commands. All-zero SHAs render as "You · Uncommitted changes" without actions. Pure label/hover builders live in `ui/blame/blamePresentation.ts` and are unit tested.
+Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders a dimmed end-of-line decoration and a status-bar item; both carry a trusted-markdown hover whose fixed command links reuse existing copy/open commands. All Git-controlled Markdown is escaped before trust is enabled.
 
 ### RepositoryWatcher
 
-One `FileSystemWatcher` per repository over `.git/{HEAD,ORIG_HEAD,packed-refs,refs/**,logs/HEAD}` with a debounced callback that refreshes comparisons, stashes, and blame. Workspace-folder changes re-discover repositories and rebuild the watchers.
+Git metadata paths are resolved with `--absolute-git-dir` and `--git-common-dir`. Deduplicated watchers cover `HEAD`, refs, packed refs, and reflogs in both locations, so linked worktrees and ordinary repositories refresh correctly. Workspace-folder changes re-discover repositories and rebuild the watchers.
 
 ## Activation and lifecycle
 
@@ -184,12 +186,12 @@ Disposables, cancellation sources, process handles, event subscriptions, and con
 
 - Refs originate from Git enumeration, not arbitrary user text.
 - Git is never invoked through a shell or interpolated command string.
-- Revision paths are passed as arguments/object specifiers and URI components are strictly encoded and validated.
-- Output limits apply independently to stdout and stderr; timeouts are configurable.
+- Revision paths are canonicalized, proven repository-relative, signed in URI components, and revalidated before use.
+- Output limits apply independently to stdout and stderr; timeouts are configurable from 1 to 300 seconds.
 - `git show` content is neither logged nor preloaded.
-- The view caps initial display at 5,000 files and reports truncation.
+- Git concurrency is bounded to four processes globally and two per repository; superseded work is cancelled.
 - Logs redact repository identity and exclude credentials, environment, tokens, remote URLs, and file data.
-- There is no telemetry, network request, or automatic fetch.
+- There is no telemetry, networking API, remote operation, or automatic fetch; Git transports and partial-clone lazy fetch are blocked at process level.
 
 ## Decisions requiring an ADR
 

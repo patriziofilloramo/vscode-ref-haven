@@ -3,8 +3,10 @@ import * as vscode from "vscode";
 import type { RepositoryIdentity } from "../../domain/comparison";
 import { shortSha, type FileChange } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
+import { pathIdentityKey } from "../../domain/pathValidation";
 import type { StashEntry } from "../../domain/stash";
 import { formatRelativeTime } from "../format";
+import { escapeMarkdown } from "../markdown";
 import {
   buildChangeNodes,
   createFileItem,
@@ -31,21 +33,27 @@ export interface StashNode {
 
 export type StashTreeNode = FileNode | FolderNode | MessageNode | StashNode | StashRepositoryNode;
 
-type StashLoader = (repositoryRoot: string) => Promise<StashEntry[]>;
+type StashLoader = (repositoryRoot: string, signal: AbortSignal) => Promise<StashEntry[]>;
 type StashFilesLoader = (
   repositoryRoot: string,
   fromSha: string,
   toSha: string,
+  signal: AbortSignal,
 ) => Promise<FileChange[]>;
 
-export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode> {
+export class StashTreeProvider
+  implements vscode.TreeDataProvider<StashTreeNode>, vscode.Disposable
+{
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
     StashTreeNode | undefined
   >();
   private repositories: readonly RepositoryIdentity[] = [];
+  private disposed = false;
   private readonly stashFiles = new Map<string, Promise<FileChange[]>>();
+  private readonly stashFileAbortControllers = new Map<string, AbortController>();
   private stashFilesLoader: StashFilesLoader | undefined;
   private readonly stashes = new Map<string, Promise<StashEntry[]>>();
+  private readonly stashAbortControllers = new Map<string, AbortController>();
   private stashLoader: StashLoader | undefined;
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
@@ -55,12 +63,30 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
     this.stashLoader = stashLoader;
   }
 
+  public dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const controller of this.stashFileAbortControllers.values()) controller.abort();
+    for (const controller of this.stashAbortControllers.values()) controller.abort();
+    this.stashFileAbortControllers.clear();
+    this.stashAbortControllers.clear();
+    this.stashFiles.clear();
+    this.stashes.clear();
+    this.repositories = [];
+    this.onDidChangeTreeDataEmitter.dispose();
+  }
+
   public setRepositories(repositories: readonly RepositoryIdentity[]): void {
+    if (this.disposed) return;
     this.repositories = repositories;
     this.refresh();
   }
 
   public refresh(): void {
+    for (const controller of this.stashFileAbortControllers.values()) controller.abort();
+    for (const controller of this.stashAbortControllers.values()) controller.abort();
+    this.stashFileAbortControllers.clear();
+    this.stashAbortControllers.clear();
     this.stashFiles.clear();
     this.stashes.clear();
     this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -82,6 +108,7 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
   }
 
   public async getChildren(element?: StashTreeNode): Promise<StashTreeNode[]> {
+    if (this.disposed) return [];
     if (!element) {
       if (this.repositories.length === 1) {
         const repository = this.repositories[0];
@@ -108,10 +135,13 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
   ): Promise<StashTreeNode[]> {
     if (!this.stashLoader) return [];
 
-    let pending = this.stashes.get(repository.rootPath);
+    const repositoryKey = pathIdentityKey(repository.rootPath);
+    let pending = this.stashes.get(repositoryKey);
     if (!pending) {
-      pending = this.stashLoader(repository.rootPath);
-      this.stashes.set(repository.rootPath, pending);
+      const controller = new AbortController();
+      pending = this.stashLoader(repository.rootPath, controller.signal);
+      this.stashes.set(repositoryKey, pending);
+      this.stashAbortControllers.set(repositoryKey, controller);
     }
 
     try {
@@ -121,7 +151,10 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
       }
       return stashes.map((stash) => ({ kind: "stash", repository, stash }));
     } catch (error) {
-      this.stashes.delete(repository.rootPath);
+      if (this.stashes.get(repositoryKey) === pending) {
+        this.stashes.delete(repositoryKey);
+        this.stashAbortControllers.delete(repositoryKey);
+      }
       return [
         {
           icon: "error",
@@ -129,6 +162,10 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
           label: error instanceof Error ? error.message : "Could not list the stashes.",
         },
       ];
+    } finally {
+      if (this.stashes.get(repositoryKey) === pending) {
+        this.stashAbortControllers.delete(repositoryKey);
+      }
     }
   }
 
@@ -136,10 +173,18 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
     if (!this.stashFilesLoader) return [];
 
     const { repository, stash } = element;
-    let pending = this.stashFiles.get(stash.sha);
+    const key = `${pathIdentityKey(repository.rootPath)}:${stash.sha}`;
+    let pending = this.stashFiles.get(key);
     if (!pending) {
-      pending = this.stashFilesLoader(repository.rootPath, stash.parentSha, stash.sha);
-      this.stashFiles.set(stash.sha, pending);
+      const controller = new AbortController();
+      pending = this.stashFilesLoader(
+        repository.rootPath,
+        stash.parentSha,
+        stash.sha,
+        controller.signal,
+      );
+      this.stashFiles.set(key, pending);
+      this.stashFileAbortControllers.set(key, controller);
     }
 
     try {
@@ -155,7 +200,10 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
       };
       return buildChangeNodes(files, "tree", scope, `${repository.rootPath}:stash:${stash.sha}`);
     } catch (error) {
-      this.stashFiles.delete(stash.sha);
+      if (this.stashFiles.get(key) === pending) {
+        this.stashFiles.delete(key);
+        this.stashFileAbortControllers.delete(key);
+      }
       return [
         {
           icon: "error",
@@ -163,6 +211,10 @@ export class StashTreeProvider implements vscode.TreeDataProvider<StashTreeNode>
           label: error instanceof Error ? error.message : "Could not load the stash files.",
         },
       ];
+    } finally {
+      if (this.stashFiles.get(key) === pending) {
+        this.stashFileAbortControllers.delete(key);
+      }
     }
   }
 }
@@ -189,10 +241,10 @@ function createStashItem(element: StashNode): vscode.TreeItem {
 
   const tooltip = new vscode.MarkdownString(
     [
-      `**${stash.message}**`,
+      `**${escapeMarkdown(stash.message)}**`,
       "",
       `$(git-stash) \`${stash.selector}\` · \`${shortSha(stash.sha)}\``,
-      ...(stash.branchName ? [`$(git-branch) stashed on ${stash.branchName}`] : []),
+      ...(stash.branchName ? [`$(git-branch) stashed on ${escapeMarkdown(stash.branchName)}`] : []),
       `$(history) ${formatRelativeTime(stash.authorDate)} (${new Date(stash.authorDate).toLocaleString()})`,
     ].join("\n\n"),
   );

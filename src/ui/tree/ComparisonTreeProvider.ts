@@ -11,6 +11,7 @@ import {
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import type { CommitFileChanges } from "../../infrastructure/git/GitCli";
 import { formatCount, formatDiffStats, formatRelativeTime, pluralize } from "../format";
+import { escapeMarkdown } from "../markdown";
 import {
   buildChangeNodes,
   createFileItem,
@@ -48,30 +49,45 @@ interface SectionNode {
 export type ComparisonTreeNode =
   CommitTreeNode | ComparisonNode | FileNode | FolderNode | MessageNode | SectionNode;
 
-type ComparisonLoader = (comparison: SavedComparisonV1) => Promise<ComparisonResult>;
-type CommitFilesLoader = (repositoryRoot: string, sha: string) => Promise<CommitFileChanges>;
+type ComparisonLoader = (
+  comparison: SavedComparisonV1,
+  signal: AbortSignal,
+) => Promise<ComparisonResult>;
+type CommitFilesLoader = (
+  repositoryRoot: string,
+  sha: string,
+  signal: AbortSignal,
+) => Promise<CommitFileChanges>;
 
-export class ComparisonTreeProvider implements vscode.TreeDataProvider<ComparisonTreeNode> {
+export class ComparisonTreeProvider
+  implements vscode.TreeDataProvider<ComparisonTreeNode>, vscode.Disposable
+{
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
     ComparisonTreeNode | undefined
   >();
   private readonly commitFiles = new Map<string, Promise<CommitFileChanges>>();
+  private readonly commitFilesAbortControllers = new Map<string, AbortController>();
   private commitFilesLoader: CommitFilesLoader | undefined;
   private comparisons: readonly SavedComparisonV1[] = [];
   private comparisonLoader: ComparisonLoader | undefined;
+  private disposed = false;
   private readonly errors = new Map<string, string>();
   private filesLayout: FilesLayout = "tree";
   private readonly generations = new Map<string, number>();
   private readonly pendingResults = new Map<string, Promise<ComparisonResult>>();
+  private readonly pendingResultAbortControllers = new Map<string, AbortController>();
   private readonly results = new Map<string, ComparisonResult>();
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
   public setComparisons(comparisons: readonly SavedComparisonV1[]): void {
+    if (this.disposed) return;
     this.comparisons = comparisons;
     const validIds = new Set(comparisons.map(({ id }) => id));
-    for (const id of this.results.keys()) if (!validIds.has(id)) this.results.delete(id);
-    for (const id of this.errors.keys()) if (!validIds.has(id)) this.errors.delete(id);
+    for (const id of this.results.keys()) if (!validIds.has(id)) this.removeComparisonState(id);
+    for (const id of this.pendingResults.keys())
+      if (!validIds.has(id)) this.removeComparisonState(id);
+    for (const id of this.errors.keys()) if (!validIds.has(id)) this.removeComparisonState(id);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 
@@ -81,6 +97,22 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
 
   public setCommitFilesLoader(loader: CommitFilesLoader): void {
     this.commitFilesLoader = loader;
+  }
+
+  public dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const comparison of this.comparisons) this.bumpGeneration(comparison.id);
+    for (const controller of this.pendingResultAbortControllers.values()) controller.abort();
+    for (const controller of this.commitFilesAbortControllers.values()) controller.abort();
+    this.pendingResultAbortControllers.clear();
+    this.commitFilesAbortControllers.clear();
+    this.pendingResults.clear();
+    this.commitFiles.clear();
+    this.results.clear();
+    this.errors.clear();
+    this.comparisons = [];
+    this.onDidChangeTreeDataEmitter.dispose();
   }
 
   public getFilesLayout(): FilesLayout {
@@ -95,6 +127,10 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
 
   public invalidateAllResults(): void {
     for (const comparison of this.comparisons) this.bumpGeneration(comparison.id);
+    for (const controller of this.pendingResultAbortControllers.values()) controller.abort();
+    for (const controller of this.commitFilesAbortControllers.values()) controller.abort();
+    this.pendingResultAbortControllers.clear();
+    this.commitFilesAbortControllers.clear();
     this.commitFiles.clear();
     this.errors.clear();
     this.pendingResults.clear();
@@ -104,6 +140,11 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
 
   public invalidateResult(comparisonId: string): void {
     this.bumpGeneration(comparisonId);
+    this.pendingResultAbortControllers.get(comparisonId)?.abort();
+    this.pendingResultAbortControllers.delete(comparisonId);
+    for (const controller of this.commitFilesAbortControllers.values()) controller.abort();
+    this.commitFilesAbortControllers.clear();
+    this.commitFiles.clear();
     this.errors.delete(comparisonId);
     this.pendingResults.delete(comparisonId);
     this.results.delete(comparisonId);
@@ -128,6 +169,7 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
   }
 
   public async getChildren(element?: ComparisonTreeNode): Promise<ComparisonTreeNode[]> {
+    if (this.disposed) return [];
     if (!element) {
       return this.comparisons.map((comparison) => ({ comparison, kind: "comparison" }));
     }
@@ -172,8 +214,14 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
     const key = `${element.repositoryRoot}:${element.commit.sha}`;
     let pending = this.commitFiles.get(key);
     if (!pending) {
-      pending = this.commitFilesLoader(element.repositoryRoot, element.commit.sha);
+      const controller = new AbortController();
+      pending = this.commitFilesLoader(
+        element.repositoryRoot,
+        element.commit.sha,
+        controller.signal,
+      );
       this.commitFiles.set(key, pending);
+      this.commitFilesAbortControllers.set(key, controller);
     }
 
     try {
@@ -194,7 +242,10 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
         `${element.comparisonId}:commit:${element.commit.sha}`,
       );
     } catch (error) {
-      this.commitFiles.delete(key);
+      if (this.commitFiles.get(key) === pending) {
+        this.commitFiles.delete(key);
+        this.commitFilesAbortControllers.delete(key);
+      }
       return [
         {
           icon: "error",
@@ -202,6 +253,8 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
           label: error instanceof Error ? error.message : "Could not load the commit files.",
         },
       ];
+    } finally {
+      if (this.commitFiles.get(key) === pending) this.commitFilesAbortControllers.delete(key);
     }
   }
 
@@ -227,6 +280,7 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
   private async getComparisonResult(
     comparison: SavedComparisonV1,
   ): Promise<ComparisonResult | null> {
+    if (!this.currentComparison(comparison.id)) return null;
     const cached = this.results.get(comparison.id);
     if (cached) return cached;
     if (!this.comparisonLoader) throw new Error("Comparison loader is unavailable.");
@@ -234,31 +288,52 @@ export class ComparisonTreeProvider implements vscode.TreeDataProvider<Compariso
     const generation = this.generations.get(comparison.id) ?? 0;
     let pending = this.pendingResults.get(comparison.id);
     if (!pending) {
-      pending = this.comparisonLoader(comparison);
+      const controller = new AbortController();
+      pending = this.comparisonLoader(comparison, controller.signal);
       this.pendingResults.set(comparison.id, pending);
+      this.pendingResultAbortControllers.set(comparison.id, controller);
     }
 
     try {
       const result = await pending;
       if (generation !== (this.generations.get(comparison.id) ?? 0)) {
-        return await this.getComparisonResult(comparison);
+        const current = this.currentComparison(comparison.id);
+        return current ? await this.getComparisonResult(current) : null;
       }
       this.results.set(comparison.id, result);
       this.errors.delete(comparison.id);
       this.onDidChangeTreeDataEmitter.fire(undefined);
       return result;
     } catch (error) {
+      if (generation !== (this.generations.get(comparison.id) ?? 0)) {
+        const current = this.currentComparison(comparison.id);
+        return current ? await this.getComparisonResult(current) : null;
+      }
       this.errors.set(comparison.id, error instanceof Error ? error.message : "Comparison failed.");
       return null;
     } finally {
       if (this.pendingResults.get(comparison.id) === pending) {
         this.pendingResults.delete(comparison.id);
+        this.pendingResultAbortControllers.delete(comparison.id);
       }
     }
   }
 
   private bumpGeneration(comparisonId: string): void {
     this.generations.set(comparisonId, (this.generations.get(comparisonId) ?? 0) + 1);
+  }
+
+  private removeComparisonState(comparisonId: string): void {
+    this.bumpGeneration(comparisonId);
+    this.pendingResultAbortControllers.get(comparisonId)?.abort();
+    this.pendingResultAbortControllers.delete(comparisonId);
+    this.pendingResults.delete(comparisonId);
+    this.results.delete(comparisonId);
+    this.errors.delete(comparisonId);
+  }
+
+  private currentComparison(comparisonId: string): SavedComparisonV1 | undefined {
+    return this.comparisons.find(({ id }) => id === comparisonId);
   }
 }
 
@@ -293,8 +368,8 @@ function comparisonTooltip(
   const modeLabel =
     comparison.mode === "branchChanges" ? "branch changes (three-dot)" : "tip to tip (two-dot)";
   const lines = [
-    `**${comparison.targetRef.displayName}** relative to **${comparison.baseRef.displayName}**`,
-    `$(repo) ${comparison.repository.label} · ${modeLabel}`,
+    `**${escapeMarkdown(comparison.targetRef.displayName)}** relative to **${escapeMarkdown(comparison.baseRef.displayName)}**`,
+    `$(repo) ${escapeMarkdown(comparison.repository.label)} · ${modeLabel}`,
   ];
 
   if (result) {
@@ -312,7 +387,7 @@ function comparisonTooltip(
       `_Updated ${formatRelativeTime(result.computedAt)}_`,
     );
   } else if (error) {
-    lines.push(`$(error) ${error}`);
+    lines.push(`$(error) ${escapeMarkdown(error)}`);
   }
 
   const tooltip = new vscode.MarkdownString(lines.join("\n\n"));
@@ -393,10 +468,10 @@ function createCommitItem(element: CommitTreeNode): vscode.TreeItem {
 
   const tooltip = new vscode.MarkdownString(
     [
-      `**${commit.subject}**`,
+      `**${escapeMarkdown(commit.subject)}**`,
       "",
       `$(git-commit) \`${shortSha(commit.sha)}\``,
-      `$(person) ${commit.authorName}`,
+      `$(person) ${escapeMarkdown(commit.authorName)}`,
       `$(history) ${formatRelativeTime(commit.authorDate)} (${new Date(commit.authorDate).toLocaleString()})`,
     ].join("\n\n"),
   );

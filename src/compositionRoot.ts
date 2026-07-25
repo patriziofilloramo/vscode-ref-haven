@@ -47,17 +47,34 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const blameController = new BlameController(logger);
   const repositoryWatcher = new RepositoryWatcher(() => {
     controller.refreshAll();
-    void stashController.refresh();
+    void stashController.refresh().catch((error: unknown) => {
+      logger.error("Automatic stash refresh failed", {
+        message: error instanceof Error ? error.message : String(error),
+        operation: "refreshStashes",
+      });
+    });
     blameController.refresh();
   });
-  const watchWorkspaceRepositories = (): void => {
-    void discoverRepositories().then((repositories) => {
-      repositoryWatcher.setRepositories(repositories);
+  const watchWorkspaceRepositories = async (): Promise<void> => {
+    const repositories = await discoverRepositories();
+    await repositoryWatcher.setRepositories(repositories);
+  };
+  const scheduleRepositoryWatchRefresh = (): void => {
+    void watchWorkspaceRepositories().catch((error: unknown) => {
+      logger.error("Repository watcher setup failed", {
+        message: error instanceof Error ? error.message : String(error),
+        operation: "watchRepositories",
+      });
     });
   };
   const workspaceFoldersListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
-    watchWorkspaceRepositories();
-    void stashController.refresh();
+    scheduleRepositoryWatchRefresh();
+    void stashController.refresh().catch((error: unknown) => {
+      logger.error("Workspace stash refresh failed", {
+        message: error instanceof Error ? error.message : String(error),
+        operation: "refreshStashes",
+      });
+    });
   });
   const revisionProviderRegistration = vscode.workspace.registerTextDocumentContentProvider(
     REVISION_DOCUMENT_SCHEME,
@@ -66,19 +83,25 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const decorationProviderRegistration = vscode.window.registerFileDecorationProvider(
     new ChangeDecorationProvider(),
   );
-  treeProvider.setComparisonLoader((comparison) => controller.calculateComparison(comparison));
-  treeProvider.setCommitFilesLoader((repositoryRoot, sha) =>
-    listCommitFileChanges(repositoryRoot, sha),
+  treeProvider.setComparisonLoader((comparison, signal) =>
+    controller.calculateComparison(comparison, signal),
+  );
+  treeProvider.setCommitFilesLoader((repositoryRoot, sha, signal) =>
+    listCommitFileChanges(repositoryRoot, sha, signal),
   );
   stashTreeProvider.setLoaders(
-    (repositoryRoot) => listStashes(repositoryRoot),
-    (repositoryRoot, fromSha, toSha) => listChangedFiles(repositoryRoot, fromSha, toSha),
+    (repositoryRoot, signal) => listStashes(repositoryRoot, signal),
+    (repositoryRoot, fromSha, toSha, signal) =>
+      listChangedFiles(repositoryRoot, fromSha, toSha, signal),
   );
 
   context.subscriptions.push(
     logger,
     revisionProviderRegistration,
+    revisionProvider,
     decorationProviderRegistration,
+    treeProvider,
+    stashTreeProvider,
     treeView,
     stashTreeView,
     blameController,
@@ -86,8 +109,13 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     workspaceFoldersListener,
   );
   controller.initialize();
-  void stashController.initialize();
-  watchWorkspaceRepositories();
+  void stashController.initialize().catch((error: unknown) => {
+    logger.error("Initial stash refresh failed", {
+      message: error instanceof Error ? error.message : String(error),
+      operation: "refreshStashes",
+    });
+  });
+  scheduleRepositoryWatchRefresh();
   registerCommands(context, logger, controller, stashController, blameController);
   logger.info("Extension services registered", { operation: "activate" });
 }

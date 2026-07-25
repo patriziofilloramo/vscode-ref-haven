@@ -1,8 +1,11 @@
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { basename, isAbsolute } from "node:path";
 
 import * as vscode from "vscode";
 
+import { assertRepositoryRelativeGitPath } from "../../domain/pathValidation";
 import { readFileAtRevision } from "../../infrastructure/git/GitCli";
+import { BoundedPromiseCache } from "./BoundedPromiseCache";
 
 export const REVISION_DOCUMENT_SCHEME = "branch-compare";
 
@@ -27,18 +30,20 @@ export class BinaryRevisionError extends Error {
 }
 
 export class GitRevisionContentProvider implements vscode.TextDocumentContentProvider {
-  private readonly allowedUris = new Set<string>();
-  private readonly contentByUri = new Map<string, Promise<string>>();
+  private readonly contentByUri = new BoundedPromiseCache<string>(64, 16 * 1024 * 1024, (value) =>
+    Buffer.byteLength(value, "utf8"),
+  );
+  private readonly signingKey = randomBytes(32);
 
   public createEmptyUri(filePath: string): vscode.Uri {
-    validateGitPath(filePath);
+    assertRepositoryRelativeGitPath(filePath);
     return this.createUri({ kind: "empty" }, filePath);
   }
 
   public createRevisionUri(repositoryRoot: string, sha: string, filePath: string): vscode.Uri {
     if (!isAbsolute(repositoryRoot)) throw new Error("Repository root must be absolute.");
     if (!/^[0-9a-f]{40,64}$/i.test(sha)) throw new Error("Revision SHA is invalid.");
-    validateGitPath(filePath);
+    assertRepositoryRelativeGitPath(filePath);
     return this.createUri({ filePath, kind: "revision", repositoryRoot, sha }, filePath);
   }
 
@@ -50,33 +55,33 @@ export class GitRevisionContentProvider implements vscode.TextDocumentContentPro
     await Promise.all([this.loadContent(left), this.loadContent(right)]);
   }
 
+  public dispose(): void {
+    this.contentByUri.clear();
+  }
+
   private createUri(request: RevisionRequest, filePath: string): vscode.Uri {
     const payload = Buffer.from(JSON.stringify(request), "utf8").toString("base64url");
+    const signature = this.sign(payload);
     const uri = vscode.Uri.from({
       path: `/revision/${basename(filePath) || "empty"}`,
-      query: payload,
+      query: `${payload}.${signature}`,
       scheme: REVISION_DOCUMENT_SCHEME,
     });
-    this.allowedUris.add(uri.toString());
     return uri;
   }
 
   private loadContent(uri: vscode.Uri): Promise<string> {
-    const key = uri.toString();
-    if (!this.allowedUris.has(key)) {
-      return Promise.reject(new Error("Unknown Branch Compare revision document."));
+    try {
+      const key = uri.toString();
+      const payload = this.verifyAndExtractPayload(uri.query);
+      return this.contentByUri.getOrCreate(key, () => this.readContent(payload));
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error("Invalid revision URI."));
     }
-
-    const cached = this.contentByUri.get(key);
-    if (cached) return cached;
-
-    const content = this.readContent(uri);
-    this.contentByUri.set(key, content);
-    return content;
   }
 
-  private async readContent(uri: vscode.Uri): Promise<string> {
-    const request = parseRequest(uri.query);
+  private async readContent(payload: string): Promise<string> {
+    const request = parseRequest(payload);
     if (request.kind === "empty") return "";
 
     const content = await readFileAtRevision(request.repositoryRoot, request.sha, request.filePath);
@@ -88,6 +93,25 @@ export class GitRevisionContentProvider implements vscode.TextDocumentContentPro
       if (error instanceof BinaryRevisionError) throw error;
       throw new BinaryRevisionError();
     }
+  }
+
+  private sign(payload: string): string {
+    return createHmac("sha256", this.signingKey).update(payload).digest("base64url");
+  }
+
+  private verifyAndExtractPayload(token: string): string {
+    if (token.length > 32 * 1024) throw new Error("Branch Compare revision URI is invalid.");
+    const separator = token.lastIndexOf(".");
+    if (separator <= 0 || separator === token.length - 1) {
+      throw new Error("Unknown Branch Compare revision document.");
+    }
+    const payload = token.slice(0, separator);
+    const signature = Buffer.from(token.slice(separator + 1), "base64url");
+    const expected = Buffer.from(this.sign(payload), "base64url");
+    if (signature.length !== expected.length || !timingSafeEqual(signature, expected)) {
+      throw new Error("Unknown Branch Compare revision document.");
+    }
+    return payload;
   }
 }
 
@@ -114,23 +138,11 @@ function parseRequest(payload: string): RevisionRequest {
   ) {
     throw new Error("Branch Compare revision URI is invalid.");
   }
-  validateGitPath(request.filePath);
+  assertRepositoryRelativeGitPath(request.filePath);
   return {
     filePath: request.filePath,
     kind: "revision",
     repositoryRoot: request.repositoryRoot,
     sha: request.sha,
   };
-}
-
-function validateGitPath(filePath: string): void {
-  if (
-    filePath.length === 0 ||
-    filePath.includes("\0") ||
-    filePath.startsWith("/") ||
-    /^[a-z]:[\\/]/i.test(filePath) ||
-    filePath.split("/").includes("..")
-  ) {
-    throw new Error("Git revision path is invalid.");
-  }
 }

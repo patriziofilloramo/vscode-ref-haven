@@ -1,4 +1,4 @@
-import { dirname, relative } from "node:path";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 
 import * as vscode from "vscode";
 
@@ -29,6 +29,7 @@ interface CurrentLineBlame {
 /** Shows blame for the cursor's line as inline text and a status bar entry. */
 export class BlameController implements vscode.Disposable {
   private current: CurrentLineBlame | undefined;
+  private activeUpdate: AbortController | undefined;
   private decoratedEditor: vscode.TextEditor | undefined;
   private readonly decorationType = vscode.window.createTextEditorDecorationType({
     after: {
@@ -39,7 +40,7 @@ export class BlameController implements vscode.Disposable {
   });
   private readonly disposables: vscode.Disposable[] = [];
   private generation = 0;
-  private readonly repositoryRoots = new Map<string, Promise<string | null>>();
+  private readonly repositoryRoots = new Map<string, string>();
   private readonly statusBarItem: vscode.StatusBarItem;
   private updateTimer: NodeJS.Timeout | undefined;
   private readonly userNames = new Map<string, Promise<string | null>>();
@@ -69,6 +70,7 @@ export class BlameController implements vscode.Disposable {
   }
 
   public dispose(): void {
+    this.activeUpdate?.abort();
     if (this.updateTimer) clearTimeout(this.updateTimer);
     for (const disposable of this.disposables) disposable.dispose();
     this.decorationType.dispose();
@@ -77,6 +79,8 @@ export class BlameController implements vscode.Disposable {
 
   /** Re-blames the current line, e.g. after the repository state changed. */
   public refresh(): void {
+    this.repositoryRoots.clear();
+    this.userNames.clear();
     this.scheduleUpdate();
   }
 
@@ -145,6 +149,9 @@ export class BlameController implements vscode.Disposable {
   }
 
   private async update(): Promise<void> {
+    this.activeUpdate?.abort();
+    const abortController = new AbortController();
+    this.activeUpdate = abortController;
     const generation = ++this.generation;
     const configuration = vscode.workspace.getConfiguration(CONFIG_SECTION);
     const inlineEnabled = configuration.get<boolean>(INLINE_BLAME_SETTING, true);
@@ -165,17 +172,23 @@ export class BlameController implements vscode.Disposable {
       return;
     }
 
-    const relativePath = relative(repositoryRootPath, document.uri.fsPath).replaceAll("\\", "/");
-    if (relativePath.startsWith("..")) {
+    const nativeRelativePath = relative(repositoryRootPath, document.uri.fsPath);
+    if (
+      nativeRelativePath === ".." ||
+      nativeRelativePath.startsWith(`..${sep}`) ||
+      isAbsolute(nativeRelativePath)
+    ) {
       this.clearBlame();
       return;
     }
+    const relativePath = nativeRelativePath.replaceAll("\\", "/");
 
     const blame = await blameLine(
       repositoryRootPath,
       relativePath,
       line + 1,
       document.isDirty ? document.getText() : undefined,
+      abortController.signal,
     );
     if (generation !== this.generation) return;
     if (!blame) {
@@ -232,13 +245,12 @@ export class BlameController implements vscode.Disposable {
     this.statusBarItem.hide();
   }
 
-  private getRepositoryRoot(directory: string): Promise<string | null> {
-    let pending = this.repositoryRoots.get(directory);
-    if (!pending) {
-      pending = findRepositoryRoot(directory);
-      this.repositoryRoots.set(directory, pending);
-    }
-    return pending;
+  private async getRepositoryRoot(directory: string): Promise<string | null> {
+    const cached = this.repositoryRoots.get(directory);
+    if (cached) return cached;
+    const repositoryRoot = await findRepositoryRoot(directory);
+    if (repositoryRoot) this.repositoryRoots.set(directory, repositoryRoot);
+    return repositoryRoot;
   }
 
   private getUserName(repositoryRootPath: string): Promise<string | null> {
