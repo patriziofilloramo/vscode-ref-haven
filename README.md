@@ -1,7 +1,5 @@
 # RefHaven
 
-<img src="assets/refhaven-icon-128.png" alt="RefHaven logo: a light-stroked shield sheltering a git branch with an amber tip" width="96" align="right">
-
 > **Your Git context, inside VS Code. Your repository data, under your control.**
 
 RefHaven brings branch comparisons, line intelligence, history, stashes, and

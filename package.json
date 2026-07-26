@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.13.0",
+  "version": "0.13.5",
   "publisher": "patriziofilloramo",
   "license": "MIT",
   "private": true,
@@ -1399,7 +1399,7 @@
     "test:extension": "npm run compile && npm run compile:tests && node scripts/run-extension-tests.mjs",
     "vscode:prepublish": "npm run compile",
     "prepackage": "node -e \"require('node:fs').mkdirSync('build',{recursive:true})\"",
-    "package": "vsce package --no-dependencies --out build",
+    "package": "vsce package --no-dependencies --no-rewrite-relative-links --out build",
     "package:release": "npm run marketplace:check && vsce package --no-dependencies --out build"
   },
   "devDependencies": {
@@ -1416,6 +1416,7 @@
     "typescript-eslint": "8.64.0"
   },
   "overrides": {
+    "brace-expansion": "5.0.8",
     "serialize-javascript": "7.0.7"
   }
 }

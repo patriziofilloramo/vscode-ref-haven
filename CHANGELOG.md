@@ -15,6 +15,10 @@ is no earlier published version to compare against.
   rename, and a choice between branch-changes and tip-to-tip diffs.
 - Ahead/Behind commit sections, changed files as a list or compacted tree, and
   native readonly diffs for comparisons, commits, and stashes.
+- Working-tree comparisons stay fresh on their own: saving, creating, deleting,
+  or renaming a file, staging or unstaging from any tool, and returning focus
+  to the window all mark the affected comparisons stale, which recalculate
+  lazily when expanded.
 - Review tracking: mark files reviewed, jump to the next or previous unreviewed
   file, and filter, sort, or quick-open the changed files. Review state is
   workspace-local and is invalidated when the comparison endpoints change.

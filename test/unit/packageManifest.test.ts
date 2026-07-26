@@ -55,6 +55,7 @@ interface PackageManifest {
   readonly icon: string;
   readonly license: string;
   readonly name: string;
+  readonly overrides?: Readonly<Record<string, string>>;
   readonly private: boolean;
   readonly publisher: string;
   readonly repository?: { readonly url: string };
@@ -87,7 +88,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "patriziofilloramo");
-    assert.equal(manifest.version, "0.13.0");
+    assert.equal(manifest.version, "0.13.5");
     assert.match(manifest.description, /local processing/u);
   });
 
@@ -345,6 +346,9 @@ suite("extension manifest", () => {
     assert.equal(manifest.devDependencies["@vscode/test-cli"], undefined);
     for (const [name, version] of Object.entries(manifest.devDependencies)) {
       assert.match(version, /^\d+\.\d+\.\d+$/u, `${name} must use an exact version`);
+    }
+    for (const [name, version] of Object.entries(manifest.overrides ?? {})) {
+      assert.match(version, /^\d+\.\d+\.\d+$/u, `${name} override must use an exact version`);
     }
   });
 
