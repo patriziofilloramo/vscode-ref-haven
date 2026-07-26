@@ -26,6 +26,8 @@ The project-owned `scripts/clean.mjs` replaces `rimraf`. The project-owned Exten
 - `typescript` stays below 6.1 because the current `typescript-eslint` peer range does not support TypeScript 7.
 - `@vscode/test-electron` stays on the latest 2.x release compatible with Node 20; 3.x requires Node 22.
 - `mocha` stays on 11.3.0 while later 11.x versions resolve to a `diff` release covered by GHSA-73rr-hh4g-fpgx. Security takes precedence over version number.
+- `brace-expansion` is centrally overridden to exact version 5.0.8 so all
+  transitive consumers use one audited release instead of a floating range.
 - `serialize-javascript` is centrally overridden to the current patched release instead of accepting Mocha's older transitive range.
 
 ## Release checks
@@ -50,9 +52,10 @@ npx vsce ls --no-dependencies
 An update is accepted only when the supported Node/VS Code matrix remains valid, the complete audit is clean, registry signatures verify, tests pass, and the packaged file list contains no dependency tree.
 
 The quality guard also rejects runtime dependencies, non-exact direct
-development pins, missing branding assets, oversized source files, duplicated
-setting literals, direct exception-message logging, and third-party branding
-or command namespaces in public/runtime surfaces. These checks are deliberately
+development pins or overrides, missing branding assets, oversized source
+files, duplicated setting literals, duplicated full Git object-ID validators,
+direct exception-message logging, and third-party branding or command
+namespaces in public/runtime surfaces. These checks are deliberately
 implemented with Node built-ins so the guard introduces no new supply-chain
 surface.
 

@@ -32,7 +32,7 @@ function parseRecord(fields: readonly string[]): WorktreeInfo {
     }
     const key = field.slice(0, separator);
     const value = field.slice(separator + 1);
-    if (values.has(key)) throw new Error(`Git returned duplicate worktree field: ${key}.`);
+    if (values.has(key)) throw new Error("Git returned duplicate worktree metadata.");
     values.set(key, value);
   }
 

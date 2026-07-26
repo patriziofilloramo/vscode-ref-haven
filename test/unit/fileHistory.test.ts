@@ -6,9 +6,19 @@ import {
   parseFileHistory,
 } from "../../src/infrastructure/git/fileHistory";
 
+const NUL = "\0";
+
+function historyRecord(
+  metadata: readonly [string, string, string, string, string],
+  status: string,
+  ...paths: readonly string[]
+): string {
+  return `${metadata.join(NUL)}${NUL}${NUL}\n${[status, ...paths].join(NUL)}${NUL}`;
+}
+
 suite("file history parser", () => {
-  test("declares a format with explicit record and metadata separators", () => {
-    assert.equal(FILE_HISTORY_LOG_FORMAT, "%x1e%H%x1f%P%x1f%an%x1f%at%x1f%s");
+  test("declares a NUL-delimited metadata format", () => {
+    assert.equal(FILE_HISTORY_LOG_FORMAT, "%H%x00%P%x00%an%x00%at%x00%s%x00");
   });
 
   test("parses modified and renamed file history entries", () => {
@@ -16,8 +26,8 @@ suite("file history parser", () => {
     const secondSha = "2".repeat(40);
     const parentSha = "0".repeat(40);
     const output =
-      `\u001e${firstSha}\u001f${parentSha}\u001fAda\u001f10\u001fmodify\0M\0src/new.ts\0` +
-      `\u001e${secondSha}\u001f\u001fGrace\u001f5\u001frename\0R100\0src/old.ts\0src/new.ts\0`;
+      historyRecord([firstSha, parentSha, "Ada", "10", "modify\u001e\u001f"], "M", "src/new.ts") +
+      historyRecord([secondSha, "", "Grace", "5", "rename"], "R100", "src/old.ts", "src/new.ts");
 
     const entries = parseFileHistory(output);
 
@@ -31,7 +41,7 @@ suite("file history parser", () => {
         authorDate: 10_000,
         authorName: "Ada",
         sha: firstSha,
-        subject: "modify",
+        subject: "modify\u001e\u001f",
       },
       parentSha,
     });
@@ -45,10 +55,17 @@ suite("file history parser", () => {
   });
 
   test("rejects malformed metadata and ambiguous change lists", () => {
-    assert.throws(() => parseFileHistory("\u001ebad\0M\0src/file.ts\0"), GitFileHistoryParseError);
+    assert.throws(
+      () => parseFileHistory(historyRecord(["bad", "", "Ada", "1", "subject"], "M", "src/file.ts")),
+      GitFileHistoryParseError,
+    );
     const sha = "1".repeat(40);
     assert.throws(
-      () => parseFileHistory(`\u001e${sha}\u001f\u001fAda\u001f1\u001fsubject\0`),
+      () => parseFileHistory(`${[sha, "", "Ada", "1", "subject"].join(NUL)}${NUL}${NUL}`),
+      GitFileHistoryParseError,
+    );
+    assert.throws(
+      () => parseFileHistory(historyRecord([sha, "", "Ada", "1", "subject"], "X", "file.ts")),
       GitFileHistoryParseError,
     );
   });

@@ -50,5 +50,12 @@ suite("Git worktree porcelain parser", () => {
         ),
       /invalid worktree branch/u,
     );
+    assert.throws(
+      () =>
+        parseWorktreeList(
+          `worktree C:/repo\0HEAD ${"a".repeat(40)}\0private-key first\0private-key second\0\0`,
+        ),
+      (error: unknown) => error instanceof Error && !error.message.includes("private-key"),
+    );
   });
 });

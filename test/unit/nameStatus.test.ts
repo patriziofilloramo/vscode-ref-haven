@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 
-import { GitNameStatusParseError, parseNameStatusZ } from "../../src/infrastructure/git/nameStatus";
+import {
+  GitNameStatusParseError,
+  nameStatusPathCount,
+  parseNameStatusZ,
+} from "../../src/infrastructure/git/nameStatus";
 
 suite("Git name-status parser", () => {
   test("parses NUL-delimited add, modify, delete, rename, copy, and type changes", () => {
@@ -49,8 +53,20 @@ suite("Git name-status parser", () => {
     ]);
   });
 
+  test("derives path cardinality from the same validated status parser", () => {
+    assert.equal(nameStatusPathCount("M"), 1);
+    assert.equal(nameStatusPathCount("UU"), 1);
+    assert.equal(nameStatusPathCount("R087"), 2);
+    assert.equal(nameStatusPathCount("C"), 2);
+    assert.throws(() => nameStatusPathCount("X"), GitNameStatusParseError);
+  });
+
   test("rejects unknown and truncated records", () => {
-    assert.throws(() => parseNameStatusZ("X\0file.txt\0"), GitNameStatusParseError);
+    assert.throws(
+      () => parseNameStatusZ("X-private-status\0file.txt\0"),
+      (error: unknown) =>
+        error instanceof GitNameStatusParseError && !error.message.includes("private-status"),
+    );
     assert.throws(() => parseNameStatusZ("M100\0file.txt\0"), GitNameStatusParseError);
     assert.throws(() => parseNameStatusZ("R100\0old.txt\0"), GitNameStatusParseError);
     assert.throws(() => parseNameStatusZ("M\0"), GitNameStatusParseError);

@@ -63,6 +63,8 @@ export class CommitDetailsTreeProvider
   private detailsLoader: DetailsLoader | undefined;
   private disposed = false;
   private filesLoader: FilesLoader | undefined;
+  /** Selection revision captured by loads so late results cannot cross commit boundaries. */
+  private selectionGeneration = 0;
   private repositoryRoot: string | undefined;
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
@@ -73,6 +75,7 @@ export class CommitDetailsTreeProvider
   }
 
   public setCommit(repositoryRoot: string, commit: CommitInfo): void {
+    this.selectionGeneration += 1;
     this.abortController?.abort();
     this.abortController = undefined;
     this.repositoryRoot = repositoryRoot;
@@ -87,6 +90,7 @@ export class CommitDetailsTreeProvider
   public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.selectionGeneration += 1;
     this.abortController?.abort();
     this.onDidChangeTreeDataEmitter.dispose();
   }
@@ -147,21 +151,42 @@ export class CommitDetailsTreeProvider
     if (!this.repositoryRoot || !this.commit || !this.detailsLoader || !this.filesLoader) return [];
 
     this.abortController?.abort();
-    this.abortController = new AbortController();
-    const { signal } = this.abortController;
-    const [details, changed] = await Promise.all([
-      this.detailsLoader(this.repositoryRoot, this.commit.sha, signal),
-      this.filesLoader(this.repositoryRoot, this.commit.sha, signal),
-    ]);
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    const selectionGeneration = this.selectionGeneration;
+    const repositoryRoot = this.repositoryRoot;
+    const commit = this.commit;
+    let details: CommitDetails;
+    let changed: CommitFileChanges;
+    try {
+      [details, changed] = await Promise.all([
+        this.detailsLoader(repositoryRoot, commit.sha, abortController.signal),
+        this.filesLoader(repositoryRoot, commit.sha, abortController.signal),
+      ]);
+    } catch (error) {
+      if (
+        abortController.signal.aborted ||
+        selectionGeneration !== this.selectionGeneration ||
+        this.abortController !== abortController
+      ) {
+        return [];
+      }
+      throw error;
+    } finally {
+      if (this.abortController === abortController) this.abortController = undefined;
+    }
+    if (abortController.signal.aborted || selectionGeneration !== this.selectionGeneration)
+      return [];
+
     const scope: FileDiffScope = {
       fromSha: changed.parentSha,
-      label: this.commit.subject || this.commit.sha.slice(0, 8),
-      repositoryRootPath: this.repositoryRoot,
-      toSha: this.commit.sha,
+      label: commit.subject || commit.sha.slice(0, 8),
+      repositoryRootPath: repositoryRoot,
+      toSha: commit.sha,
     };
-    const context = { commitSha: this.commit.sha, repositoryRoot: this.repositoryRoot };
+    const context = { commitSha: commit.sha, repositoryRoot };
     return [
-      detail(context, "Commit", this.commit.sha, "git-commit", this.commit.sha),
+      detail(context, "Commit", commit.sha, "git-commit", commit.sha),
       detail(context, "Author", details.commit.authorName, "account", details.commit.authorName),
       detail(context, "Author Email", details.authorEmail, "mail", details.authorEmail),
       detail(

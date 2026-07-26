@@ -77,6 +77,11 @@ fallback inline hover behavior, separate selected-index/worktree stash
 snapshots, and rejection of review writes carrying a stale revision key.
 Concurrent review-write tests force asynchronous workspace-state updates and
 verify that both file marks survive.
+Comparison-store tests apply the same delayed-write fixture to concurrent
+replace/add operations, order collisions, and recovery after a rejected write.
+Parser tests cover control characters in metadata, strict decimal timestamp
+bounds, and exact 40/64-character object IDs without duplicating the domain
+validator.
 
 | Milestone        | Tests written before implementation                                                    | Required completion evidence                                          |
 | ---------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -130,6 +135,9 @@ verify that both file marks survive.
 - restore of five comparisons with IDs, order, modes, refs, and pins unchanged;
 - generation race: older completion cannot replace newer state;
 - cancellation on refresh replacement, edit, close, and disposal;
+- batched Working Tree invalidation emits one refresh for multiple results;
+- commit-detail loads discard stale selections, preserve captured repository
+  context, and propagate only current non-cancellation failures;
 - two-per-repository and four-global scheduler limits;
 - SHA-based cache keys including mode, operation, and pagination.
 

@@ -1,12 +1,13 @@
 import type { FileHistoryEntry } from "../../domain/history";
 import type { FileChange } from "../../domain/comparisonResult";
 import { isGitObjectId } from "../../domain/gitObjectId";
-import { parseNameStatusZ } from "./nameStatus";
+import { parseGitEpochSeconds } from "./gitTimestamp";
+import { nameStatusPathCount, parseNameStatusZ } from "./nameStatus";
 
-const RECORD_SEPARATOR = "\u001e";
-const FIELD_SEPARATOR = "\u001f";
+const FIELD_SEPARATOR = "\0";
 
-export const FILE_HISTORY_LOG_FORMAT = "%x1e%H%x1f%P%x1f%an%x1f%at%x1f%s";
+/** `git log --name-status -z --format` template matching {@link parseFileHistory}. */
+export const FILE_HISTORY_LOG_FORMAT = "%H%x00%P%x00%an%x00%at%x00%s%x00";
 
 export class GitFileHistoryParseError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
@@ -15,25 +16,29 @@ export class GitFileHistoryParseError extends Error {
   }
 }
 
+/** Parses fixed metadata followed by exactly one validated name-status change per commit. */
 export function parseFileHistory(stdout: string): FileHistoryEntry[] {
   const entries: FileHistoryEntry[] = [];
-  for (const record of stdout.split(RECORD_SEPARATOR)) {
-    if (record.length === 0) continue;
-    const fields = record.split("\0");
-    const metadata = fields.shift();
-    if (!metadata) continue;
-    const [sha, parents, authorName, epochSeconds, subject] = metadata.split(FIELD_SEPARATOR);
+  const fields = stdout.split(FIELD_SEPARATOR);
+  for (let index = 0; index < fields.length;) {
+    const sha = fields[index++]?.replace(/^\r?\n/u, "");
+    if (sha === "" && index === fields.length) break;
+    const parents = fields[index++];
+    const authorName = fields[index++];
+    const epochSeconds = fields[index++];
+    const subject = fields[index++];
     if (
-      sha === undefined ||
+      !sha ||
       parents === undefined ||
       authorName === undefined ||
       epochSeconds === undefined ||
+      subject === undefined ||
       !isGitObjectId(sha)
     ) {
       throw new GitFileHistoryParseError("Malformed file history metadata.");
     }
-    const authorDateSeconds = Number.parseInt(epochSeconds, 10);
-    if (!Number.isFinite(authorDateSeconds)) {
+    const authorDateSeconds = parseGitEpochSeconds(epochSeconds);
+    if (authorDateSeconds === null) {
       throw new GitFileHistoryParseError("Invalid file history timestamp.");
     }
     const firstParent = parents.split(" ")[0] ?? "";
@@ -41,9 +46,24 @@ export function parseFileHistory(stdout: string): FileHistoryEntry[] {
     if (parentSha !== null && !isGitObjectId(parentSha)) {
       throw new GitFileHistoryParseError("Invalid file history parent.");
     }
-    const statusFields = fields.filter((field) => field.length > 0);
-    if (statusFields[0] !== undefined) {
-      statusFields[0] = statusFields[0].replace(/^\r?\n/u, "");
+    const recordSeparator = fields[index++];
+    const status = fields[index++]?.replace(/^\r?\n/u, "");
+    if (recordSeparator !== "" || !status) {
+      throw new GitFileHistoryParseError("Malformed file history change data.");
+    }
+    const statusFields = [status];
+    let pathCount: number;
+    try {
+      pathCount = nameStatusPathCount(status);
+    } catch (error) {
+      throw new GitFileHistoryParseError("Malformed file history change data.", { cause: error });
+    }
+    for (let pathIndex = 0; pathIndex < pathCount; pathIndex += 1) {
+      const path = fields[index++];
+      if (path === undefined) {
+        throw new GitFileHistoryParseError("Malformed file history change data.");
+      }
+      statusFields.push(path);
     }
     let changes: FileChange[];
     try {
@@ -61,7 +81,7 @@ export function parseFileHistory(stdout: string): FileHistoryEntry[] {
         authorDate: authorDateSeconds * 1000,
         authorName,
         sha,
-        subject: subject ?? "",
+        subject,
       },
       parentSha,
     });

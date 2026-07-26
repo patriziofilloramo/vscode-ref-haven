@@ -7,6 +7,11 @@ export class GitNameStatusParseError extends Error {
   }
 }
 
+/** Returns the number of path fields required by a validated name-status code. */
+export function nameStatusPathCount(rawStatus: string): 1 | 2 {
+  return parseStatus(rawStatus).usesTwoPaths ? 2 : 1;
+}
+
 export function parseNameStatusZ(stdout: string): FileChange[] {
   if (stdout.length === 0) return [];
 
@@ -21,13 +26,13 @@ export function parseNameStatusZ(stdout: string): FileChange[] {
     const { similarity, status, usesTwoPaths } = parseStatus(rawStatus);
     const firstPath = fields[index++];
     if (firstPath === undefined || firstPath.length === 0) {
-      throw new GitNameStatusParseError(`Missing path for Git status ${rawStatus}.`);
+      throw new GitNameStatusParseError("Git returned a file status without a path.");
     }
 
     if (usesTwoPaths) {
       const secondPath = fields[index++];
       if (secondPath === undefined || secondPath.length === 0) {
-        throw new GitNameStatusParseError(`Missing destination path for Git status ${rawStatus}.`);
+        throw new GitNameStatusParseError("Git returned a rename or copy without a destination.");
       }
       changes.push({
         newPath: secondPath,
@@ -54,16 +59,16 @@ function parseStatus(rawStatus: string): {
   }
 
   const match = /^([AMDTCR])(\d{1,3})?$/.exec(rawStatus);
-  if (!match) throw new GitNameStatusParseError(`Unsupported Git file status: ${rawStatus}.`);
+  if (!match) throw new GitNameStatusParseError("Git returned an unsupported file status.");
 
   const code = match[1];
   const scoreText = match[2];
   const similarity = scoreText === undefined ? undefined : Number.parseInt(scoreText, 10);
   if (similarity !== undefined && code !== "R" && code !== "C") {
-    throw new GitNameStatusParseError(`Unexpected Git similarity score: ${rawStatus}.`);
+    throw new GitNameStatusParseError("Git returned a similarity score for an invalid status.");
   }
   if (similarity !== undefined && similarity > 100) {
-    throw new GitNameStatusParseError(`Invalid Git similarity score: ${rawStatus}.`);
+    throw new GitNameStatusParseError("Git returned an invalid similarity score.");
   }
 
   const statusByCode: Readonly<Record<string, FileChangeStatus>> = {
@@ -75,7 +80,7 @@ function parseStatus(rawStatus: string): {
     T: "typeChanged",
   };
   const status = code ? statusByCode[code] : undefined;
-  if (!status) throw new GitNameStatusParseError(`Unsupported Git file status: ${rawStatus}.`);
+  if (!status) throw new GitNameStatusParseError("Git returned an unsupported file status.");
 
   return {
     ...(similarity === undefined ? {} : { similarity }),

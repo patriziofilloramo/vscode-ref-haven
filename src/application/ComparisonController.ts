@@ -195,6 +195,20 @@ export class ComparisonController {
     this.logger.info("Refreshed comparison", { operation: "refreshComparison" });
   }
 
+  /** Marks mutable Working Tree results stale without touching immutable comparisons. */
+  public refreshWorkingTreeComparisons(): void {
+    const workingTreeComparisons = this.store
+      .getAll()
+      .filter((comparison) => comparison.mode === "workingTree");
+    this.treeProvider.invalidateResults(new Set(workingTreeComparisons.map(({ id }) => id)));
+    if (workingTreeComparisons.length > 0) {
+      this.logger.debug("Invalidated working-tree comparisons", {
+        count: workingTreeComparisons.length,
+        operation: "refreshWorkingTreeComparisons",
+      });
+    }
+  }
+
   public async swapComparison(comparison: SavedComparisonV1): Promise<void> {
     if (comparison.mode === "workingTree") {
       void vscode.window.showInformationMessage("Working-tree comparisons cannot be swapped.");

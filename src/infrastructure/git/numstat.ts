@@ -33,7 +33,7 @@ export function parseNumstatZ(stdout: string): NumstatEntry[] {
     if (record === undefined) break;
 
     const match = /^(-|\d+)\t(-|\d+)\t(.*)$/s.exec(record);
-    if (!match) throw new GitNumstatParseError(`Unsupported Git numstat record: ${record}.`);
+    if (!match) throw new GitNumstatParseError("Git returned a malformed numstat record.");
 
     const additions = match[1] === "-" ? undefined : Number.parseInt(match[1] ?? "", 10);
     const deletions = match[2] === "-" ? undefined : Number.parseInt(match[2] ?? "", 10);

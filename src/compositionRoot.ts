@@ -178,6 +178,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     );
   });
   const savedDocumentListener = vscode.workspace.onDidSaveTextDocument((document) => {
+    if (document.uri.scheme === "file") controller.refreshWorkingTreeComparisons();
     if (document === vscode.window.activeTextEditor?.document) {
       runInBackground(
         fileHistoryController.refresh(true),
@@ -186,6 +187,17 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
         "refreshFileHistory",
       );
     }
+  });
+  const workspaceFileOperationListeners = vscode.Disposable.from(
+    vscode.workspace.onDidCreateFiles(() => controller.refreshWorkingTreeComparisons()),
+    vscode.workspace.onDidDeleteFiles(() => controller.refreshWorkingTreeComparisons()),
+    vscode.workspace.onDidRenameFiles(() => controller.refreshWorkingTreeComparisons()),
+  );
+  const windowFocusListener = vscode.window.onDidChangeWindowState(({ focused }) => {
+    if (focused) controller.refreshWorkingTreeComparisons();
+  });
+  const comparisonVisibilityListener = treeView.onDidChangeVisibility(({ visible }) => {
+    if (visible) controller.refreshWorkingTreeComparisons();
   });
   const revisionProviderRegistration = vscode.workspace.registerTextDocumentContentProvider(
     REVISION_DOCUMENT_SCHEME,
@@ -242,6 +254,9 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     workspaceFoldersListener,
     activeEditorListener,
     savedDocumentListener,
+    workspaceFileOperationListeners,
+    windowFocusListener,
+    comparisonVisibilityListener,
   );
   controller.initialize();
   runInBackground(

@@ -1,19 +1,27 @@
 import type { BranchDetails } from "../../domain/repositoryNavigation";
 import { isGitObjectId } from "../../domain/gitObjectId";
+import { parseGitEpochSeconds } from "./gitTimestamp";
 
-const RECORD_SEPARATOR = "\u001e";
 const FIELD_SEPARATOR = "\0";
 
+/** `git for-each-ref --format` template matching {@link parseBranchDetails}. */
 export const BRANCH_DETAILS_FORMAT =
-  "%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)%00%(upstream:track)%00%(authorname)%00%(authordate:unix)%00%(subject)%1e";
+  "%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)%00%(upstream:track)%00%(authorname)%00%(authordate:unix)%00%(subject)%00";
 
+/** Parses fixed-width, NUL-delimited local and remote branch metadata. */
 export function parseBranchDetails(output: string): BranchDetails[] {
   const branches: BranchDetails[] = [];
-  for (const record of output.split(RECORD_SEPARATOR)) {
-    const normalized = record.replace(/^\r?\n/u, "");
-    if (normalized.length === 0) continue;
-    const [fullName, displayName, sha, upstream, track, authorName, epoch, subject] =
-      normalized.split(FIELD_SEPARATOR);
+  const fields = output.split(FIELD_SEPARATOR);
+  for (let index = 0; index < fields.length;) {
+    const fullName = fields[index++]?.replace(/^\r?\n/u, "");
+    if (fullName === "" && index === fields.length) break;
+    const displayName = fields[index++];
+    const sha = fields[index++];
+    const upstream = fields[index++];
+    const track = fields[index++];
+    const authorName = fields[index++];
+    const epoch = fields[index++];
+    const subject = fields[index++];
     if (fullName?.startsWith("refs/remotes/") && fullName.endsWith("/HEAD")) continue;
     if (
       !fullName ||
@@ -27,8 +35,8 @@ export function parseBranchDetails(output: string): BranchDetails[] {
     ) {
       throw new Error("Git returned malformed branch details.");
     }
-    const authorSeconds = Number.parseInt(epoch, 10);
-    if (!Number.isSafeInteger(authorSeconds) || authorSeconds < 0) {
+    const authorSeconds = parseGitEpochSeconds(epoch);
+    if (authorSeconds === null) {
       throw new Error("Git returned an invalid branch commit date.");
     }
     const tracking = parseTracking(track ?? "");

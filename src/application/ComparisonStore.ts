@@ -14,9 +14,12 @@ type WorkspaceState = Pick<vscode.ExtensionContext["workspaceState"], "get" | "u
 
 /**
  * Owns persistence of saved comparisons in workspace state. All reads return
- * validated, deduplicated comparisons in display order (pinned first).
+ * validated, deduplicated comparisons in display order (pinned first), and
+ * mutations are serialized so each one reads the last persisted state.
  */
 export class ComparisonStore {
+  private writeQueue: Promise<void> = Promise.resolve();
+
   public constructor(private readonly workspaceState: WorkspaceState) {}
 
   public getAll(): SavedComparisonV1[] {
@@ -31,26 +34,43 @@ export class ComparisonStore {
   }
 
   public nextOrder(): number {
-    return (
-      this.getAll().reduce((highest, comparison) => Math.max(highest, comparison.order), -1) + 1
-    );
+    return nextComparisonOrder(this.getAll());
   }
 
   public async add(comparison: SavedComparisonV1): Promise<SavedComparisonV1[]> {
-    return this.persist([...this.getAll(), comparison]);
+    return this.enqueueWrite(() => {
+      const current = this.getAll();
+      const persistedComparison = current.some(({ order }) => order === comparison.order)
+        ? { ...comparison, order: nextComparisonOrder(current) }
+        : comparison;
+      return this.persist([...current, persistedComparison]);
+    });
   }
 
   public async remove(id: string): Promise<SavedComparisonV1[]> {
-    return this.persist(this.getAll().filter((comparison) => comparison.id !== id));
+    return this.enqueueWrite(() =>
+      this.persist(this.getAll().filter((comparison) => comparison.id !== id)),
+    );
   }
 
   public async replace(
     id: string,
     update: (comparison: SavedComparisonV1) => SavedComparisonV1,
   ): Promise<SavedComparisonV1[]> {
-    return this.persist(
-      this.getAll().map((comparison) => (comparison.id === id ? update(comparison) : comparison)),
+    return this.enqueueWrite(() =>
+      this.persist(
+        this.getAll().map((comparison) => (comparison.id === id ? update(comparison) : comparison)),
+      ),
     );
+  }
+
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.writeQueue.then(operation, operation);
+    this.writeQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
   }
 
   private async persist(comparisons: readonly SavedComparisonV1[]): Promise<SavedComparisonV1[]> {
@@ -58,4 +78,8 @@ export class ComparisonStore {
     await this.workspaceState.update(COMPARISON_STORAGE_KEY, normalized);
     return normalized;
   }
+}
+
+function nextComparisonOrder(comparisons: readonly SavedComparisonV1[]): number {
+  return comparisons.reduce((highest, comparison) => Math.max(highest, comparison.order), -1) + 1;
 }

@@ -842,7 +842,7 @@ export async function fileExistsAtRevision(
     signal,
   ).catch((error: unknown) => failGitOperation(error, "Git could not verify this file revision."));
   const separator = output.indexOf("\t");
-  if (separator < 0 || !/^\d{6} blob [0-9a-f]{40,64}$/u.test(output.slice(0, separator))) {
+  if (separator < 0 || !isBlobLsTreeHeader(output.slice(0, separator))) {
     return false;
   }
   return output.slice(separator + 1).replace(/\0$/u, "") === filePath;
@@ -1150,6 +1150,17 @@ function isSafeRemoteName(value: string): boolean {
 
 function parseObjectId(stdout: string, errorMessage: string): string {
   return requireGitObjectId(stdout.trim(), errorMessage);
+}
+
+function isBlobLsTreeHeader(value: string): boolean {
+  const [mode, type, objectId, extra] = value.split(" ");
+  return (
+    /^\d{6}$/u.test(mode ?? "") &&
+    type === "blob" &&
+    objectId !== undefined &&
+    isGitObjectId(objectId) &&
+    extra === undefined
+  );
 }
 
 async function resolveOptionalCommit(repositoryRoot: string, ref: string): Promise<string | null> {

@@ -1,7 +1,8 @@
 import type { FileBlameLine, LineBlame } from "../../domain/blame";
 import { isGitObjectId } from "../../domain/gitObjectId";
+import { parseGitEpochSeconds } from "./gitTimestamp";
 
-const HEADER_PATTERN = /^([0-9a-f]{40,64}) (\d+) (\d+)(?: \d+)?$/u;
+const HEADER_PATTERN = /^(\S+) (\d+) (\d+)(?: \d+)?$/u;
 
 export class GitBlameParseError extends Error {
   public constructor(message: string) {
@@ -31,7 +32,7 @@ export function parseBlameFilePorcelain(stdout: string): FileBlameLine[] {
     const sha = match?.[1];
     const originalLineText = match?.[2];
     const finalLineText = match?.[3];
-    if (!sha || !originalLineText || !finalLineText) {
+    if (!sha || !isGitObjectId(sha) || !originalLineText || !finalLineText) {
       throw new GitBlameParseError("Malformed Git blame header.");
     }
     const originalLineNumber = Number.parseInt(originalLineText, 10);
@@ -86,10 +87,9 @@ function parseMetadata(
   if (authorName === undefined || authorTime === undefined || path === undefined) {
     throw new GitBlameParseError("Git blame output is missing required fields.");
   }
-  const authorDateSeconds = Number.parseInt(authorTime, 10);
-  if (!Number.isSafeInteger(authorDateSeconds)) {
-    throw new GitBlameParseError(`Invalid author time in Git blame output: ${authorTime}.`);
-  }
+  const authorDateSeconds = parseGitEpochSeconds(authorTime);
+  if (authorDateSeconds === null)
+    throw new GitBlameParseError("Git blame output contains an invalid author time.");
 
   const isCommitted = !/^0+$/u.test(sha);
   const previous = parsePrevious(metadata.get("previous"));

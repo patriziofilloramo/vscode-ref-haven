@@ -40,7 +40,11 @@ suite("parseNumstatZ", () => {
   });
 
   test("rejects malformed records", () => {
-    assert.throws(() => parseNumstatZ("not-numstat\0"), GitNumstatParseError);
+    assert.throws(
+      () => parseNumstatZ("private-not-numstat\0"),
+      (error: unknown) =>
+        error instanceof GitNumstatParseError && !error.message.includes("private-not-numstat"),
+    );
   });
 });
 

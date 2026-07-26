@@ -73,6 +73,7 @@ suite("Git blame porcelain parser", () => {
 
   test("rejects malformed headers and missing metadata", () => {
     assert.throws(() => parseBlamePorcelain("not a blame header\n"), GitBlameParseError);
+    assert.throws(() => parseBlamePorcelain(porcelain("a".repeat(41))), GitBlameParseError);
     assert.throws(
       () => parseBlamePorcelain(porcelain(SHA, { "author-time": null })),
       GitBlameParseError,

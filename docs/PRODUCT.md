@@ -184,6 +184,11 @@ characters.
 
 Repository events mark affected comparisons stale but are not treated as the sole source of truth. The extension rechecks visible comparisons when the window regains focus or the view becomes visible. Manual refresh is always available. It does not continuously poll while VS Code is in the background.
 
+File saves and VS Code create, delete, or rename operations invalidate mutable
+Working Tree results. Staging and unstaging are observed through the Git index
+watcher. These events only mark cached results stale; recalculation remains
+lazy and scheduler-bounded.
+
 Refresh is generation-based and cancellable. At most two Git processes run concurrently per repository and four globally. In-flight work is cancelled when its comparison is refreshed, replaced, or closed. Computed comparison and commit results remain cached while their active tree state is valid; readonly revision content uses a bounded LRU cache.
 
 ## Privacy, safety, and limits

@@ -163,6 +163,12 @@ parser selection. Keeping process mechanics separate prevents the command
 adapter from becoming the implicit owner of configuration, scheduling, and
 platform error normalization.
 
+Commit logs, file history, branch details, stash metadata, and full commit
+details use fixed NUL-delimited formats. NUL is the framing boundary because
+Git excludes it from identities, messages, refs, and paths; other control
+characters remain valid data. Decimal Git timestamps pass through one strict
+validator and must fit the JavaScript `Date` range before entering the domain.
+
 `gitProcessPolicy.ts` is the single local-only process boundary. It blocks every Git transport and lazy object fetch, disables prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes inherited repository and command-config redirection, enables literal pathspec handling, and prevents external diff/textconv execution. The policy is applied to string, buffer, and stdin invocations and is covered by exact regression tests.
 
 ### GitClient
@@ -177,7 +183,14 @@ If `vscode.git` is unavailable, discovery probes each workspace folder with `git
 
 ### ComparisonStore
 
-Reads and atomically writes `refhaven.comparisons.v1` in `workspaceState`. It strictly validates the complete schema, rejects malformed repository paths and branch refs, removes duplicate logical identities and IDs, and implements create, update, delete, and pin operations. It sorts pinned comparisons first while preserving explicit order within pinned and unpinned groups.
+Reads and writes `refhaven.comparisons.v1` in `workspaceState`. It strictly
+validates the complete schema, rejects malformed repository paths and branch
+refs, removes duplicate logical identities and IDs, and implements create,
+update, delete, and pin operations. Mutations run through one promise queue so
+every read-modify-write starts from the last persisted state; colliding order
+values from concurrent creation are moved to the next available order. It
+sorts pinned comparisons first while preserving explicit order within pinned
+and unpinned groups.
 
 ### ComparisonReviewStore
 
@@ -213,6 +226,10 @@ and changed files into a native tree; neither search results nor commit details
 are persisted. Metadata rows carry only their explicit clipboard value and
 repository/SHA context. Parent rows can load the parent details or request a
 single parent-to-commit file diff through the shared native diff pipeline.
+Each load captures the current selection generation, repository, and commit;
+selection changes and disposal abort the request, and a late completion is
+discarded before it can publish mixed-context nodes. Current, non-cancellation
+failures continue to the Inspector error boundary.
 
 ### ComparisonController
 
@@ -258,6 +275,13 @@ without a repository-wide calculation.
 The scheduler enforces two concurrent Git processes per repository and four globally. Queued work is abortable, and `AbortSignal` is passed to running child processes. Repository events invalidate active results; expansion then resolves refs again. There is no background polling.
 
 Comparison results are cached by active comparison ID and protected by a generation counter. Commit-file results are keyed by repository and commit SHA. Refresh, replacement, and close abort and remove the affected in-flight state before a stale result can be installed.
+
+Mutable Working Tree results are invalidated on file saves, VS Code create,
+delete, and rename operations, Git index changes, window focus restoration,
+and comparison-view visibility. Multiple affected comparisons are invalidated
+as one tree event. Invalidation remains lazy: only visible expanded nodes
+recalculate, and automatic activity is logged at debug level with a bounded
+count and stable operation identifier.
 
 ### Tree provider
 
@@ -383,7 +407,11 @@ rendering, and never persisted.
 
 ### RepositoryWatcher
 
-Git metadata paths are resolved with `--absolute-git-dir` and `--git-common-dir`. Deduplicated watchers cover `HEAD`, refs, packed refs, and reflogs in both locations, so linked worktrees and ordinary repositories refresh correctly. Workspace-folder changes re-discover repositories and rebuild the watchers.
+Git metadata paths are resolved with `--absolute-git-dir` and
+`--git-common-dir`. Deduplicated watchers cover `HEAD`, the index, refs, packed
+refs, and reflogs in both locations, so linked worktrees and ordinary
+repositories refresh correctly. Notifications are debounced; workspace-folder
+changes re-discover repositories and rebuild the watchers.
 
 ## Activation and lifecycle
 

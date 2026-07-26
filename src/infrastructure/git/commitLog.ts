@@ -1,11 +1,11 @@
 import type { CommitInfo } from "../../domain/comparisonResult";
 import { isGitObjectId } from "../../domain/gitObjectId";
+import { parseGitEpochSeconds } from "./gitTimestamp";
 
-const RECORD_SEPARATOR = "\u001e";
-const FIELD_SEPARATOR = "\u001f";
+const FIELD_SEPARATOR = "\0";
 
 /** `git log --format` template matching {@link parseCommitLog}. */
-export const COMMIT_LOG_FORMAT = "%H%x1f%an%x1f%at%x1f%s%x1e";
+export const COMMIT_LOG_FORMAT = "%H%x00%an%x00%at%x00%s%x00";
 
 export class GitCommitLogParseError extends Error {
   public constructor(message: string) {
@@ -15,32 +15,33 @@ export class GitCommitLogParseError extends Error {
 }
 
 /**
- * Parses `git log` output produced with {@link COMMIT_LOG_FORMAT}: records
- * separated by 0x1e, fields (sha, author, epoch seconds, subject) by 0x1f.
+ * Parses `git log` output produced with {@link COMMIT_LOG_FORMAT}. NUL safely
+ * separates fields because Git identities and commit messages cannot contain it.
  */
 export function parseCommitLog(stdout: string): CommitInfo[] {
   const commits: CommitInfo[] = [];
-  for (const record of stdout.split(RECORD_SEPARATOR)) {
-    const trimmed = record.replace(/^\r?\n/, "");
-    if (trimmed.length === 0) continue;
-
-    const [sha, authorName, epochSeconds, subject] = trimmed.split(FIELD_SEPARATOR);
-    if (sha === undefined || authorName === undefined || epochSeconds === undefined) {
+  const fields = stdout.split(FIELD_SEPARATOR);
+  for (let index = 0; index < fields.length;) {
+    const sha = fields[index++]?.replace(/^\r?\n/u, "");
+    if (sha === "" && index === fields.length) break;
+    const authorName = fields[index++];
+    const epochSeconds = fields[index++];
+    const subject = fields[index++];
+    if (!sha || authorName === undefined || epochSeconds === undefined || subject === undefined) {
       throw new GitCommitLogParseError("Malformed Git commit log record.");
     }
     if (!isGitObjectId(sha)) {
-      throw new GitCommitLogParseError(`Invalid commit SHA in Git log output: ${sha}.`);
+      throw new GitCommitLogParseError("Git returned an invalid commit SHA.");
     }
-    const authorDateSeconds = Number.parseInt(epochSeconds, 10);
-    if (Number.isNaN(authorDateSeconds)) {
-      throw new GitCommitLogParseError(`Invalid commit date in Git log output: ${epochSeconds}.`);
-    }
+    const authorDateSeconds = parseGitEpochSeconds(epochSeconds);
+    if (authorDateSeconds === null)
+      throw new GitCommitLogParseError("Git returned an invalid commit date.");
 
     commits.push({
       authorDate: authorDateSeconds * 1000,
       authorName,
       sha,
-      subject: subject ?? "",
+      subject,
     });
   }
   return commits;

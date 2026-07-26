@@ -1,5 +1,5 @@
 /** Full object IDs emitted by supported SHA-1 and SHA-256 Git repositories. */
-export const GIT_OBJECT_ID_PATTERN = /^[0-9a-f]{40,64}$/iu;
+export const GIT_OBJECT_ID_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 
 declare const gitObjectIdBrand: unique symbol;
 

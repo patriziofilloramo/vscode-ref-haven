@@ -235,16 +235,28 @@ export class ComparisonTreeProvider
   }
 
   public invalidateResult(comparisonId: string): void {
-    this.bumpGeneration(comparisonId);
-    this.pendingResultAbortControllers.get(comparisonId)?.abort();
-    this.pendingResultAbortControllers.delete(comparisonId);
+    this.invalidateResults(new Set([comparisonId]));
+  }
+
+  /** Invalidates several comparisons atomically and emits one tree refresh. */
+  public invalidateResults(comparisonIds: ReadonlySet<string>): void {
+    let invalidated = false;
+    for (const comparisonId of comparisonIds) {
+      if (!this.currentComparison(comparisonId)) continue;
+      invalidated = true;
+      this.bumpGeneration(comparisonId);
+      this.pendingResultAbortControllers.get(comparisonId)?.abort();
+      this.pendingResultAbortControllers.delete(comparisonId);
+      this.errors.delete(comparisonId);
+      this.pendingResults.delete(comparisonId);
+      if (this.results.has(comparisonId)) this.staleResults.add(comparisonId);
+      this.clearComparisonParents(comparisonId);
+    }
+    if (!invalidated) return;
+
     for (const controller of this.commitFilesAbortControllers.values()) controller.abort();
     this.commitFilesAbortControllers.clear();
     this.commitFiles.clear();
-    this.errors.delete(comparisonId);
-    this.pendingResults.delete(comparisonId);
-    if (this.results.has(comparisonId)) this.staleResults.add(comparisonId);
-    this.clearComparisonParents(comparisonId);
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 

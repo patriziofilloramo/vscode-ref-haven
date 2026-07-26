@@ -20,7 +20,7 @@ suite("branch details parser", () => {
         "10",
         "local subject",
       ].join("\0") +
-      "\u001e" +
+      "\0\n" +
       [
         "refs/remotes/origin/main",
         "origin/main",
@@ -31,7 +31,7 @@ suite("branch details parser", () => {
         "5",
         "remote subject",
       ].join("\0") +
-      "\u001e";
+      "\0\n";
 
     assert.deepEqual(parseBranchDetails(output), [
       {
@@ -73,11 +73,19 @@ suite("branch details parser", () => {
     const [branch] = parseBranchDetails(
       ["refs/heads/topic", "topic", sha, "origin/topic", "[gone]", "Ada", "1", "subject"].join(
         "\0",
-      ) + "\u001e",
+      ) + "\0\n",
     );
     assert.ok(branch);
     assert.equal(branch.upstreamGone, true);
-    assert.throws(() => parseBranchDetails("refs/heads/main\0main\0bad\u001e"), /malformed/u);
+    assert.throws(() => parseBranchDetails("refs/heads/main\0main\0bad\0"), /malformed/u);
+    assert.throws(
+      () =>
+        parseBranchDetails(
+          ["refs/heads/main", "main", sha, "", "", "Ada", "1trailing", "subject"].join("\0") +
+            "\0\n",
+        ),
+      /date/u,
+    );
     assert.match(BRANCH_DETAILS_FORMAT, /upstream:track/u);
   });
 
@@ -87,9 +95,9 @@ suite("branch details parser", () => {
       ["refs/remotes/origin/HEAD", "origin/HEAD", sha, "", "", "Ada", "1", "remote head"].join(
         "\0",
       ) +
-      "\u001e" +
+      "\0\n" +
       ["refs/heads/HEAD", "HEAD", sha, "", "", "Ada", "1", "local head"].join("\0") +
-      "\u001e";
+      "\0\n";
     assert.deepEqual(
       parseBranchDetails(output).map(({ branch }) => branch.fullName),
       ["refs/heads/HEAD"],

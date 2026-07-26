@@ -1,12 +1,12 @@
 import type { StashEntry } from "../../domain/stash";
 import { isGitObjectId } from "../../domain/gitObjectId";
+import { parseGitEpochSeconds } from "./gitTimestamp";
 
-const RECORD_SEPARATOR = "\u001e";
-const FIELD_SEPARATOR = "\u001f";
+const FIELD_SEPARATOR = "\0";
 const SELECTOR_PATTERN = /^stash@\{\d+\}$/;
 
 /** `git stash list --format` template matching {@link parseStashList}. */
-export const STASH_LOG_FORMAT = "%gd%x1f%H%x1f%P%x1f%at%x1f%gs%x1e";
+export const STASH_LOG_FORMAT = "%gd%x00%H%x00%P%x00%at%x00%gs%x00";
 
 export class GitStashListParseError extends Error {
   public constructor(message: string) {
@@ -16,43 +16,45 @@ export class GitStashListParseError extends Error {
 }
 
 /**
- * Parses `git stash list` output produced with {@link STASH_LOG_FORMAT}:
- * records separated by 0x1e, fields (selector, sha, parent shas, epoch
- * seconds, reflog subject) by 0x1f.
+ * Parses `git stash list` output produced with {@link STASH_LOG_FORMAT}.
+ * NUL safely separates fields because Git metadata cannot contain it.
  */
 export function parseStashList(stdout: string): StashEntry[] {
   const stashes: StashEntry[] = [];
-  for (const record of stdout.split(RECORD_SEPARATOR)) {
-    const trimmed = record.replace(/^\r?\n/, "");
-    if (trimmed.length === 0) continue;
-
-    const [selector, sha, parents, epochSeconds, subject] = trimmed.split(FIELD_SEPARATOR);
+  const fields = stdout.split(FIELD_SEPARATOR);
+  for (let index = 0; index < fields.length;) {
+    const selector = fields[index++]?.replace(/^\r?\n/u, "");
+    if (selector === "" && index === fields.length) break;
+    const sha = fields[index++];
+    const parents = fields[index++];
+    const epochSeconds = fields[index++];
+    const subject = fields[index++];
     if (
-      selector === undefined ||
+      !selector ||
       sha === undefined ||
       parents === undefined ||
-      epochSeconds === undefined
+      epochSeconds === undefined ||
+      subject === undefined
     ) {
       throw new GitStashListParseError("Malformed Git stash list record.");
     }
     if (!SELECTOR_PATTERN.test(selector)) {
-      throw new GitStashListParseError(`Invalid stash selector in Git output: ${selector}.`);
+      throw new GitStashListParseError("Git returned an invalid stash selector.");
     }
     if (!isGitObjectId(sha)) {
-      throw new GitStashListParseError(`Invalid stash SHA in Git output: ${sha}.`);
+      throw new GitStashListParseError("Git returned an invalid stash SHA.");
     }
     const parentSha = parents.split(" ")[0];
     if (parentSha === undefined || !isGitObjectId(parentSha)) {
-      throw new GitStashListParseError(`Invalid stash parent in Git output: ${parents}.`);
+      throw new GitStashListParseError("Git returned an invalid stash parent.");
     }
-    const authorDateSeconds = Number.parseInt(epochSeconds, 10);
-    if (Number.isNaN(authorDateSeconds)) {
-      throw new GitStashListParseError(`Invalid stash date in Git output: ${epochSeconds}.`);
-    }
+    const authorDateSeconds = parseGitEpochSeconds(epochSeconds);
+    if (authorDateSeconds === null)
+      throw new GitStashListParseError("Git returned an invalid stash date.");
 
     stashes.push({
       authorDate: authorDateSeconds * 1000,
-      ...parseStashSubject(subject ?? ""),
+      ...parseStashSubject(subject),
       parentSha,
       selector,
       sha,

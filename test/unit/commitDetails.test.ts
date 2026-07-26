@@ -36,5 +36,11 @@ suite("commit details parser", () => {
         ["bad", "", "Ada", "a@b", "1", "Grace", "g@b", "2", "message", ""].join("\0"),
       ),
     );
+    const sha = "1".repeat(40);
+    assert.throws(() =>
+      parseCommitDetails(
+        [sha, "", "Ada", "a@b", "1trailing", "Grace", "g@b", "2", "message", ""].join("\0"),
+      ),
+    );
   });
 });

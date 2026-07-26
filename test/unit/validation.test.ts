@@ -2,11 +2,21 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
+import { isGitObjectId } from "../../src/domain/gitObjectId";
 import { isFileChange, isFileDiffScope, isSavedComparisonV1 } from "../../src/domain/validation";
 
 const SHA = "a".repeat(40);
 
 suite("domain boundary validation", () => {
+  test("accepts only complete SHA-1 and SHA-256 object IDs", () => {
+    assert.equal(isGitObjectId("a".repeat(40)), true);
+    assert.equal(isGitObjectId("b".repeat(64)), true);
+    assert.equal(isGitObjectId("a".repeat(39)), false);
+    assert.equal(isGitObjectId("a".repeat(41)), false);
+    assert.equal(isGitObjectId("b".repeat(63)), false);
+    assert.equal(isGitObjectId("b".repeat(65)), false);
+  });
+
   test("accepts a complete saved comparison", () => {
     assert.equal(isSavedComparisonV1(createComparison()), true);
     assert.equal(

@@ -5,12 +5,12 @@ import { pathIdentityKey } from "../domain/pathValidation";
 import { resolveGitMetadataPaths } from "../infrastructure/git/GitCli";
 
 /** Files inside resolved Git metadata directories that indicate repository state changes. */
-const GIT_STATE_PATTERN = "{HEAD,ORIG_HEAD,packed-refs,refs/**,logs/HEAD,logs/refs/**}";
+const GIT_STATE_PATTERN = "{HEAD,ORIG_HEAD,index,packed-refs,refs/**,logs/HEAD,logs/refs/**}";
 const NOTIFY_DEBOUNCE_MS = 1000;
 
 /**
  * Watches each repository's .git metadata and fires a debounced callback when
- * commits, branch switches, stash operations, or fetches change the state.
+ * commits, branch switches, staging, stash operations, or fetches change state.
  */
 export class RepositoryWatcher implements vscode.Disposable {
   private notifyTimer: NodeJS.Timeout | undefined;

@@ -28,6 +28,12 @@ for (const [name, version] of Object.entries(manifest.devDependencies ?? {})) {
   }
 }
 
+for (const [name, version] of Object.entries(manifest.overrides ?? {})) {
+  if (typeof version === "string" && !/^\d+\.\d+\.\d+$/u.test(version)) {
+    violations.push(`Dependency override ${name} is not exact-pinned.`);
+  }
+}
+
 const iconPath = join(root, manifest.icon ?? "");
 if (!manifest.icon || !existsSync(iconPath) || statSync(iconPath).size === 0) {
   violations.push("The extension icon is missing or empty.");
@@ -56,6 +62,12 @@ for (const file of sourceFiles) {
   }
   if (/logger\.(?:debug|info|warn|error)\([^\n]*(?:error|err)\.message/iu.test(content)) {
     violations.push(`${relativePath} logs an exception message directly.`);
+  }
+  if (
+    relativePath !== "src/domain/gitObjectId.ts" &&
+    /\[0-9a-f\][^/\n]{0,32}\{(?:40|40,64)\}/iu.test(content)
+  ) {
+    violations.push(`${relativePath} duplicates the full Git object-ID validator.`);
   }
 }
 

@@ -90,6 +90,23 @@ Recognised status prefixes map to domain states:
 
 Rename and copy scores are optional numeric similarity values. Unknown or malformed statuses produce typed parser errors; they are not silently coerced.
 
+## Metadata and history framing
+
+Commit lists, followed file history, branch details, stash lists, and full
+commit details use explicit `%x00` fields. NUL is the only safe shared framing
+byte because Git forbids it in identities, refs, messages, and paths. Record
+parsers consume an exact field count; file history additionally consumes the
+validated one- or two-path name-status record emitted by `-z`. Characters such
+as `0x1e`, `0x1f`, tabs, and newlines remain data and never delimit records.
+
+`%at`, `%(authordate:unix)`, and equivalent timestamps must be complete
+non-negative decimal values inside the JavaScript `Date` range. Partial
+numbers, negative values, unsafe integers, and out-of-range dates are rejected
+without echoing the malformed Git field in user-visible errors or logs.
+The same non-echo rule applies to malformed object IDs, status codes, numstat
+records, and worktree metadata: parser errors describe the failed contract but
+never interpolate repository-controlled fields.
+
 ## Numstat
 
 Statistics are obtained separately:

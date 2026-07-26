@@ -4,7 +4,9 @@ import { resolve } from "node:path";
 import * as vscode from "vscode";
 
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
-import type { ComparisonResult } from "../../src/domain/comparisonResult";
+import type { CommitDetails } from "../../src/domain/commitDetails";
+import type { CommitInfo, ComparisonResult } from "../../src/domain/comparisonResult";
+import type { CommitFileChanges } from "../../src/infrastructure/git/GitCli";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 import { BranchesTreeProvider } from "../../src/ui/tree/BranchesTreeProvider";
 import { CommitDetailsTreeProvider } from "../../src/ui/tree/CommitDetailsTreeProvider";
@@ -152,6 +154,49 @@ suite("comparison tree lifecycle", () => {
 
       provider.invalidateResult(comparison.id);
       assert.match(String(provider.getTreeItem(root).description), /Stale/u);
+    } finally {
+      provider.dispose();
+    }
+  });
+
+  test("batches invalidation of several comparisons into one tree refresh", async () => {
+    const provider = new ComparisonTreeProvider();
+    const first = createComparison();
+    const second: SavedComparisonV1 = {
+      ...createComparison(),
+      id: "second-cancellation-test",
+      order: 1,
+      targetRef: {
+        displayName: "second",
+        fullName: "refs/heads/second",
+        kind: "localBranch",
+      },
+    };
+    provider.setComparisons([first, second]);
+    provider.setComparisonLoader((comparison) => Promise.resolve(createResult(comparison)));
+
+    try {
+      await Promise.all([
+        provider.prepareComparison(first.id),
+        provider.prepareComparison(second.id),
+      ]);
+      let rootRefreshCount = 0;
+      const subscription = provider.onDidChangeTreeData((node) => {
+        if (node === undefined) rootRefreshCount += 1;
+      });
+      try {
+        provider.invalidateResults(new Set([first.id, second.id]));
+      } finally {
+        subscription.dispose();
+      }
+
+      assert.equal(rootRefreshCount, 1);
+      const firstNode = provider.getComparisonNode(first.id);
+      const secondNode = provider.getComparisonNode(second.id);
+      assert.ok(firstNode);
+      assert.ok(secondNode);
+      assert.match(String(provider.getTreeItem(firstNode).description), /Stale/u);
+      assert.match(String(provider.getTreeItem(secondNode).description), /Stale/u);
     } finally {
       provider.dispose();
     }
@@ -314,6 +359,73 @@ suite("comparison tree lifecycle", () => {
       provider.dispose();
     }
   });
+
+  test("discards commit details that finish after a different commit is selected", async () => {
+    const provider = new CommitDetailsTreeProvider();
+    const firstCommit = createCommitInfo("a", "first");
+    const secondCommit = createCommitInfo("b", "second");
+    let firstSignal: AbortSignal | undefined;
+    let resolveFirstDetails: ((details: CommitDetails) => void) | undefined;
+    let resolveFirstFiles: ((files: CommitFileChanges) => void) | undefined;
+    provider.setLoaders(
+      (_repositoryRoot, sha, signal) => {
+        if (sha === firstCommit.sha) {
+          firstSignal = signal;
+          return new Promise((resolveDetails) => {
+            resolveFirstDetails = resolveDetails;
+          });
+        }
+        return Promise.resolve(createCommitDetails(secondCommit));
+      },
+      (_repositoryRoot, sha) => {
+        if (sha === firstCommit.sha) {
+          return new Promise((resolveFiles) => {
+            resolveFirstFiles = resolveFiles;
+          });
+        }
+        return Promise.resolve({ files: [], parentSha: null });
+      },
+    );
+
+    try {
+      provider.setCommit(resolve("first-repository"), firstCommit);
+      const staleChildren = provider.getChildren();
+      await new Promise((resolveImmediate) => setImmediate(resolveImmediate));
+
+      provider.setCommit(resolve("second-repository"), secondCommit);
+      const currentChildren = await provider.getChildren();
+      assert.equal(firstSignal?.aborted, true);
+
+      resolveFirstDetails?.(createCommitDetails(firstCommit));
+      resolveFirstFiles?.({ files: [], parentSha: null });
+      assert.deepEqual(await staleChildren, []);
+
+      const commitNode = currentChildren.find(
+        (node) => node.kind === "detail" && node.label === "Commit",
+      );
+      assert.ok(commitNode?.kind === "detail");
+      assert.equal(commitNode.description, secondCommit.sha);
+      assert.equal(commitNode.repositoryRoot, resolve("second-repository"));
+    } finally {
+      provider.dispose();
+    }
+  });
+
+  test("propagates a current commit-details failure", async () => {
+    const provider = new CommitDetailsTreeProvider();
+    const commit = createCommitInfo("c", "current");
+    provider.setLoaders(
+      () => Promise.reject(new Error("safe current-load failure")),
+      () => Promise.resolve({ files: [], parentSha: null }),
+    );
+
+    try {
+      provider.setCommit(resolve("repository"), commit);
+      await assert.rejects(provider.getChildren(), /safe current-load failure/u);
+    } finally {
+      provider.dispose();
+    }
+  });
 });
 
 suite("composite native views", () => {
@@ -368,6 +480,27 @@ function createComparison(): SavedComparisonV1 {
       kind: "localBranch",
     },
     updatedAt: 1,
+  };
+}
+
+function createCommitInfo(character: string, subject: string): CommitInfo {
+  return {
+    authorDate: 1,
+    authorName: "Author",
+    sha: character.repeat(40),
+    subject,
+  };
+}
+
+function createCommitDetails(commit: CommitInfo): CommitDetails {
+  return {
+    authorEmail: "author@example.com",
+    commit,
+    committerDate: 1,
+    committerEmail: "committer@example.com",
+    committerName: "Committer",
+    fullMessage: commit.subject,
+    parentShas: [],
   };
 }
 

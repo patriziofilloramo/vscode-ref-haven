@@ -1,5 +1,6 @@
 import type { CommitDetails } from "../../domain/commitDetails";
 import { isGitObjectId } from "../../domain/gitObjectId";
+import { parseGitEpochSeconds } from "./gitTimestamp";
 
 export const COMMIT_DETAILS_FORMAT = "%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%ct%x00%B%x00";
 
@@ -29,9 +30,9 @@ export function parseCommitDetails(stdout: string): CommitDetails {
   ) {
     throw new Error("Git returned malformed commit details.");
   }
-  const authorSeconds = Number.parseInt(authorEpoch, 10);
-  const committerSeconds = Number.parseInt(committerEpoch, 10);
-  if (!Number.isFinite(authorSeconds) || !Number.isFinite(committerSeconds)) {
+  const authorSeconds = parseGitEpochSeconds(authorEpoch);
+  const committerSeconds = parseGitEpochSeconds(committerEpoch);
+  if (authorSeconds === null || committerSeconds === null) {
     throw new Error("Git returned invalid commit dates.");
   }
   const parentShas = parents === "" ? [] : parents.split(" ");
