@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 
 import { isGitObjectId } from "../domain/gitObjectId";
 import { MAX_STASH_MESSAGE_LENGTH } from "../domain/inputLimits";
+import { pathIdentityKey } from "../domain/pathValidation";
 import type { FileChange } from "../domain/comparisonResult";
 import type { FileDiffScope } from "../domain/fileDiffScope";
 import {
@@ -147,11 +148,13 @@ export class FileActionsController {
 
   public async stashFile(candidate?: unknown): Promise<void> {
     const selectedTarget = await this.requireTarget(candidate);
+    const selectedDocument = findSelectedWorkspaceDocument(selectedTarget);
     const message = await vscode.window.showInputBox({
       ignoreFocusOut: true,
       placeHolder: "Stash message",
-      prompt:
-        "Stash tracked staged and unstaged changes for this file only. Untracked files are excluded.",
+      prompt: selectedDocument?.isDirty
+        ? "This file has unsaved editor changes. Confirming saves them before stashing its tracked staged and unstaged changes."
+        : "Stash tracked staged and unstaged changes for this file only. Untracked files are excluded.",
       title: "RefHaven: Stash This File",
       value: `RefHaven: ${selectedTarget.filePath}`,
       validateInput: (value) => {
@@ -170,6 +173,7 @@ export class FileActionsController {
     ) {
       throw new Error("The selected file changed while preparing the stash.");
     }
+    await saveSelectedDocumentIfDirty(target);
     await this.stashController.stashFile(target.repositoryRoot, target.filePath, message);
   }
 
@@ -470,6 +474,25 @@ function stashFilePaths(file: FileChange): readonly string[] {
   return file.oldPath && file.oldPath !== file.newPath
     ? [file.newPath, file.oldPath]
     : [file.newPath];
+}
+
+function findSelectedWorkspaceDocument(
+  target: FileContextTarget,
+): vscode.TextDocument | vscode.NotebookDocument | undefined {
+  const targetKey = pathIdentityKey(target.uri.fsPath);
+  return [...vscode.workspace.textDocuments, ...vscode.workspace.notebookDocuments].find(
+    (document) =>
+      document.uri.scheme === "file" && pathIdentityKey(document.uri.fsPath) === targetKey,
+  );
+}
+
+async function saveSelectedDocumentIfDirty(target: FileContextTarget): Promise<void> {
+  const document = findSelectedWorkspaceDocument(target);
+  if (!document?.isDirty) return;
+  const saved = await document.save();
+  if (!saved || findSelectedWorkspaceDocument(target)?.isDirty === true) {
+    throw new Error("RefHaven could not save the selected file before stashing it.");
+  }
 }
 
 function findMatchingFile(

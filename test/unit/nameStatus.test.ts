@@ -71,4 +71,21 @@ suite("Git name-status parser", () => {
     assert.throws(() => parseNameStatusZ("R100\0old.txt\0"), GitNameStatusParseError);
     assert.throws(() => parseNameStatusZ("M\0"), GitNameStatusParseError);
   });
+
+  test("rejects traversal paths on every host", () => {
+    for (const output of ["M\0../outside.txt\0", "R100\0safe.txt\0../outside.txt\0"]) {
+      assert.throws(() => parseNameStatusZ(output), GitNameStatusParseError);
+    }
+  });
+
+  test("applies Windows filename restrictions only on Windows", () => {
+    for (const path of ["NUL.txt", "safe.txt:alternate-stream"]) {
+      const output = `M\0${path}\0`;
+      if (process.platform === "win32") {
+        assert.throws(() => parseNameStatusZ(output), GitNameStatusParseError);
+      } else {
+        assert.deepEqual(parseNameStatusZ(output), [{ newPath: path, status: "modified" }]);
+      }
+    }
+  });
 });

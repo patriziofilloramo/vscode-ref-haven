@@ -1,4 +1,5 @@
 import type { FileChange, FileChangeStatus } from "../../domain/comparisonResult";
+import { isRepositoryRelativeGitPath } from "../../domain/pathValidation";
 
 export class GitNameStatusParseError extends Error {
   public constructor(message: string) {
@@ -25,14 +26,16 @@ export function parseNameStatusZ(stdout: string): FileChange[] {
 
     const { similarity, status, usesTwoPaths } = parseStatus(rawStatus);
     const firstPath = fields[index++];
-    if (firstPath === undefined || firstPath.length === 0) {
-      throw new GitNameStatusParseError("Git returned a file status without a path.");
+    if (!isRepositoryRelativeGitPath(firstPath)) {
+      throw new GitNameStatusParseError("Git returned an invalid repository-relative path.");
     }
 
     if (usesTwoPaths) {
       const secondPath = fields[index++];
-      if (secondPath === undefined || secondPath.length === 0) {
-        throw new GitNameStatusParseError("Git returned a rename or copy without a destination.");
+      if (!isRepositoryRelativeGitPath(secondPath)) {
+        throw new GitNameStatusParseError(
+          "Git returned an invalid repository-relative destination path.",
+        );
       }
       changes.push({
         newPath: secondPath,

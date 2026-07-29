@@ -112,6 +112,7 @@ async function canonicalizeTarget(target: FileContextTarget): Promise<FileContex
 
 function resourceUri(candidate: unknown): vscode.Uri | undefined {
   if (!candidate || typeof candidate !== "object") return undefined;
-  const uri = (candidate as { readonly resourceUri?: unknown }).resourceUri;
-  return uri instanceof vscode.Uri ? uri : undefined;
+  const resource = candidate as { readonly resourceUri?: unknown; readonly uri?: unknown };
+  if (resource.resourceUri instanceof vscode.Uri) return resource.resourceUri;
+  return resource.uri instanceof vscode.Uri ? resource.uri : undefined;
 }

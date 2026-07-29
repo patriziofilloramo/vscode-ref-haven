@@ -1,7 +1,11 @@
 # Public publishing checklist
 
-RefHaven remains deliberately protected from public publication until the
-organisation supplies and approves the final ownership and support metadata.
+RefHaven is deliberately protected from publication to the npm registry by
+`private: true`. That flag does not prevent Visual Studio Marketplace
+packaging: `npm run package:release` validates the public metadata and creates
+the release VSIX directly with VSCE. Keep the protection in the committed
+manifest; a release must not require a temporary or dirty manifest edit.
+
 Internal VSIX packaging remains available through `npm run package`.
 
 ## Required organisation inputs
@@ -65,8 +69,9 @@ The repository already carries the public identity: publisher
 
 1. the `patriziofilloramo` publisher ID is registered and verified on the
    Marketplace under the owning account;
-2. `private` is set to `false` for the release build (it stays `true` in the
-   repository to block accidental `npm publish`);
+2. `private` remains `true` in the release commit and build, blocking accidental
+   `npm publish`; VSCE packaging is independent of npm registry publication,
+   and `npm run marketplace:check` rejects a missing or disabled safeguard;
 3. **private vulnerability reporting is enabled** on the GitHub repository
    (Settings → Advanced Security → Private vulnerability reporting), because
    `SECURITY.md` directs reporters there;

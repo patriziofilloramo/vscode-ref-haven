@@ -54,39 +54,98 @@ Every Git child process is started without a shell and receives a centrally test
 - pagers and configured `core.fsmonitor` processes are disabled;
 - optional Git locks and replace-object rewriting are disabled;
 - path arguments use Git's global literal-pathspec mode;
-- diff operations pass `--no-ext-diff` and `--no-textconv`;
+- diff, blame, and content-search operations explicitly disable external
+  diff/textconv execution;
+- before every Git operation, a read-only bounded config probe enumerates the
+  effective content-filter drivers. Command-scoped overrides clear each
+  driver's `clean`, `smudge`, and `process` commands and set `required=false`;
+  malformed, unsupported, or excessive filter configuration fails closed
+  before the requested operation runs;
+- working-tree operations use `git check-attr` without executing drivers and
+  fail explicitly when one of the affected paths has an active content filter,
+  rather than returning an approximation of filtered content;
 - the Git executable is resolved to an absolute path from the configured
-  `git.path` or the absolute directories on `PATH`, so a poisoned or
-  current-directory `PATH` entry cannot substitute a different binary for
-  `git`.
+  machine-scoped `git.path` or the absolute directories on `PATH`; empty and
+  relative entries are rejected, and resolution fails closed rather than
+  falling back to a current-directory executable.
 
-If a required object is not already available locally, the operation fails instead of contacting a remote. The extension does not activate VS Code's built-in Git extension. If that extension is already active, RefHaven reads its repository list only; all comparison data still comes from the restricted local Git process.
+If a required object is not already available locally, the operation fails instead of contacting a remote. RefHaven does not activate VS Code's built-in Git extension. If that extension is already active, RefHaven reads and watches only its repository list; all comparison data still comes from the restricted local Git process.
 
-The only repository mutation currently implemented is the explicit
-**Stash This File...** workflow. RefHaven builds a standard two-parent stash
-from temporary index state, updates `refs/stash` with an expected-old-value
-check, and restores only the selected tracked path or rename pair to `HEAD`.
-Unrelated index and worktree state is not included or reset. Untracked files,
-unmerged paths, repository metadata, and active `filter` attributes are
-rejected. Every mutating plumbing command overrides `core.hooksPath` with a
-private empty temporary path, preventing repository or global Git hooks from
-running. The temporary index stores Git object IDs and paths, not file
-contents, and is deleted after the operation.
+A repository root is accepted only when it equals or descends from a current
+trusted workspace folder; opening a subfolder never authorizes an ancestor
+repository. Persisted comparisons are hidden when their repository leaves the
+workspace and are revalidated against fresh discovery before calculation,
+export, clipboard, or document-opening actions.
 
-After the stash ref is created, RefHaven re-snapshots both the selected real
-index entries and selected working-tree paths into the isolated index and
-revalidates the captured HEAD. Cleanup proceeds as one Git restore only if all
-three states still match. If an editor, terminal, or other process changes
-them during preparation, the stash remains available but RefHaven leaves the
-newer repository state untouched and reports the partial outcome.
+RefHaven exposes one explicit repository mutation: **Stash This File...**. It
+creates a standard two-parent Git stash containing the staged and unstaged
+state of one tracked regular file (or both paths of its detected rename), then
+cleans only those selected paths. Unrelated index and working-tree entries are
+not included in the stash and are not cleaned. The command is non-cancellable
+once started, disables Git hooks, and serializes RefHaven stash mutations per
+repository.
 
-Apply, pop, drop, multi-file stash, include-untracked, and keep-index variants
-remain outside scope. RefHaven also makes the mutation non-cancellable after
-it starts: terminating Git while it is updating objects, refs, or the real
-index would be less safe than allowing the bounded local operation to finish.
+The single-file cleanup uses a recoverable, fail-closed transaction instead of
+`git restore` or another command that can replace a path after a stale check:
 
-For the same reason, the Branches and Worktrees sections in the Repository
-view are read-only. They can
+1. The UI re-resolves the selected document's canonical repository-relative
+   path after the message prompt. If that document is dirty, confirming the
+   prompt saves it and fails closed if the save does not complete. The Git
+   layer then snapshots the selected index and working-tree states with size
+   and type bounds.
+2. RefHaven builds the index and worktree stash trees in repository-local temporary
+   indices, rechecks `HEAD`, the selected index entries, and the on-disk file,
+   then atomically updates `refs/stash` and a private
+   `refs/refhaven/stash-recovery/*` ref. The stash update uses an
+   expected-old-value compare-and-swap. A
+   competing stash update makes this step fail before selected paths are
+   cleaned.
+3. Before hiding any working-tree bytes, it writes and synchronizes a recovery
+   journal under the repository's absolute Git metadata directory. The Git
+   directory and selected path must be on the same filesystem device.
+4. The original path is moved atomically into that safety directory and its
+   content, mode, and file identity are checked. The clean `HEAD` file is
+   installed with a no-clobber hard link; an already recreated path is never
+   unlinked or replaced.
+5. RefHaven prepares the clean index from the byte-for-byte captured full
+   index, acquires the real `index.lock`, compares the real index with that
+   capture, synchronizes the lock file, and atomically renames it into place.
+   Any mismatch or busy lock preserves the newer index.
+
+The transaction does not claim to lock out other editors, extensions, or Git
+processes. Instead, concurrent state wins: movement of `HEAD`, a competing
+stash update before the compare-and-swap, a selected-index change, or a
+working-tree path race causes the operation to fail before publication or to
+report a created stash with incomplete cleanup.
+Once a stash has been published, an unexpected cleanup error is never reported
+as if no stash existed. RefHaven refreshes both stash and Source Control views,
+warns the user, and offers the retained recovery directory for manual
+inspection.
+
+Recovery directories live under `<absolute-git-dir>/refhaven-recovery/stash-*`
+with mode-restricted files where the platform supports POSIX permissions. They
+are repository storage, not an access-control boundary. If an existing file was evacuated, its
+safety copy is retained even after successful cleanup because a process with
+an already-open file handle can still write to that original inode. RefHaven
+does not automatically delete completed or incomplete recovery directories.
+Close possible writers and verify the stash, current file, index, and journal
+before deleting one manually. Successful completion normally removes the
+private recovery ref. If a retained journal records a non-null `recoveryRef`,
+delete it with the journal's expected `stashSha` before deleting the directory:
+`git update-ref -d <recoveryRef> <stashSha>`.
+
+Preflight fails closed for clean or untracked selections, unresolved conflicts,
+active content filters, sparse checkout, symlinks, gitlinks/submodules, special
+or non-stage-zero index entries, files over 64 MiB, malformed Git metadata, and
+a Git safety directory on a different filesystem device. If the filesystem
+later refuses an atomic rename or no-clobber hard link, post-publication
+cleanup stops with the stash and safety directory identified; RefHaven does
+not fall back to an overwriting primitive. The Stashes view remains read-only
+apart from this explicit creation command: apply, pop, drop, multi-file stash,
+include-untracked, and keep-index variants are outside scope.
+
+Separately, the Branches and Worktrees sections in the Repository view are
+read-only. They can
 copy metadata, create RefHaven comparison records, and ask VS Code to open an
 already enumerated local worktree, but they never checkout/create/delete a
 branch or add/remove a worktree. Command arguments are checked against fresh
@@ -113,12 +172,21 @@ Working Tree review state is invalidated on every recalculation because that
 endpoint is mutable.
 
 Computed history, diffs, blame and annotation results, selected
-changes-annotation references, and file contents are not persisted. The
+changes-annotation references, and file contents are not persisted except by
+the explicit single-file stash mutation described below. The
 non-sensitive whole-file annotation mode (`off`, `blame`, or `heatmap`) may be
 saved as a VS Code user setting; comparison layout, filter, and sort choices
 may be saved as workspace-local view preferences. Revision content is loaded
 on demand into a bounded in-memory cache and revision URIs are authenticated
 with a session-only HMAC.
+
+Single-file stash is the exception to the general non-persistence of computed
+file content: its explicit mutation writes the selected state into the local
+Git object database and `refs/stash`. The recovery protocol may also retain the
+original working-tree bytes in the repository-local Git metadata safety directory
+and an incomplete transaction's private `refs/refhaven/stash-recovery/*` ref as
+described above. Neither copy is logged, placed in VS Code state, or sent over
+the network.
 
 Rich line hovers load commit metadata and a path-limited patch only after the
 user hovers a line. Successful hover results use a 64-entry in-memory cache
@@ -139,11 +207,13 @@ is trusted only when its URI's session HMAC verifies and its repository is
 still part of the workspace; blame then runs at the pinned SHA through the
 same transport-blocked Git policy.
 
-Merge forecasts run `merge-tree --write-tree`, which computes the merge
-in memory only: it does not touch the worktree, the index, or any ref, runs
-no checkout, and executes no merge drivers configured by the repository.
-A forecast failure degrades to "no forecast" and is never surfaced as an
-actionable error.
+Merge forecasts run `merge-tree --write-tree`, which computes the merge in
+memory only: it does not touch the worktree, the index, or any ref, and runs no
+checkout. Because Git's merge machinery can invoke a configured external merge
+driver, RefHaven first probes all effective config scopes and disables the
+forecast whenever any `merge.*.driver` is present or the probe cannot complete.
+Renormalization is also disabled. A forecast failure degrades to "no forecast"
+and is never surfaced as an actionable error.
 
 Patch export writes a locally produced unified diff to the clipboard or to a
 local-filesystem location the user picks in a save dialog. RefHaven rejects
@@ -173,12 +243,19 @@ The guarantee above covers RefHaven and the Git processes it creates. The follow
 - repositories or object stores located on network-mounted filesystems;
 - development-time package installation and Extension Host test downloads.
 
-Local Git configuration remains trusted for identity, attributes, object
-format, line-ending, and working-tree encoding semantics. RefHaven blocks
-network transports, hooks, content filters, external diff/textconv,
-fsmonitor, prompts, and inherited process redirection for its own stash
-sequence; it cannot prevent another extension, terminal, or concurrent local
-process from running a different Git command.
+Local Git configuration remains trusted for identity, non-executable
+attributes, object format, line-ending, and working-tree encoding semantics.
+RefHaven neutralizes configured content-filter commands for every Git process
+it creates and explicitly disables external diff/textconv where Git can render
+content. Working-tree operations reject affected paths with active filter
+attributes so the neutralized command cannot be mistaken for Git's filtered
+semantics. It also blocks network transports, hooks in its mutation sequence,
+fsmonitor, prompts, and inherited process redirection. It cannot prevent
+another extension, terminal, or concurrent local process from running a
+different Git command or changing configuration between the bounded probe and
+the protected invocation. Single-file stash therefore treats concurrent state
+as authoritative, preserves it rather than forcing cleanup, and may require
+manual recovery from the retained local safety directory.
 
 For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; RefHaven itself neither enables nor calls remote Git operations.
 

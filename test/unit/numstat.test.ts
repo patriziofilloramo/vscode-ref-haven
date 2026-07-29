@@ -45,6 +45,20 @@ suite("parseNumstatZ", () => {
       (error: unknown) =>
         error instanceof GitNumstatParseError && !error.message.includes("private-not-numstat"),
     );
+    for (const output of ["1\t2\t../outside.txt\0", "1\t2\t\0safe.txt\0../outside.txt\0"]) {
+      assert.throws(() => parseNumstatZ(output), GitNumstatParseError);
+    }
+  });
+
+  test("applies Windows filename restrictions only on Windows", () => {
+    for (const path of ["NUL.txt", "safe.txt:alternate-stream"]) {
+      const output = `1\t2\t${path}\0`;
+      if (process.platform === "win32") {
+        assert.throws(() => parseNumstatZ(output), GitNumstatParseError);
+      } else {
+        assert.deepEqual(parseNumstatZ(output), [{ additions: 1, deletions: 2, newPath: path }]);
+      }
+    }
   });
 });
 

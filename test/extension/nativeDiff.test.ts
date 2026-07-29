@@ -38,18 +38,13 @@ suite("native branch diff", () => {
   let mergeTreeSupport: boolean | undefined;
 
   suiteSetup(() => {
-    // Unique per run: Windows can refuse to delete read-only Git objects left
-    // by a previous run, so never reuse an old fixture directory.
-    repositoryRoot = join(
-      tmpdir(),
-      `refhaven-extension-tests-${process.pid.toString()}-${Date.now().toString()}`,
-    );
-    rmSync(repositoryRoot, { force: true, recursive: true });
-    mkdirSync(repositoryRoot, { recursive: true });
-    git("init", "--initial-branch=main");
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder);
+    repositoryRoot = workspaceFolder.uri.fsPath;
+    git("branch", "-M", "main");
     git("config", "user.name", "RefHaven Tests");
     git("config", "user.email", "refhaven@example.invalid");
-    git("remote", "add", "origin", "git@gitlab.example.invalid:group/project.git");
+    git("config", "remote.origin.url", "git@gitlab.example.invalid:group/project.git");
     writeFileSync(join(repositoryRoot, "modified.txt"), "before\n", "utf8");
     writeFileSync(join(repositoryRoot, "deleted.txt"), "deleted\n", "utf8");
     writeFileSync(join(repositoryRoot, "rename-old.txt"), "renamed\n", "utf8");
@@ -66,11 +61,6 @@ suite("native branch diff", () => {
 
   suiteTeardown(async () => {
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-    try {
-      rmSync(repositoryRoot, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
-    } catch {
-      // Best-effort cleanup; leftovers live in %TEMP% under a unique name.
-    }
   });
 
   test("calculates merge-base changes and opens a native immutable diff", async () => {
@@ -97,49 +87,58 @@ suite("native branch diff", () => {
     );
 
     const treeProvider = new ComparisonTreeProvider();
-    treeProvider.setComparisons([comparison]);
-    treeProvider.setComparisonLoader(() => Promise.resolve(result));
-    const [comparisonNode] = await treeProvider.getChildren();
-    assert.ok(comparisonNode);
-    assert.equal(
-      treeProvider.getTreeItem(comparisonNode).collapsibleState,
-      vscode.TreeItemCollapsibleState.Collapsed,
-    );
+    try {
+      treeProvider.setComparisons([comparison]);
+      treeProvider.setComparisonLoader(() => Promise.resolve(result));
+      const [comparisonNode] = await treeProvider.getChildren();
+      assert.ok(comparisonNode);
+      assert.equal(
+        treeProvider.getTreeItem(comparisonNode).collapsibleState,
+        vscode.TreeItemCollapsibleState.Collapsed,
+      );
 
-    const sections = await treeProvider.getChildren(comparisonNode);
-    const filesSection = sections.find(
-      (node) => node.kind === "section" && node.section === "files",
-    );
-    assert.ok(filesSection, "Expected the comparison to expose a changed-files section");
-    const fileNodes = await treeProvider.getChildren(filesSection);
-    const modifiedNode = fileNodes.find(
-      (node) => treeProvider.getTreeItem(node).label === "modified.txt",
-    );
-    assert.ok(modifiedNode);
-    const modifiedItem = treeProvider.getTreeItem(modifiedNode);
-    const command = modifiedItem.command;
-    assert.ok(command);
-    assert.equal(command.command, "refhaven.openFileDiff");
-    const commandArguments = (command.arguments ?? []) as readonly unknown[];
-    await vscode.commands.executeCommand(command.command, ...commandArguments);
+      const sections = await treeProvider.getChildren(comparisonNode);
+      const filesSection = sections.find(
+        (node) => node.kind === "section" && node.section === "files",
+      );
+      assert.ok(filesSection, "Expected the comparison to expose a changed-files section");
+      const fileNodes = await treeProvider.getChildren(filesSection);
+      const modifiedNode = fileNodes.find(
+        (node) => treeProvider.getTreeItem(node).label === "modified.txt",
+      );
+      assert.ok(modifiedNode);
+      const modifiedItem = treeProvider.getTreeItem(modifiedNode);
+      const command = modifiedItem.command;
+      assert.ok(command);
+      assert.equal(command.command, "refhaven.openFileDiff");
+      const commandArguments = (command.arguments ?? []) as readonly unknown[];
+      await vscode.commands.executeCommand(command.command, ...commandArguments);
 
-    assert.ok(
-      vscode.window.visibleTextEditors.some(({ document }) => document.uri.scheme === "refhaven"),
-      "Expected vscode.diff to open RefHaven revision documents",
-    );
-    const revisionDocuments = vscode.workspace.textDocuments.filter(
-      ({ uri }) => uri.scheme === "refhaven",
-    );
-    assert.deepEqual(revisionDocuments.map((document) => document.getText()).sort(), [
-      "after\n",
-      "before\n",
-    ]);
-    const [leftDocument, rightDocument] = revisionDocuments;
-    assert.ok(leftDocument);
-    assert.ok(rightDocument);
-    await vscode.commands.executeCommand("vscode.changes", "RefHaven test changes", [
-      [vscode.Uri.file(join(repositoryRoot, "modified.txt")), leftDocument.uri, rightDocument.uri],
-    ]);
+      assert.ok(
+        vscode.window.visibleTextEditors.some(({ document }) => document.uri.scheme === "refhaven"),
+        "Expected vscode.diff to open RefHaven revision documents",
+      );
+      const revisionDocuments = vscode.workspace.textDocuments.filter(
+        ({ uri }) => uri.scheme === "refhaven",
+      );
+      assert.deepEqual(revisionDocuments.map((document) => document.getText()).sort(), [
+        "after\n",
+        "before\n",
+      ]);
+      const [leftDocument, rightDocument] = revisionDocuments;
+      assert.ok(leftDocument);
+      assert.ok(rightDocument);
+      await vscode.commands.executeCommand("vscode.changes", "RefHaven test changes", [
+        [
+          vscode.Uri.file(join(repositoryRoot, "modified.txt")),
+          leftDocument.uri,
+          rightDocument.uri,
+        ],
+      ]);
+    } finally {
+      treeProvider.dispose();
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    }
   });
 
   test("loads file and line history without leaving the repository", async () => {
@@ -201,10 +200,26 @@ suite("native branch diff", () => {
   });
 
   test("rejects command file contexts from repositories outside the workspace", async () => {
-    const target = await resolveFileContextTarget(
-      vscode.Uri.file(join(repositoryRoot, "modified.txt")),
+    const outsideRepository = join(
+      tmpdir(),
+      `refhaven-outside-repository-${process.pid.toString()}-${Date.now().toString()}`,
     );
-    assert.equal(target, null);
+    mkdirSync(outsideRepository, { recursive: true });
+    try {
+      execFileSync("git", ["init"], { cwd: outsideRepository, windowsHide: true });
+      writeFileSync(join(outsideRepository, "outside.txt"), "outside\n", "utf8");
+      const target = await resolveFileContextTarget(
+        vscode.Uri.file(join(outsideRepository, "outside.txt")),
+      );
+      assert.equal(target, null);
+    } finally {
+      rmSync(outsideRepository, {
+        force: true,
+        maxRetries: 5,
+        recursive: true,
+        retryDelay: 100,
+      });
+    }
   });
 
   test("loads a bounded local commit diff preview", async () => {

@@ -1,4 +1,5 @@
 import type { FileChange } from "../../domain/comparisonResult";
+import { isRepositoryRelativeGitPath } from "../../domain/pathValidation";
 
 export class GitNumstatParseError extends Error {
   public constructor(message: string) {
@@ -40,6 +41,7 @@ export function parseNumstatZ(stdout: string): NumstatEntry[] {
     const inlinePath = match[3] ?? "";
 
     if (inlinePath.length > 0) {
+      assertNumstatPath(inlinePath);
       entries.push({
         ...(additions === undefined ? {} : { additions }),
         ...(deletions === undefined ? {} : { deletions }),
@@ -50,7 +52,7 @@ export function parseNumstatZ(stdout: string): NumstatEntry[] {
 
     const oldPath = fields[index++];
     const newPath = fields[index++];
-    if (!oldPath || !newPath) {
+    if (!isRepositoryRelativeGitPath(oldPath) || !isRepositoryRelativeGitPath(newPath)) {
       throw new GitNumstatParseError("Missing rename paths in Git numstat output.");
     }
     entries.push({
@@ -62,6 +64,12 @@ export function parseNumstatZ(stdout: string): NumstatEntry[] {
   }
 
   return entries;
+}
+
+function assertNumstatPath(filePath: unknown): asserts filePath is string {
+  if (!isRepositoryRelativeGitPath(filePath)) {
+    throw new GitNumstatParseError("Git returned an invalid repository-relative path.");
+  }
 }
 
 /** Attaches per-file addition/deletion counts to name-status changes. */

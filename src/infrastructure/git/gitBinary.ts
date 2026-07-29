@@ -14,14 +14,15 @@ export interface GitBinaryEnvironment {
 const WINDOWS_DEFAULT_EXECUTABLE_EXTENSIONS = [".COM", ".EXE", ".BAT", ".CMD"];
 
 /**
- * Resolves the Git executable to an absolute path so that a poisoned `PATH`,
- * or the current working directory leaking in through an empty `PATH` entry on
- * Windows, cannot substitute an attacker-controlled binary for `git`.
+ * Resolves the Git executable to an absolute path so that relative `PATH`
+ * entries, or the current working directory leaking in through an empty entry
+ * on Windows, cannot substitute a repository-local binary for `git`.
  *
  * Configured absolute paths win first; otherwise each absolute `PATH`
- * directory is probed for a real `git` file. The bare name `git` is returned
- * only when nothing resolves, preserving today's behaviour on unusual setups
- * rather than breaking Git access.
+ * directory is probed for a real `git` file. Resolution fails closed when no
+ * absolute executable can be found: returning a bare name here would make
+ * `execFile` search the original `PATH` again, including entries deliberately
+ * rejected above.
  */
 export function selectGitBinaryPath(
   configuredPaths: readonly string[],
@@ -47,7 +48,7 @@ export function selectGitBinaryPath(
     }
   }
 
-  return "git";
+  throw new Error("Git could not be resolved to an absolute executable path.");
 }
 
 function gitExecutableNames(environment: GitBinaryEnvironment): string[] {

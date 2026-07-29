@@ -34,4 +34,17 @@ suite("repository identity discovery", () => {
       1,
     );
   });
+
+  test("rejects a repository root above the trusted workspace folder", () => {
+    const repository = resolve("repository");
+    const workspace = join(repository, "packages", "opened-folder");
+
+    assert.deepEqual(
+      buildRepositoryIdentities(
+        [repository],
+        [{ name: "opened-folder", rootPath: workspace, uri: "file:///opened-folder" }],
+      ),
+      [],
+    );
+  });
 });

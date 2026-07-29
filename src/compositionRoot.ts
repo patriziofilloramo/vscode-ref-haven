@@ -22,6 +22,7 @@ import {
   listCommitFileChanges,
   listStashes,
   readCommitDetails,
+  watchGitRepositories,
 } from "./infrastructure/git/GitCli";
 import { OutputChannelLogger } from "./infrastructure/logging/OutputChannelLogger";
 import { registerCommands } from "./ui/commands/registerCommands";
@@ -154,7 +155,13 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
       "watchRepositories",
     );
   };
-  const workspaceFoldersListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+  const scheduleRepositoryTopologyRefresh = (clearComparisonsBeforeDiscovery: boolean): void => {
+    runInBackground(
+      controller.refreshAvailableComparisons(clearComparisonsBeforeDiscovery),
+      logger,
+      "Workspace comparison refresh failed",
+      "refreshAvailableComparisons",
+    );
     scheduleRepositoryWatchRefresh();
     runInBackground(
       stashController.refresh(),
@@ -168,6 +175,12 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
       "Workspace repository navigation refresh failed",
       "refreshRepositoryNavigation",
     );
+  };
+  const workspaceFoldersListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    scheduleRepositoryTopologyRefresh(true);
+  });
+  const gitRepositoriesListener = watchGitRepositories(() => {
+    scheduleRepositoryTopologyRefresh(false);
   });
   const activeEditorListener = vscode.window.onDidChangeActiveTextEditor(() => {
     runInBackground(
@@ -194,10 +207,16 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidRenameFiles(() => controller.refreshWorkingTreeComparisons()),
   );
   const windowFocusListener = vscode.window.onDidChangeWindowState(({ focused }) => {
-    if (focused) controller.refreshWorkingTreeComparisons();
+    if (focused) {
+      controller.refreshWorkingTreeComparisons();
+      scheduleRepositoryTopologyRefresh(false);
+    }
   });
   const comparisonVisibilityListener = treeView.onDidChangeVisibility(({ visible }) => {
-    if (visible) controller.refreshWorkingTreeComparisons();
+    if (visible) {
+      controller.refreshWorkingTreeComparisons();
+      scheduleRepositoryTopologyRefresh(false);
+    }
   });
   const revisionProviderRegistration = vscode.workspace.registerTextDocumentContentProvider(
     REVISION_DOCUMENT_SCHEME,
@@ -252,6 +271,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     fileHistoryController,
     repositoryWatcher,
     workspaceFoldersListener,
+    gitRepositoriesListener,
     activeEditorListener,
     savedDocumentListener,
     workspaceFileOperationListeners,
@@ -259,6 +279,12 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
     comparisonVisibilityListener,
   );
   controller.initialize();
+  runInBackground(
+    controller.refreshAvailableComparisons(),
+    logger,
+    "Initial comparison workspace refresh failed",
+    "refreshAvailableComparisons",
+  );
   runInBackground(
     stashController.initialize(),
     logger,

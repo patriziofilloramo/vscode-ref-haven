@@ -14,14 +14,15 @@ dependencies** · **No background network activity**
 
 ## See what changed. Understand why. Keep moving.
 
-|                     | What you need                            | What RefHaven gives you                                             |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
-| 🔀 **Compare**      | Understand a feature branch              | Commits, changed files, statistics, native diffs, review progress   |
-| 🧭 **Investigate**  | Understand a suspicious line             | Author, commit, dates, previous diff, file history, line history    |
-| 📚 **Time travel**  | Inspect a file at an older revision      | Readonly historical documents and native revision comparisons       |
-| 📦 **Protect work** | Stash one file without touching the rest | A path-limited stash that preserves every unrelated local change    |
-| 🌿 **Navigate**     | Inspect branches and worktrees           | Local metadata, divergence, recent commits, state, quick actions    |
-| 🔗 **Open safely**  | Continue on your repository host         | Explicit links to validated repository origins—never a RefHaven API |
+|                        | What you need                       | What RefHaven gives you                                             |
+| ---------------------- | ----------------------------------- | ------------------------------------------------------------------- |
+| 🔀 **Compare**         | Understand a feature branch         | Commits, changed files, statistics, native diffs, review progress   |
+| 🧭 **Investigate**     | Understand a suspicious line        | Author, commit, dates, previous diff, file history, line history    |
+| 📚 **Time travel**     | Inspect a file at an older revision | Readonly historical documents and native revision comparisons       |
+| 📦 **Stash one file**  | Set aside one tracked file safely   | Staged/unstaged state, fail-closed cleanup, and recovery copies     |
+| 🔎 **Inspect stashes** | Review work already saved by Git    | Expandable files, statistics, revisions, history, and native diffs  |
+| 🌿 **Navigate**        | Inspect branches and worktrees      | Local metadata, divergence, recent commits, state, quick actions    |
+| 🔗 **Open safely**     | Continue on your repository host    | Explicit links to validated repository origins—never a RefHaven API |
 
 All of this uses VS Code's native trees, editors, hovers, menus, quick picks,
 and Source Control sidebar.
@@ -166,25 +167,51 @@ Annotations are native, cancellable, bounded, and never persisted.
 </details>
 
 <details>
-<summary><strong>📦 Single-file stash</strong></summary>
+<summary><strong>📦 Single-file stash and inspection</strong></summary>
 
-Right-click a file in the editor, Explorer, or Source Control and choose:
+**Stash This File...** stores the staged and unstaged state of one tracked
+regular file—or both sides of its detected rename—in a standard two-parent Git
+stash, then returns only that selection to `HEAD`. Untracked files are excluded,
+and every unrelated staged or working-tree change stays exactly where it was.
+The command is available from the unified RefHaven file submenu in Source
+Control, Explorer, and editors, plus the Command Palette. If the selected
+editor has unsaved changes, confirming the stash message saves that document
+before the Git transaction begins.
 
-**RefHaven → Stash This File...**
+The cleanup is deliberately fail-safe. RefHaven first publishes the stash and
+a private recovery ref in one atomic ref transaction,
+atomically moves the selected file into a repository-local safety directory inside the
+repository's Git metadata, verifies the moved bytes, and installs the clean
+`HEAD` file with a no-clobber hard link. The full index is captured byte for
+byte; RefHaven installs the prepared clean index only after acquiring
+`index.lock` and confirming that the real index still matches that capture. If another editor or
+process writes the path, moves `HEAD`, or changes the selected index entry,
+RefHaven stops instead of overwriting the newer state. `refs/stash` itself is
+published with an expected-old-value check, so a competing stash update wins
+safely before cleanup starts. A stash may therefore be created while cleanup
+is reported as incomplete; the warning identifies that outcome and offers the
+safety directory for inspection.
 
-RefHaven stashes only that tracked file while preserving unrelated worktree
-and index state—including partial staging, deletions, and renames.
+When an existing file is moved during a successful stash, its safety copy and
+completion journal are retained under the repository's
+`refhaven-recovery/stash-*` Git metadata directory. This is intentional: an
+editor that already had the original file open can still write through its old
+file handle. Close editors and other writers, verify both the stash and current
+file, and only then remove an obsolete safety directory manually. RefHaven
+does not delete these directories automatically. If an incomplete journal has
+a non-null `recoveryRef`, first delete that ref with its expected stash SHA
+(`git update-ref -d <recoveryRef> <stashSha>`), then remove the directory.
 
-For safety, it rejects:
+Save the selected VS Code document before running the command. RefHaven fails
+closed for untracked or conflicted paths, active Git content filters, sparse
+checkout or skip-worktree entries, symlinks, submodules and other special
+index entries, files over 64 MiB, or a worktree whose path cannot use atomic
+rename and hard links with the Git safety directory. Stash apply/pop/drop,
+multi-file stash,
+include-untracked, and keep-index workflows remain outside RefHaven.
 
-- untracked or conflicted files;
-- repository metadata paths;
-- files with active Git content filters;
-- stale or invalid repository inputs.
-
-The **Stashes** view lets you inspect stash files, statistics, revisions,
-history, and native comparisons. Apply, pop, drop, multi-file stash, and
-include-untracked mutations are deliberately outside RefHaven.
+The **Stashes** view lets you inspect existing stash files, statistics,
+revisions, history, and native comparisons without applying or dropping them.
 
 </details>
 
@@ -267,6 +294,8 @@ Every Git process:
   `git.path` or the absolute directories on `PATH`—never a bare name;
 - blocks transports and partial-clone lazy fetch;
 - disables prompts, tracing, pagers, fsmonitor, external diff, and textconv;
+- rejects working-tree paths with active content filters instead of returning
+  an approximation while their executable drivers are disabled;
 - uses literal validated paths;
 - has bounded concurrency, input/output limits, timeouts, and cancellation.
 
@@ -302,10 +331,10 @@ Open `Ctrl+Shift+P` and type `RefHaven`.
 | `Inspect Current Line`                  | Open rich blame actions for the cursor line         |
 | `Open File at Revision...`              | Read a historical version                           |
 | `Compare File with Revision...`         | Diff the current file against a local ref           |
-| `Stash This File...`                    | Stash only one tracked file                         |
 | `Reveal File in Branch Comparison`      | Find the active file in a saved comparison          |
 | `Change File Annotations...`            | Enable blame, heatmap, or changes markers           |
 | `Show File Actions`                     | Open the context-sensitive native action menu       |
+| `Stash This File...`                    | Safely set aside one tracked file                   |
 | `Open Local Reference on GitLab...`     | Open a validated immutable revision in the browser  |
 | `Open GitLab Issue or Merge Request...` | Open a `#issue` or `!merge-request` on your GitLab  |
 | `Configure Restricted GitLab Origin...` | Enable or clear the strict GitLab origin policy     |
@@ -335,7 +364,8 @@ To install an internally supplied build:
 3. Choose **Install from VSIX...**
 4. Select `refhaven-<version>.vsix`.
 
-RefHaven requires Node 20 for development and VS Code 1.105 or newer.
+RefHaven development uses supported Node.js LTS lines: Node 22.13 or newer
+within the Node 22 line, or Node 24. VS Code 1.105 or newer is required.
 
 ## Development and release gates
 

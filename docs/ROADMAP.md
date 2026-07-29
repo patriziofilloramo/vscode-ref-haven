@@ -32,8 +32,14 @@ This boundary shapes what may be built:
 - remote-aware features must fail closed when the host is not the one the user
   configured.
 
-The shipped implementation contains exactly one hardened local mutation
-(single-file stash) and explicit browser links to a validated origin.
+The shipped implementation contains one deliberately bounded local repository
+mutation, **Stash This File...**. It uses a written fail-closed transaction and
+manual-recovery contract: standard stash publication precedes cleanup,
+concurrent state is never force-overwritten, and evacuated file bytes remain
+in a repository-local Git metadata safety directory until the user verifies and removes
+them. An incomplete journal may also retain a private recovery ref, which must
+be deleted with its expected stash SHA during manual cleanup. Every other repository view remains read-only. Remote handoff is limited
+to explicit browser links to a validated origin.
 `SECURITY.md`, `PRIVACY.md`, `PRODUCT.md`, and `ARCHITECTURE.md` are updated
 with every boundary change, so the documented guarantees match the code. The
 no-egress property is enforced by a guard test rather than by convention.
@@ -44,11 +50,10 @@ The planned low and medium complexity native-UI work is complete. New work
 should come from measured use rather than from adding another permanent Source
 Control section; prefer refining the four existing views.
 
-The clearest remaining candidate is **cherry-pick from the Ahead/Behind
-commits**. It would be the second repository mutation, so it must follow the
-same playbook as the single-file stash: real-repository integration tests, a
-written failure and recovery contract, and no reliance on repository-configured
-hooks or helpers.
+Any future mutation—including cherry-pick from Ahead/Behind commits—must meet
+the same gate as the single-file stash: real-repository integration tests, a
+written failure and recovery contract, deterministic concurrency coverage, and
+no reliance on repository-configured hooks or executable helpers.
 
 ## Deliberately deferred
 

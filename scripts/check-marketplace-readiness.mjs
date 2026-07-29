@@ -6,8 +6,10 @@ const root = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const violations = [];
 
-if (manifest.private !== false) {
-  violations.push("package.json must set private to false for a public release.");
+if (manifest.private !== true) {
+  violations.push(
+    "package.json must keep private set to true to block accidental npm publication; VSCE packaging does not require changing it.",
+  );
 }
 
 if (

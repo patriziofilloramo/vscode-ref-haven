@@ -47,10 +47,11 @@ function findOwningWorkspaceFolder(
   return [...folders]
     .filter((folder) => {
       const folderKey = pathIdentityKey(folder.rootPath);
-      return (
-        isContainedRelativePath(relative(folderKey, repositoryKey)) ||
-        isContainedRelativePath(relative(repositoryKey, folderKey))
-      );
+      // Workspace trust flows down into nested repositories, never up into a
+      // repository that contains the opened folder. Accepting an ancestor
+      // root would let a trusted subfolder expose and process files outside
+      // the workspace boundary.
+      return isContainedRelativePath(relative(folderKey, repositoryKey));
     })
     .sort((left, right) => right.rootPath.length - left.rootPath.length)[0];
 }

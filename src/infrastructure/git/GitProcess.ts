@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -8,13 +9,26 @@ import {
 } from "../../config/extensionConfiguration";
 import { pathIdentityKey } from "../../domain/pathValidation";
 import { selectGitBinaryPath } from "./gitBinary";
-import { buildLocalOnlyGitArguments, buildLocalOnlyGitEnvironment } from "./gitProcessPolicy";
+import {
+  buildLocalOnlyGitArguments,
+  buildLocalOnlyGitEnvironment,
+  parseConfiguredFilterDrivers,
+} from "./gitProcessPolicy";
 import { GitScheduler } from "./GitScheduler";
 
 const execFileAsync = promisify(execFile);
 
 const MAX_GIT_INPUT_BYTES = 5 * 1_024 * 1_024;
 const MAX_GIT_OUTPUT_BYTES = 5 * 1_024 * 1_024;
+const MAX_FILTER_CONFIG_OUTPUT_BYTES = 256 * 1_024;
+const FILTER_CONFIG_QUERY = [
+  "config",
+  "--includes",
+  "--name-only",
+  "--null",
+  "--get-regexp",
+  "^filter\\.",
+] as const;
 const scheduler = new GitScheduler(4, 2);
 
 let cachedGitBinary: string | undefined;
@@ -39,6 +53,45 @@ function isRegularFile(candidate: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Reads the effective system/global/repository filter configuration, then
+ * adds command-scoped no-op overrides for every executable filter driver.
+ * The probe is a read-only Git builtin and cannot itself invoke a filter.
+ */
+async function buildProtectedGitArguments(
+  cwd: string,
+  args: readonly string[],
+  signal?: AbortSignal,
+): Promise<string[]> {
+  let output = "";
+  try {
+    const result = await execFileAsync(
+      gitBinary(),
+      buildLocalOnlyGitArguments(FILTER_CONFIG_QUERY),
+      {
+        cwd,
+        env: buildLocalOnlyGitEnvironment(process.env),
+        maxBuffer: MAX_FILTER_CONFIG_OUTPUT_BYTES,
+        signal,
+        timeout: readGitTimeoutMilliseconds(),
+        windowsHide: true,
+      },
+    );
+    output = result.stdout;
+  } catch (error) {
+    const candidate = error as {
+      readonly code?: unknown;
+      readonly killed?: unknown;
+      readonly name?: unknown;
+    };
+    // `git config --get-regexp` uses exit 1 for a valid empty result.
+    if (candidate.code !== 1 || candidate.killed === true || candidate.name === "AbortError") {
+      throw normalizeGitError(error);
+    }
+  }
+  return buildLocalOnlyGitArguments(args, parseConfiguredFilterDrivers(output));
 }
 
 /** Test seam: clears the memoized Git binary so a new environment is resolved. */
@@ -71,7 +124,8 @@ export function runGit(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
+        const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+        const { stdout } = await execFileAsync(gitBinary(), protectedArgs, {
           cwd,
           env: buildLocalOnlyGitEnvironment(process.env),
           maxBuffer: maxOutputBytes,
@@ -103,7 +157,8 @@ export function runGitWithExitCode(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
+        const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+        const { stdout } = await execFileAsync(gitBinary(), protectedArgs, {
           cwd,
           env: buildLocalOnlyGitEnvironment(process.env),
           maxBuffer: MAX_GIT_OUTPUT_BYTES,
@@ -133,37 +188,6 @@ export function runGitWithExitCode(
   );
 }
 
-/** Executes Git with a temporary index without changing the inherited environment. */
-export function runGitWithTemporaryIndex(
-  cwd: string,
-  args: readonly string[],
-  temporaryIndex: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  return scheduler.run(
-    pathIdentityKey(cwd),
-    async () => {
-      try {
-        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
-          cwd,
-          env: {
-            ...buildLocalOnlyGitEnvironment(process.env),
-            GIT_INDEX_FILE: temporaryIndex,
-          },
-          maxBuffer: MAX_GIT_OUTPUT_BYTES,
-          signal,
-          timeout: readGitTimeoutMilliseconds(),
-          windowsHide: true,
-        });
-        return stdout;
-      } catch (error) {
-        throw normalizeGitError(error);
-      }
-    },
-    signal,
-  );
-}
-
 /** Executes Git and preserves binary stdout for immutable blob or patch content. */
 export function runGitBuffer(
   cwd: string,
@@ -175,7 +199,8 @@ export function runGitBuffer(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const { stdout } = await execFileAsync(gitBinary(), buildLocalOnlyGitArguments(args), {
+        const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+        const { stdout } = await execFileAsync(gitBinary(), protectedArgs, {
           cwd,
           encoding: "buffer",
           env: buildLocalOnlyGitEnvironment(process.env),
@@ -193,29 +218,48 @@ export function runGitBuffer(
   );
 }
 
-/** Executes Git while optionally feeding bounded UTF-8 input to stdin. */
+export interface GitInputOptions {
+  readonly maxInputBytes?: number;
+  readonly temporaryIndex?: string;
+}
+
+/** Executes Git while optionally feeding bounded text or binary input to stdin. */
 export function runGitWithInput(
   cwd: string,
   args: readonly string[],
-  input: string | undefined,
+  input: Buffer | string | undefined,
   signal?: AbortSignal,
-  temporaryIndex?: string,
+  options: GitInputOptions = {},
 ): Promise<string> {
-  if (input !== undefined && Buffer.byteLength(input, "utf8") > MAX_GIT_INPUT_BYTES) {
+  const maxInputBytes = options.maxInputBytes ?? MAX_GIT_INPUT_BYTES;
+  const inputBytes =
+    input === undefined
+      ? 0
+      : typeof input === "string"
+        ? Buffer.byteLength(input, "utf8")
+        : input.byteLength;
+  if (inputBytes > maxInputBytes) {
     return Promise.reject(new Error("The Git operation input is too large to process safely."));
+  }
+  if (
+    options.temporaryIndex !== undefined &&
+    (!isAbsolute(options.temporaryIndex) || options.temporaryIndex.includes("\0"))
+  ) {
+    return Promise.reject(new Error("The temporary Git index path is invalid."));
   }
   return scheduler.run(
     pathIdentityKey(cwd),
-    () =>
-      new Promise((resolve, reject) => {
+    async () => {
+      const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+      return new Promise((resolve, reject) => {
         const child = execFile(
           gitBinary(),
-          buildLocalOnlyGitArguments(args),
+          protectedArgs,
           {
             cwd,
             env: {
               ...buildLocalOnlyGitEnvironment(process.env),
-              ...(temporaryIndex ? { GIT_INDEX_FILE: temporaryIndex } : {}),
+              ...(options.temporaryIndex ? { GIT_INDEX_FILE: options.temporaryIndex } : undefined),
             },
             maxBuffer: MAX_GIT_OUTPUT_BYTES,
             signal,
@@ -233,9 +277,20 @@ export function runGitWithInput(
           });
           child.stdin.end(input);
         }
-      }),
+      });
+    },
     signal,
   );
+}
+
+/** Executes a protected Git command against an isolated absolute index path. */
+export function runGitWithTemporaryIndex(
+  cwd: string,
+  args: readonly string[],
+  temporaryIndex: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  return runGitWithInput(cwd, args, undefined, signal, { temporaryIndex });
 }
 
 /** Normalizes platform-specific child-process failures into stable error codes. */

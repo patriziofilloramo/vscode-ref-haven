@@ -18,15 +18,24 @@ details, patches, and repository navigation metadata. Results are rendered in
 native VS Code views and editors.
 
 Saved comparison definitions and bounded reviewed-file markers are stored in
-VS Code workspace state. File contents, patches, commit messages, blame
-results, history results, and generated GitLab URLs are not persisted by
-RefHaven. Operational logs exclude exception messages and redact
-repository-derived and sensitive metadata.
+VS Code workspace state. Outside an explicit **Stash This File...** operation,
+file contents, patches, commit messages, blame results, history results, and
+generated GitLab URLs are not persisted by RefHaven. A single-file stash
+writes the selected staged and working-tree states to the local Git object
+database and `refs/stash`. Its fail-safe cleanup may also retain the original
+file bytes, a recovery journal, and, while cleanup is incomplete, a private
+`refs/refhaven/stash-recovery/*` ref under the repository's local Git metadata
+until the user verifies and removes them manually. A recorded recovery ref must
+be deleted with its expected stash SHA before its directory is removed, or the
+stash objects remain reachable. Operational logs exclude
+exception messages and redact repository-derived and sensitive metadata.
 
 ## Explicit user handoffs
 
 RefHaven transfers data outside its process only after a direct user action:
 
+- **Stash This File...** writes the selected file state to the repository's
+  local Git storage and may retain a local safety copy as described above;
 - copy commands place the selected value or locally generated patch on the
   operating-system clipboard;
 - save commands write a patch only to the local filesystem location selected
@@ -64,8 +73,9 @@ bytes you install:
   cleared, and commands run without a shell. See `gitProcessPolicy.ts` and its
   test.
 
-The only way repository data leaves the extension is one of the explicit,
-user-initiated handoffs listed above.
+The only way repository data leaves the extension process is one of the
+explicit, user-initiated local writes or handoffs listed above. RefHaven never
+sends stash or recovery content over the network.
 
 ## Components outside RefHaven
 

@@ -60,6 +60,15 @@ const LOCAL_ONLY_CONFIG_ARGUMENTS = [
   "core.fsmonitor=false",
 ] as const;
 
+const FILTER_COMMAND_KEYS = ["clean", "smudge", "process"] as const;
+const FILTER_CONFIG_KEY = /^filter\.([\s\S]+)\.(clean|smudge|process|required)$/iu;
+const MAX_FILTER_CONFIG_ENTRIES = 512;
+const MAX_FILTER_DRIVERS = 64;
+const MAX_FILTER_DRIVER_LENGTH = 128;
+
+const UNSAFE_FILTER_CONFIGURATION_MESSAGE =
+  "Git filter configuration is too large or contains an unsupported driver name. RefHaven stopped before running the requested operation.";
+
 /**
  * Builds a deterministic Git environment that cannot prompt, trace repository
  * data, use a transport, or inherit a parent process' repository redirection.
@@ -77,7 +86,64 @@ export function buildLocalOnlyGitEnvironment(
   return environment;
 }
 
+/**
+ * Parses the effective filter configuration reported by `git config -z`.
+ * Driver names are bounded and restricted to values that can safely be
+ * round-tripped through a command-scoped `-c key=value` argument.
+ */
+export function parseConfiguredFilterDrivers(output: string): string[] {
+  if (output.length === 0) return [];
+  if (!output.endsWith("\0")) throw new Error(UNSAFE_FILTER_CONFIGURATION_MESSAGE);
+
+  const keys = output.slice(0, -1).split("\0");
+  if (keys.length > MAX_FILTER_CONFIG_ENTRIES) {
+    throw new Error(UNSAFE_FILTER_CONFIGURATION_MESSAGE);
+  }
+
+  const drivers = new Set<string>();
+  for (const key of keys) {
+    const match = FILTER_CONFIG_KEY.exec(key);
+    if (!match) continue;
+    const driver = match[1];
+    if (
+      driver === undefined ||
+      driver.length === 0 ||
+      driver.length > MAX_FILTER_DRIVER_LENGTH ||
+      !isSafeFilterDriver(driver)
+    ) {
+      throw new Error(UNSAFE_FILTER_CONFIGURATION_MESSAGE);
+    }
+    drivers.add(driver);
+    if (drivers.size > MAX_FILTER_DRIVERS) {
+      throw new Error(UNSAFE_FILTER_CONFIGURATION_MESSAGE);
+    }
+  }
+  return [...drivers];
+}
+
+function isSafeFilterDriver(driver: string): boolean {
+  if (driver.includes("=")) return false;
+  for (const character of driver) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x20 || codePoint === 0x7f) return false;
+  }
+  return true;
+}
+
 /** Applies command-scoped policy after all inherited and repository config. */
-export function buildLocalOnlyGitArguments(args: readonly string[]): string[] {
-  return ["--literal-pathspecs", ...LOCAL_ONLY_CONFIG_ARGUMENTS, ...args];
+export function buildLocalOnlyGitArguments(
+  args: readonly string[],
+  filterDrivers: readonly string[] = [],
+): string[] {
+  const disabledFilterArguments = filterDrivers.flatMap((driver) => [
+    ...FILTER_COMMAND_KEYS.flatMap((key) => ["-c", `filter.${driver}.${key}=`]),
+    "-c",
+    `filter.${driver}.required=false`,
+  ]);
+  return [
+    "--literal-pathspecs",
+    ...LOCAL_ONLY_CONFIG_ARGUMENTS,
+    ...disabledFilterArguments,
+    ...args,
+  ];
 }

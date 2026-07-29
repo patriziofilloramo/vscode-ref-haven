@@ -1,11 +1,20 @@
 import type { MergePreview } from "../../domain/comparisonResult";
 import { requireGitObjectId } from "../../domain/gitObjectId";
+import { isRepositoryRelativeGitPath } from "../../domain/pathValidation";
 import { GitOperationError, normalizeGitError, runGitWithExitCode } from "./GitProcess";
 
 /** Git's usage exit code, reported when `--write-tree` is not understood. */
 const GIT_USAGE_EXIT_CODE = 129;
+const EXTERNAL_MERGE_DRIVER_KEY_PATTERN = "^merge\\..*\\.driver$";
 
 let writeTreeSupported = true;
+
+type MergePreviewGitRunner = (
+  cwd: string,
+  args: readonly string[],
+  acceptedExitCodes: readonly number[],
+  signal?: AbortSignal,
+) => Promise<{ readonly exitCode: number; readonly stdout: string }>;
 
 /** Test seam: forgets whether the local Git understands `merge-tree --write-tree`. */
 export function resetMergePreviewSupportCache(): void {
@@ -25,14 +34,44 @@ export async function previewMerge(
   baseSha: string,
   targetSha: string,
   signal?: AbortSignal,
+  run: MergePreviewGitRunner = runGitWithExitCode,
 ): Promise<MergePreview> {
   requireGitObjectId(baseSha, "The merge preview base revision is invalid.");
   requireGitObjectId(targetSha, "The merge preview target revision is invalid.");
   if (!writeTreeSupported) return { kind: "unavailable" };
+
+  // `merge-tree` uses the normal low-level merge machinery. A repository can
+  // therefore pair `merge=<name>` in .gitattributes with
+  // `merge.<name>.driver` in Git config and make this otherwise read-only
+  // preview start an arbitrary shell command. Probe every effective config
+  // scope (including include files) and fail closed before invoking it.
   try {
-    const { exitCode, stdout } = await runGitWithExitCode(
+    const { exitCode } = await run(
       repositoryRoot,
-      ["merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", baseSha, targetSha],
+      ["config", "--includes", "--name-only", "--get-regexp", EXTERNAL_MERGE_DRIVER_KEY_PATTERN],
+      [1],
+      signal,
+    );
+    if (exitCode === 0) return { kind: "unavailable" };
+  } catch (error) {
+    rethrowCancellation(error);
+    return { kind: "unavailable" };
+  }
+
+  try {
+    const { exitCode, stdout } = await run(
+      repositoryRoot,
+      [
+        "-c",
+        "merge.renormalize=false",
+        "merge-tree",
+        "--write-tree",
+        "--name-only",
+        "--no-messages",
+        "-z",
+        baseSha,
+        targetSha,
+      ],
       [1],
       signal,
     );
@@ -42,10 +81,7 @@ export async function previewMerge(
       ? { conflictedPaths, kind: "conflicts" }
       : { kind: "unavailable" };
   } catch (error) {
-    const normalized = normalizeGitError(error);
-    if (normalized instanceof GitOperationError && normalized.code === "commandCancelled") {
-      throw normalized;
-    }
+    rethrowCancellation(error);
     if ((error as { readonly code?: unknown }).code === GIT_USAGE_EXIT_CODE) {
       writeTreeSupported = false;
     }
@@ -53,7 +89,21 @@ export async function previewMerge(
   }
 }
 
+function rethrowCancellation(error: unknown): void {
+  const normalized = normalizeGitError(error);
+  if (normalized instanceof GitOperationError && normalized.code === "commandCancelled") {
+    throw normalized;
+  }
+}
+
 /** Parses `-z` merge-tree output: `<toplevel tree OID> NUL <conflicted path> NUL ...`. */
 export function parseConflictedPaths(stdout: string): readonly string[] {
-  return [...new Set(stdout.split("\0").slice(1))].filter((path) => path.length > 0);
+  const paths = stdout
+    .split("\0")
+    .slice(1)
+    .filter((path) => path.length > 0);
+  if (paths.some((path) => !isRepositoryRelativeGitPath(path))) {
+    throw new Error("Git returned an invalid merge-conflict path.");
+  }
+  return [...new Set(paths)];
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildLocalOnlyGitArguments,
   buildLocalOnlyGitEnvironment,
+  parseConfiguredFilterDrivers,
 } from "../../src/infrastructure/git/gitProcessPolicy";
 
 suite("local-only Git process policy", () => {
@@ -72,5 +73,57 @@ suite("local-only Git process policy", () => {
       "show",
       "abc:file.txt",
     ]);
+  });
+
+  test("neutralizes every command form of each configured content filter", () => {
+    const drivers = parseConfiguredFilterDrivers(
+      [
+        "filter.lfs.clean",
+        "filter.lfs.smudge",
+        "filter.audit.process",
+        "filter.audit.required",
+        "filter.audit.unrelated",
+      ].join("\0") + "\0",
+    );
+
+    assert.deepEqual(drivers, ["lfs", "audit"]);
+    assert.deepEqual(buildLocalOnlyGitArguments(["status"], drivers), [
+      "--literal-pathspecs",
+      "-c",
+      "protocol.allow=never",
+      "-c",
+      "core.fsmonitor=false",
+      "-c",
+      "filter.lfs.clean=",
+      "-c",
+      "filter.lfs.smudge=",
+      "-c",
+      "filter.lfs.process=",
+      "-c",
+      "filter.lfs.required=false",
+      "-c",
+      "filter.audit.clean=",
+      "-c",
+      "filter.audit.smudge=",
+      "-c",
+      "filter.audit.process=",
+      "-c",
+      "filter.audit.required=false",
+      "status",
+    ]);
+  });
+
+  test("fails closed on malformed, unsafe, or excessive filter configuration", () => {
+    assert.throws(() => parseConfiguredFilterDrivers("filter.audit.clean"), /stopped before/u);
+    assert.throws(() => parseConfiguredFilterDrivers("filter.bad name.clean\0"), /stopped before/u);
+    assert.throws(
+      () =>
+        parseConfiguredFilterDrivers(
+          Array.from({ length: 65 }, (_, index) => `filter.driver-${index.toString()}.clean`).join(
+            "\0",
+          ) + "\0",
+        ),
+      /stopped before/u,
+    );
   });
 });

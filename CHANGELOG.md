@@ -4,6 +4,70 @@ All notable changes to RefHaven are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.6] — 2026-07-28
+
+### Security
+
+- Prevent repository-configured content filters, text-conversion commands, and
+  merge drivers from being executed by RefHaven's local Git inspections.
+- Fail closed when the Git executable cannot be resolved to an absolute path,
+  and reject repository roots above the trusted workspace boundary.
+- Revalidate persisted comparisons against the current workspace before they
+  can calculate, export, copy, or open repository data.
+- Reject traversal on every host and enforce device-name, alternate-stream,
+  trailing-dot, and trailing-space restrictions on Windows without rejecting
+  valid POSIX repository names.
+- Reject working-tree operations on paths with active content filters instead
+  of returning approximate results while executable drivers are neutralized.
+
+### Fixed
+
+- Run Extension Host tests with a fresh, locally owned Git fixture and isolated
+  user profile, and clear compiled test output so stale or restored sessions
+  cannot cause misleading failures.
+- Keep `private: true` as the npm publication safeguard while allowing the VSCE
+  marketplace readiness gate to package a public release.
+- Restore **Stash This File...** with a fail-safe transaction that preserves
+  the selected file's staged and unstaged state in a standard two-parent Git
+  stash while leaving unrelated and untracked changes intact. A detected
+  rename is stored as its old/new path pair, and `refs/stash` is published with
+  an expected-old-value compare-and-swap.
+- Keep **Stash This File...** functional and singular inside the unified
+  RefHaven file-actions submenu, including Source Control resources.
+- Resolve deleted Source Control resources even when their parent directory no
+  longer exists, hide file actions on Explorer folders, and save dirty text or
+  notebook documents only after the stash message is confirmed.
+- Replace unconditional working-tree restore with an atomic move into a
+  same-filesystem safety directory followed by exclusive, no-clobber
+  publication of the clean `HEAD` file. Remove the selected staged delta with
+  a raw full-index compare-and-swap under the real `index.lock`, so a concurrent
+  save or stage is never replaced.
+- Retain durable, repository-local recovery journals and safety copies under the
+  repository's Git metadata whenever an existing file is evacuated. If HEAD,
+  the selected index entry, or the working-tree path changes concurrently,
+  RefHaven stops cleanup, preserves the newer state, reports the created stash,
+  and offers the recovery directory for manual inspection. A private recovery
+  ref keeps an incomplete stash reachable until explicit cleanup. A concurrent stash
+  update before publication loses the compare-and-swap and leaves the selected
+  file untouched.
+- Count only unfinished recovery records against the bounded recovery scan, so
+  retained safety copies from completed operations do not disable later stashes.
+- Refresh nested-repository topology without activating VS Code's Git extension
+  and reject repository actions that race with workspace removal.
+- Preserve cached immutable comparison results when repository discovery updates
+  which saved comparisons are available.
+
+### Changed
+
+- Move development tooling from end-of-life Node 20 to the maintained Node 22
+  and Node 24 LTS lines.
+- Open the stash message prompt for a dirty selected editor and save that
+  document only after confirmation; fail closed if the save cannot complete.
+  Continue to reject untracked or conflicted paths, active content filters,
+  sparse checkout, special index entries, symlinks/gitlinks, oversized files,
+  and filesystems that cannot provide the required atomic rename and hard-link
+  guarantees.
+
 ## [0.13.5] — 2026-07-25
 
 First public release. Everything below is what RefHaven does on day one; there

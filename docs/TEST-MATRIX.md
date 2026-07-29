@@ -15,7 +15,7 @@ npm run package
 
 These scripts preserve separate unit, real-Git/Extension Host, compile, lint, format, and VSIX packaging gates. Failures block the milestone commit.
 
-The security-hardening suite additionally covers repository-relative path containment, cross-platform backslash traversal, complete persisted-schema validation, duplicate IDs, trusted-Markdown escaping, scheduler concurrency and queued cancellation, bounded-cache eviction and rejection behaviour, signed revision-URI tampering, in-flight comparison cancellation, nested repository identities, real linked-worktree metadata discovery, and the exact local-only Git environment/config policy. Release gates also require zero production dependencies, an audit-clean lockfile, and inspection of the packaged VSIX contents.
+The security-hardening suite additionally covers repository-relative path containment, host-specific Windows path restrictions, valid POSIX names, complete persisted-schema validation, duplicate IDs, trusted-Markdown escaping, scheduler concurrency and queued cancellation, bounded-cache eviction and rejection behaviour, signed revision-URI tampering, in-flight comparison cancellation, nested repository identities, real linked-worktree metadata discovery, and the exact local-only Git environment/config policy. Release gates also require zero production dependencies, an audit-clean lockfile, and inspection of the packaged VSIX contents.
 
 ## CI operating-system matrix
 
@@ -47,11 +47,12 @@ files.
 Rich-hover coverage includes extended blame-porcelain metadata, malicious
 Markdown/backtick fixtures, command allowlists, bounded patch rendering, real
 local patch loading, and `vscode.executeHoverProvider` over a complete line.
-Single-file-stash coverage uses real repositories for modified, staged,
-partially staged, deleted, renamed, Unicode, whitespace, bracket/pathspec,
-long-path, linked-worktree, clean, untracked, metadata, content-filter, and
-hook scenarios. Tests prove unrelated index/worktree preservation, standard
-stash-list parsing, and `git stash apply --index` compatibility.
+Stash coverage verifies delimiter-safe inspection of existing stash commits
+and the restored single-file mutation. Manifest and Extension Host tests prove
+that **Stash This File...** appears once inside the unified RefHaven submenu on
+each applicable surface; command routing accepts both Source Control resource
+state and Git API change objects, opens the message prompt without touching a
+dirty buffer, and saves and stashes that buffer only after confirmation.
 GitLab coverage includes zero-config HTTP-origin preservation, SSH-to-HTTPS
 inference, invalid/local remote rejection, `origin` preference, exact-origin
 normalization, strict allowlist scheme/port/path enforcement, credential
@@ -112,7 +113,7 @@ validator.
 - Git binary resolution: configured absolute path wins, relative/missing
   configured paths fall through to `PATH`, empty and relative `PATH` entries
   are never resolved, Windows executable extensions include `git.exe`, and an
-  absent `PATH` or no match falls back to the bare name.
+  absent `PATH` or no absolute match fails closed.
 
 ### Data-egress guard
 
@@ -179,14 +180,49 @@ Every test creates an isolated temporary repository, configures deterministic au
 
 Additional hardening fixtures cover filenames with spaces, tabs, newlines and non-ASCII characters; type changes; applicable merge-conflict states; thousands of changed files; timeout; cancellation; stdout/stderr limits; missing Git; repository deletion; and forced ref movement during overlapping refreshes.
 
+### Single-file stash transaction
+
+Required real-repository coverage preserves and compares the complete index
+and worktree around each operation. It covers:
+
+- selected unstaged, staged, and partially staged content, with
+  a standard two-parent result and `git stash apply --index` reconstructing the
+  separate states;
+- staged additions, deletions, and detected renames;
+- unrelated staged and unstaged changes remaining byte-for-byte and
+  entry-for-entry unchanged;
+- Unicode, bracket, nested, and long literal paths plus linked worktrees;
+- hooks that would fail or modify state remaining disabled;
+- fail-closed rejection of clean/untracked files, conflicts, active filters,
+  sparse/skip-worktree or special index entries, symlinks/gitlinks, content
+  over 64 MiB, and unsupported filesystem boundaries;
+- compare-and-swap failure when another process updates `refs/stash`, with no
+  visible selected-file or index cleanup;
+- deterministic barriers before evacuation, after evacuation, and before
+  index cleanup. A concurrent file recreation is never overwritten, an
+  already-published stash remains identified, newer index state survives, and
+  the recovery journal/safety copy remains inspectable;
+- more than 256 completed safety-copy directories remain inspectable without
+  consuming the bounded allowance for genuinely unfinished recovery records;
+- a raw full-index compare-and-swap for both changed and initially clean
+  selected entries, plus retained private recovery refs when the stash list
+  moves after publication;
+- successful cleanup retaining an evacuated file and a completion journal,
+  so a writer that kept the pre-rename file handle cannot lose later bytes;
+- incomplete cleanup retaining its journal without automatically restoring or
+  deleting repository data, while the command warning offers the recovery
+  directory for inspection.
+
 ## Extension Host tests
 
 - extension activation stays independent of comparison calculation;
 - all declared commands are registered;
 - Explorer/editor RefHaven file actions and the editor-title quick menu are
   contributed with file-only context clauses;
-- Source Control resource objects resolve through the same canonical file
-  boundary, and the RefHaven submenu contributes Stash This File;
+- Source Control resource and Git API change objects resolve through the same
+  canonical file boundary; cancelling the message leaves an unsaved selected
+  editor untouched, while confirmation saves it and creates the expected
+  single-file stash through the public command;
 - GitLab commands register without enumerating remotes or opening a browser;
   remote URLs are read only in an explicit command path;
 - restricted-origin input accepts only exact HTTP(S) origins, empty input
@@ -236,9 +272,15 @@ Before delivering `refhaven-x.y.z.vsix`:
 10. From Explorer, editor, editor title, status-bar blame, and a changed-file
     node, verify the same file history/revision actions target the intended
     repository and path.
-11. From Source Control, stash a partially staged file while unrelated staged
-    and unstaged files are present; verify only the selected path becomes
-    clean, then inspect and apply the stash with `--index`.
+11. Run **Stash This File...** from the Command Palette and the unified RefHaven
+    file-actions submenu in Source Control, Explorer, and an editor on staged,
+    unstaged, and partially staged tracked files. Verify unrelated changes
+    remain intact, `git stash apply --index` reconstructs the selected states,
+    and the retained safety directory opens from the completion message. Close all
+    writers and inspect the stash, worktree, index, and completion journal
+    before manually removing that directory. Also confirm an unsaved selected
+    editor is saved only after accepting the stash message, while every
+    documented unsupported case fails without mutation.
 12. With an empty GitLab origin list, verify HTTP and SSH remotes immediately
     open the expected project/commit/comparison/file-line/issue/MR targets.
     Add the exact internal origin and verify strict allowlist behavior, then

@@ -7,6 +7,8 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
+  truncateSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -18,8 +20,14 @@ import {
   listStashes,
   stashTrackedFile,
 } from "../../src/infrastructure/git/GitCli";
+import {
+  createPathLimitedStash,
+  StashCleanupIncompleteError,
+  type StashFileResult,
+  type StashFileTestHooks,
+} from "../../src/infrastructure/git/stashFile";
 
-suite("safe single-file stash", () => {
+suite("fail-safe single-file stash", () => {
   const roots: string[] = [];
 
   teardown(() => {
@@ -45,11 +53,12 @@ suite("safe single-file stash", () => {
     const stagedBefore = repository.git("diff", "--cached", "--binary", "--", "other-staged.txt");
     const unstagedBefore = repository.git("diff", "--binary", "--", "other-unstaged.txt");
 
-    const stashSha = await stashTrackedFile(
+    const result = await stashTrackedFile(
       repository.root,
       "selected.txt",
       "RefHaven selected file",
     );
+    const { stashSha } = result;
 
     assert.equal(read(repository, "selected.txt"), "base selected\n");
     assert.equal(read(repository, "other-staged.txt"), "staged change\n");
@@ -60,6 +69,7 @@ suite("safe single-file stash", () => {
     );
     assert.equal(repository.git("diff", "--binary", "--", "other-unstaged.txt"), unstagedBefore);
     assert.equal(repository.git("show", `${stashSha}:selected.txt`), "selected change");
+    assert.equal(readSafetyCopy(result, "selected.txt"), "selected change\n");
     const [stash] = await listStashes(repository.root);
     assert.ok(stash);
     assert.equal(stash.sha, stashSha);
@@ -82,7 +92,7 @@ suite("safe single-file stash", () => {
     repository.git("add", "--", "partial.txt");
     write(repository, "partial.txt", "working tree\n");
 
-    const stashSha = await stashTrackedFile(repository.root, "partial.txt", "partial state");
+    const { stashSha } = await stashTrackedFile(repository.root, "partial.txt", "partial state");
 
     assert.equal(read(repository, "partial.txt"), "base\n");
     assert.equal(repository.git("show", `${stashSha}^2:partial.txt`), "staged");
@@ -93,18 +103,26 @@ suite("safe single-file stash", () => {
     assert.equal(read(repository, "partial.txt"), "working tree\n");
   });
 
-  test("supports staged files, deletions, and renames", async () => {
+  test("supports staged files, additions, deletions, and renames", async () => {
     const stagedRepository = createRepository({ "staged.txt": "base\n" });
     write(stagedRepository, "staged.txt", "staged\n");
     stagedRepository.git("add", "--", "staged.txt");
-    const stagedSha = await stashTrackedFile(stagedRepository.root, "staged.txt", "staged file");
+    const { stashSha: stagedSha } = await stashTrackedFile(
+      stagedRepository.root,
+      "staged.txt",
+      "staged file",
+    );
     assert.equal(read(stagedRepository, "staged.txt"), "base\n");
     assert.equal(stagedRepository.git("show", `${stagedSha}^2:staged.txt`), "staged");
 
     const addedRepository = createRepository({ "existing.txt": "base\n" });
     write(addedRepository, "added.txt", "added\n");
     addedRepository.git("add", "--", "added.txt");
-    const addedSha = await stashTrackedFile(addedRepository.root, "added.txt", "added file");
+    const { stashSha: addedSha } = await stashTrackedFile(
+      addedRepository.root,
+      "added.txt",
+      "added file",
+    );
     assert.throws(() => read(addedRepository, "added.txt"));
     assert.equal(addedRepository.git("show", `${addedSha}:added.txt`), "added");
     addedRepository.git("stash", "apply", "--index", addedSha);
@@ -112,7 +130,7 @@ suite("safe single-file stash", () => {
 
     const deletedRepository = createRepository({ "deleted.txt": "deleted\n" });
     unlinkSync(join(deletedRepository.root, "deleted.txt"));
-    const deletedSha = await stashTrackedFile(
+    const { stashSha: deletedSha } = await stashTrackedFile(
       deletedRepository.root,
       "deleted.txt",
       "deleted file",
@@ -128,7 +146,7 @@ suite("safe single-file stash", () => {
       join(renamedRepository.root, "rename-new.txt"),
     );
     renamedRepository.git("add", "-A");
-    const renamedSha = await stashTrackedFile(
+    const { stashSha: renamedSha } = await stashTrackedFile(
       renamedRepository.root,
       "rename-new.txt",
       "renamed file",
@@ -155,20 +173,24 @@ suite("safe single-file stash", () => {
     });
     write(repository, nestedPath, "changed\n");
 
-    const stashSha = await stashTrackedFile(repository.root, nestedPath, "Unicode path");
+    const { stashSha } = await stashTrackedFile(repository.root, nestedPath, "Unicode path");
 
     assert.equal(read(repository, nestedPath), "base\n");
     assert.equal(read(repository, "l.txt"), "other\n");
     assert.equal(repository.git("show", `${stashSha}:${nestedPath}`), "changed");
 
     write(repository, "[literal].txt", "literal changed\n");
-    const bracketSha = await stashTrackedFile(repository.root, "[literal].txt", "literal pathspec");
+    const { stashSha: bracketSha } = await stashTrackedFile(
+      repository.root,
+      "[literal].txt",
+      "literal pathspec",
+    );
     assert.equal(read(repository, "[literal].txt"), "brackets\n");
     assert.equal(read(repository, "l.txt"), "other\n");
     assert.equal(repository.git("show", `${bracketSha}:[literal].txt`), "literal changed");
 
     write(repository, longPath, "long changed\n");
-    const longSha = await stashTrackedFile(repository.root, longPath, "long path");
+    const { stashSha: longSha } = await stashTrackedFile(repository.root, longPath, "long path");
     assert.equal(read(repository, longPath), "long base\n");
     assert.equal(repository.git("show", `${longSha}:${longPath}`), "long changed");
   });
@@ -179,7 +201,7 @@ suite("safe single-file stash", () => {
     repository.git("worktree", "add", "-b", "linked-test", linkedRoot);
     writeFileSync(join(linkedRoot, "worktree.txt"), "linked change\n", "utf8");
 
-    const stashSha = await stashTrackedFile(linkedRoot, "worktree.txt", "linked worktree");
+    const { stashSha } = await stashTrackedFile(linkedRoot, "worktree.txt", "linked worktree");
 
     assert.equal(readFileSync(join(linkedRoot, "worktree.txt"), "utf8"), "base\n");
     assert.equal(repository.git("show", `${stashSha}:worktree.txt`), "linked change");
@@ -202,7 +224,7 @@ suite("safe single-file stash", () => {
     assert.equal(read(repository, "hooked.txt"), "base\n");
   });
 
-  test("rejects clean, untracked, and repository metadata paths without mutation", async () => {
+  test("rejects clean, untracked, metadata, and filtered paths without mutation", async () => {
     const repository = createRepository({ "tracked.txt": "base\n" });
     write(repository, "untracked.txt", "untracked\n");
 
@@ -224,6 +246,143 @@ suite("safe single-file stash", () => {
     assert.equal(read(repository, "tracked.txt"), "filtered change\n");
     assert.equal(read(repository, "untracked.txt"), "untracked\n");
     assert.equal(repository.gitAllowFailure("rev-parse", "--verify", "refs/stash"), "");
+  });
+
+  test("rejects an untracked replacement at a path whose deletion was staged", async () => {
+    const repository = createRepository({ "selected.txt": "base\n" });
+    repository.git("rm", "--", "selected.txt");
+    write(repository, "selected.txt", "untracked replacement\n");
+
+    await assert.rejects(
+      stashTrackedFile(repository.root, "selected.txt", "staged deletion with replacement"),
+      /replacement|untracked/iu,
+    );
+
+    assert.equal(repository.git("ls-files", "--stage", "--", "selected.txt"), "");
+    assert.equal(read(repository, "selected.txt"), "untracked replacement\n");
+    assert.equal(repository.gitAllowFailure("rev-parse", "--verify", "refs/stash"), "");
+  });
+
+  test("rejects a selected Git symlink without changing its bytes or index", async () => {
+    const repository = createRepository({ "selected-link": "target-one\n" });
+    const blob = repository.git("rev-parse", ":selected-link");
+    repository.git("update-index", "--cacheinfo", `120000,${blob},selected-link`);
+    repository.git("commit", "-m", "record symlink mode");
+    write(repository, "selected-link", "target-two\n");
+    const indexBefore = repository.git("ls-files", "--stage", "--", "selected-link");
+
+    await assert.rejects(
+      stashTrackedFile(repository.root, "selected-link", "symlink"),
+      /unsupported|entry type/u,
+    );
+
+    assert.equal(read(repository, "selected-link"), "target-two\n");
+    assert.equal(repository.git("ls-files", "--stage", "--", "selected-link"), indexBefore);
+    assert.equal(repository.gitAllowFailure("rev-parse", "--verify", "refs/stash"), "");
+  });
+
+  test("rejects sparse checkout and sparse-index modes without mutation", async () => {
+    const sparseCheckout = createRepository({ "selected.txt": "base\n" });
+    sparseCheckout.git("sparse-checkout", "init", "--cone");
+    write(sparseCheckout, "selected.txt", "sparse checkout change\n");
+
+    await assert.rejects(
+      stashTrackedFile(sparseCheckout.root, "selected.txt", "sparse checkout"),
+      /sparse checkout/iu,
+    );
+    assert.equal(read(sparseCheckout, "selected.txt"), "sparse checkout change\n");
+    assert.equal(sparseCheckout.git("show", ":selected.txt"), "base");
+    assert.equal(sparseCheckout.gitAllowFailure("rev-parse", "--verify", "refs/stash"), "");
+
+    const sparseIndex = createRepository({ "selected.txt": "base\n" });
+    sparseIndex.git("config", "index.sparse", "true");
+    write(sparseIndex, "selected.txt", "sparse index change\n");
+
+    await assert.rejects(
+      stashTrackedFile(sparseIndex.root, "selected.txt", "sparse index"),
+      /sparse/iu,
+    );
+    assert.equal(read(sparseIndex, "selected.txt"), "sparse index change\n");
+    assert.equal(sparseIndex.git("show", ":selected.txt"), "base");
+    assert.equal(sparseIndex.gitAllowFailure("rev-parse", "--verify", "refs/stash"), "");
+  });
+
+  test("rejects a sparse file over the safety limit before creating a stash", async () => {
+    const repository = createRepository({ "selected.bin": "base\n" });
+    const selectedPath = join(repository.root, "selected.bin");
+    const oversizedLength = 64 * 1024 * 1024 + 1;
+    truncateSync(selectedPath, oversizedLength);
+
+    await assert.rejects(
+      stashTrackedFile(repository.root, "selected.bin", "oversized"),
+      /too large/u,
+    );
+
+    assert.equal(statSync(selectedPath).size, oversizedLength);
+    assert.equal(repository.git("show", ":selected.bin"), "base");
+    assert.equal(repository.gitAllowFailure("rev-parse", "--verify", "refs/stash"), "");
+  });
+
+  test("preserves a concurrent worktree write detected before evacuation", async () => {
+    const repository = createRepository({ "selected.txt": "base\n" });
+    write(repository, "selected.txt", "captured change\n");
+
+    const error = await expectIncomplete(
+      stashWithHooks(repository, ["selected.txt"], {
+        beforeEvacuate: () => {
+          write(repository, "selected.txt", "concurrent save\n");
+        },
+      }),
+    );
+
+    assert.equal(error.phase, "worktree");
+    assert.equal(read(repository, "selected.txt"), "concurrent save\n");
+    assert.equal(repository.git("show", `${error.stashSha}:selected.txt`), "captured change");
+    assert.equal(readSafetyCopy(error, "selected.txt"), "concurrent save\n");
+    assert.equal(repository.git("show", ":selected.txt"), "base");
+  });
+
+  test("never overwrites a concurrent worktree write created after evacuation", async () => {
+    const repository = createRepository({ "selected.txt": "base\n" });
+    write(repository, "selected.txt", "captured change\n");
+
+    const error = await expectIncomplete(
+      stashWithHooks(repository, ["selected.txt"], {
+        afterEvacuate: () => {
+          write(repository, "selected.txt", "concurrent save\n");
+        },
+      }),
+    );
+
+    assert.equal(error.phase, "worktree");
+    assert.equal(read(repository, "selected.txt"), "concurrent save\n");
+    assert.equal(repository.git("show", `${error.stashSha}:selected.txt`), "captured change");
+    assert.equal(readSafetyCopy(error, "selected.txt"), "captured change\n");
+    assert.equal(repository.git("show", ":selected.txt"), "base");
+  });
+
+  test("never overwrites concurrent staged or worktree bytes during index cleanup", async () => {
+    const repository = createRepository({ "selected.txt": "base\n" });
+    write(repository, "selected.txt", "captured staged\n");
+    repository.git("add", "--", "selected.txt");
+    write(repository, "selected.txt", "captured worktree\n");
+
+    const error = await expectIncomplete(
+      stashWithHooks(repository, ["selected.txt"], {
+        beforeIndexCleanup: () => {
+          write(repository, "selected.txt", "concurrent staged\n");
+          repository.git("add", "--", "selected.txt");
+          write(repository, "selected.txt", "concurrent worktree\n");
+        },
+      }),
+    );
+
+    assert.equal(error.phase, "index");
+    assert.equal(repository.git("show", ":selected.txt"), "concurrent staged");
+    assert.equal(read(repository, "selected.txt"), "concurrent worktree\n");
+    assert.equal(repository.git("show", `${error.stashSha}^2:selected.txt`), "captured staged");
+    assert.equal(repository.git("show", `${error.stashSha}:selected.txt`), "captured worktree");
+    assert.equal(readSafetyCopy(error, "selected.txt"), "captured worktree\n");
   });
 
   interface RepositoryFixture {
@@ -266,6 +425,47 @@ suite("safe single-file stash", () => {
     repository.git("add", ".");
     repository.git("commit", "-m", "base");
     return repository;
+  }
+
+  async function stashWithHooks(
+    repository: RepositoryFixture,
+    pathspecs: readonly string[],
+    testHooks: StashFileTestHooks,
+  ): Promise<StashFileResult> {
+    return createPathLimitedStash({
+      branchName: repository.git("branch", "--show-current"),
+      headSha: repository.git("rev-parse", "HEAD"),
+      message: "race regression",
+      pathspecs,
+      repositoryRoot: repository.root,
+      testHooks,
+    });
+  }
+
+  async function expectIncomplete(
+    operation: Promise<StashFileResult>,
+  ): Promise<StashCleanupIncompleteError> {
+    try {
+      await operation;
+    } catch (error) {
+      assert.ok(error instanceof StashCleanupIncompleteError);
+      return error;
+    }
+    assert.fail("Expected fail-safe cleanup to stop with a recovery error.");
+  }
+
+  function readSafetyCopy(
+    result: StashFileResult | StashCleanupIncompleteError,
+    filePath: string,
+  ): string {
+    const recoveryDirectory = result.safetyCopyDirectory;
+    assert.ok(recoveryDirectory, "Expected a retained safety-copy directory");
+    const journal = JSON.parse(
+      readFileSync(join(recoveryDirectory, "journal-000-prepared.json"), "utf8"),
+    ) as { readonly paths?: readonly { readonly backup?: string; readonly filePath?: string }[] };
+    const path = journal.paths?.find((entry) => entry.filePath === filePath);
+    assert.ok(path?.backup, `Expected a safety-copy entry for ${filePath}`);
+    return readFileSync(join(recoveryDirectory, path.backup), "utf8");
   }
 
   function write(repository: RepositoryFixture, filePath: string, contents: string): void {

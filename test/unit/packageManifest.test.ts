@@ -11,11 +11,15 @@ import {
 } from "../../src/config/extensionConfigurationSchema";
 
 interface CommandContribution {
+  readonly category?: string;
   readonly command: string;
+  readonly icon?: string;
+  readonly title?: string;
 }
 
 interface MenuContribution {
   readonly command?: string;
+  readonly group?: string;
   readonly submenu?: string;
   readonly when?: string;
 }
@@ -51,6 +55,7 @@ interface PackageManifest {
   readonly description: string;
   readonly devDependencies: Readonly<Record<string, string>>;
   readonly displayName: string;
+  readonly engines: { readonly node: string; readonly vscode: string };
   readonly files: readonly string[];
   readonly icon: string;
   readonly license: string;
@@ -88,11 +93,11 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "patriziofilloramo");
-    assert.equal(manifest.version, "0.13.5");
+    assert.equal(manifest.version, "0.13.6");
     assert.match(manifest.description, /local processing/u);
   });
 
-  test("carries its public identity while blocking accidental npm publish", () => {
+  test("permits VSIX release packaging while blocking accidental npm publish", () => {
     const manifest = loadManifest();
 
     assert.equal(manifest.private, true);
@@ -106,6 +111,14 @@ suite("extension manifest", () => {
       manifest.scripts["package:release"],
       "npm run marketplace:check && vsce package --no-dependencies --out build",
     );
+    assert.equal(
+      manifest.scripts["marketplace:check"],
+      "node scripts/check-marketplace-readiness.mjs",
+    );
+    assert.equal(
+      manifest.scripts["compile:tests"],
+      "node scripts/clean-test-output.mjs && tsc -p test/tsconfig.json",
+    );
   });
 
   test("keeps package-lock release metadata aligned with the manifest", () => {
@@ -118,6 +131,13 @@ suite("extension manifest", () => {
     assert.ok(rootPackage);
     assert.equal(rootPackage.name, manifest.name);
     assert.equal(rootPackage.version, manifest.version);
+  });
+
+  test("uses maintained Node LTS lines for development tooling", () => {
+    const manifest = loadManifest();
+
+    assert.equal(manifest.engines.node, "^22.13.0 || ^24.0.0");
+    assert.equal(manifest.engines.vscode, "^1.105.0");
   });
 
   test("contributes the RefHaven views to Source Control", () => {
@@ -240,10 +260,15 @@ suite("extension manifest", () => {
         ({ submenu }) => submenu === "refhaven.fileActions",
       ),
     );
-    assert.ok(
-      manifest.contributes.menus["explorer/context"]?.some(
+    assert.deepEqual(
+      manifest.contributes.menus["explorer/context"]?.find(
         ({ submenu }) => submenu === "refhaven.fileActions",
       ),
+      {
+        group: "navigation@19",
+        submenu: "refhaven.fileActions",
+        when: "resourceScheme == file && !explorerResourceIsFolder",
+      },
     );
     assert.ok(
       manifest.contributes.menus["scm/resourceState/context"]?.some(
@@ -269,6 +294,38 @@ suite("extension manifest", () => {
       "refhaven.copyBrowserFileUrl",
       "refhaven.openBrowserReference",
     ]);
+  });
+
+  test("contributes single-file stash only inside the unified RefHaven submenu", () => {
+    const manifest = loadManifest();
+
+    assert.deepEqual(
+      manifest.contributes.commands.find(({ command }) => command === "refhaven.stashFile"),
+      {
+        category: "RefHaven",
+        command: "refhaven.stashFile",
+        icon: "$(git-stash)",
+        title: "Stash This File...",
+      },
+    );
+    assert.deepEqual(
+      manifest.contributes.menus["scm/resourceState/context"]?.filter(
+        ({ command }) => command === "refhaven.stashFile",
+      ),
+      [],
+    );
+    assert.deepEqual(
+      manifest.contributes.menus["refhaven.fileActions"]?.filter(
+        ({ command }) => command === "refhaven.stashFile",
+      ),
+      [
+        {
+          command: "refhaven.stashFile",
+          group: "4_stash@1",
+          when: "resourceScheme == file || scmProvider == git",
+        },
+      ],
+    );
   });
 
   test("exposes native comparison review controls only on review-capable nodes", () => {

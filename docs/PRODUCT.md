@@ -93,12 +93,15 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   with read-only `merge-tree` plumbing. Conflicts surface on the comparison
   row with the conflicted paths in the tooltip; clean merges stay quiet, and
   unsupported Git versions degrade silently to no forecast.
-- **Safe single-file stash:** a dedicated Stashes view lists stashes per
-  repository with expandable file trees, native diffs, copy-message, revision
-  actions, and recent-stash search. **Stash This File...** preserves selected
-  staged/unstaged state (including partial staging, deletion, and rename) while
-  excluding unrelated and untracked changes. Hooks and content filters are
-  prevented rather than trusted.
+- **Fail-safe single-file stash and read-only inspection:** _Stash This File..._
+  captures the selected tracked regular file's separate staged and unstaged
+  states—or both paths of its rename—in a standard two-parent Git stash while
+  excluding untracked files and leaving unrelated changes in place. Cleanup
+  uses atomic evacuation, no-clobber publication, a byte-for-byte index
+  compare-and-swap, and a retained recovery journal so concurrent editor or Git activity
+  is preserved rather than overwritten. The Stashes view lists existing
+  stashes per repository with expandable file trees, native diffs,
+  copy-message, revision actions, and recent-stash search.
 - **Native view enrichment:** Stashes and File History have in-memory filters;
   expanded stashes show local change statistics; file history exposes parent,
   rename-follow, and adjacent-revision navigation; Commit Details supports
@@ -106,10 +109,11 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   tip metadata, and bounded expandable history; Worktrees show a local
   staged/unstaged/untracked/conflicted summary.
 - **Native file-action surfaces:** the Explorer and editor share a RefHaven submenu for file/line history, annotations, open-at-revision, and compare-with-revision. The editor title and status-bar blame provide compact quick picks, while changed-file nodes expose revision, history, open, and copy actions consistently.
-- **Contextual workflows:** Source Control exposes direct single-file stash,
-  editor line inspection, active-file reveal in saved comparisons, and
-  two-branch selection. These flows reuse the same validated controllers as
-  the Command Palette instead of introducing parallel implementations.
+- **Contextual workflows:** Source Control exposes single-file stash through
+  the unified RefHaven submenu, plus editor line inspection, active-file reveal
+  in saved comparisons, and two-branch selection. These flows reuse the same
+  validated controllers as the Command Palette instead of introducing parallel
+  implementations.
 - **Line blame and hover:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, full commit identity, local commit statistics, a bounded previous-revision patch, and native actions for details, diffs, history, revision opening, and copy.
 - **File annotations:** opt-in whole-file gutter blame, a five-bucket commit-age heatmap, and saved-working-tree change ranges relative to a locally resolved reference. Computation is cancellable, bounded to 5,000 editor lines, and never persisted.
 - **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
@@ -170,9 +174,14 @@ repository-relative Git path immediately before use. Comparing a file with a
 reference performs a path-limited local diff and opens the shared native
 revision pipeline; it does not calculate or retain an entire repository diff.
 The same submenu accepts VS Code Git Source Control resource objects. Stash
-creation prompts for a message, re-resolves the target after the prompt, runs
-as a non-cancellable bounded mutation, and refreshes both RefHaven and built-in
-Source Control after success.
+creation prompts for a message, saves a dirty selected editor only after the
+user confirms that message, re-resolves the target, runs as a non-cancellable
+bounded mutation, and refreshes both RefHaven and built-in Source Control
+whenever a stash was published. A failed save stops before Git is mutated. A
+successful evacuation offers its retained safety directory. If
+concurrent activity prevents cleanup after publication, the UI distinguishes
+that outcome from total failure, identifies the created stash, leaves the
+newer state untouched, and offers the same directory for manual recovery.
 
 Rich line hovers are computed only when VS Code requests them. Results are
 cached by document version and line in a 64-entry in-memory LRU, cleared on
@@ -198,10 +207,21 @@ operation, or automatic fetch. Git is launched without a shell and with
 argument arrays. Every invocation blocks protocols and partial-clone lazy
 fetch, disables prompts and tracing, removes inherited Git redirection, and
 prevents configured fsmonitor/diff/textconv helpers. Paths are literal, not
-Git patterns. The stash mutation additionally disables Git hooks and rejects
-active content filters before changing the real index or worktree. Missing
-local objects fail closed. Typed revisions pass strict syntax validation and
-must resolve through the transport-blocked local Git boundary before use.
+Git patterns. The stash mutation saves a confirmed dirty selected buffer before
+entering the Git boundary, disables Git hooks, and rejects active content
+filters, sparse checkout, conflicts, special entries, symlinks/gitlinks,
+skip-worktree state, files over 64 MiB, and cross-device recovery boundaries
+before publishing. It atomically publishes
+`refs/stash` plus a private recovery ref with a compare-and-swap, atomically evacuates the original path to
+repository-local Git metadata, installs `HEAD` without clobbering a concurrently
+recreated path, and installs a prepared full index only after a byte-for-byte
+compare-and-swap under the real `index.lock`. Failures after publication retain a journal and
+safety copy under `<absolute-git-dir>/refhaven-recovery` and warn the user;
+these retained files are not automatically deleted. A recovery ref recorded by
+an incomplete journal must be deleted with its expected stash SHA before the
+directory is removed. Missing local objects fail
+closed. Typed revisions pass strict syntax validation and must resolve through
+the transport-blocked local Git boundary before use.
 
 GitLab browser actions work from validated local remotes without setup.
 HTTP(S) remotes retain their exact origin and SSH remotes infer HTTPS on the

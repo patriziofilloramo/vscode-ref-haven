@@ -67,6 +67,10 @@ src/
       fileHistory.ts
       nameStatus.ts
       numstat.ts
+      stashFile.ts          // fail-safe single-file stash orchestration
+      stashFileTransaction.ts // ref/index transaction and recovery discovery
+      stashFileValidation.ts  // bounded request contract
+      stashFileWorktreeSafety.ts // no-clobber filesystem primitives
       stashList.ts
       worktreeList.ts
     logging/
@@ -146,17 +150,16 @@ Process-control failures use stable codes for `commandTimedOut`, `commandCancell
 `GitProcess.ts` is the only child-process execution adapter. It launches `git`
 with `execFile`, argument arrays, and no shell. Every operation runs through
 `GitScheduler`, which enforces four global and two per-repository processes.
-The adapter owns cancellation, centrally configured timeouts, encoding, 5 MiBxxxx
+The adapter owns cancellation, centrally configured timeouts, encoding, 5 MiB
 stdout/stderr limits, stdin bounds, and stable process-control errors.
 
 The Git executable is resolved to an absolute path once and memoized:
 `gitBinary.ts` prefers the user's configured `git.path`, then probes only the
 absolute directories on `PATH` (skipping empty and relative entries, so a
-current-directory `git` cannot win), and falls back to the bare name only when
-nothing resolves. Resolving the binary means a poisoned `PATH` cannot
-substitute an attacker executable for `git`. The pure selection is
-host-independent and unit-tested; the buffer path also accepts a larger output
-ceiling for patch export.
+current-directory `git` cannot win). Resolution fails closed when no absolute
+executable is available; it never reverts to a bare name that would repeat the
+unsafe lookup. The pure selection is host-independent and unit-tested; the
+buffer path also accepts a larger output ceiling for patch export.
 
 `GitCli.ts` owns typed Git operations, command construction, validation, and
 parser selection. Keeping process mechanics separate prevents the command
@@ -169,7 +172,20 @@ Git excludes it from identities, messages, refs, and paths; other control
 characters remain valid data. Decimal Git timestamps pass through one strict
 validator and must fit the JavaScript `Date` range before entering the domain.
 
-`gitProcessPolicy.ts` is the single local-only process boundary. It blocks every Git transport and lazy object fetch, disables prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes inherited repository and command-config redirection, enables literal pathspec handling, and prevents external diff/textconv execution. The policy is applied to string, buffer, and stdin invocations and is covered by exact regression tests.
+`gitProcessPolicy.ts` is the single local-only process boundary. It blocks
+every Git transport and lazy object fetch, disables
+prompts/pagers/tracing/fsmonitor/optional locks/replace objects, removes
+inherited repository and command-config redirection, and enables literal
+pathspec handling. Before every string, buffer, temporary-index, or stdin
+invocation, `GitProcess.ts` uses a read-only bounded config query to enumerate
+effective content-filter drivers. The requested command then receives
+command-scoped overrides that clear every discovered `clean`, `smudge`, and
+`process` command and make the filter optional; malformed or excessive output
+fails closed. Diff, blame, and content-search operations additionally pass
+Git's explicit external-diff/textconv opt-outs. A strict `check-attr --stdin -z`
+guard rejects working-tree paths with active content filters, so driver
+neutralization never becomes a silently approximate result. Exact unit and
+Extension Host marker regressions cover this boundary.
 
 ### GitClient
 
@@ -177,7 +193,15 @@ Provides typed operations for repository probing, branch listing, ref resolution
 
 ### Repository discovery
 
-Uses the exported API of VS Code's built-in Git extension only when that extension is already active, discovering known repositories including nested repositories without activating a component that may be configured for autofetch. Repository identity combines workspace folder URI and repository path relative to it; path identity is case-sensitive except on Windows, and worktrees remain distinct even when they share a common Git directory.
+Uses the exported API of VS Code's built-in Git extension only when that
+extension is already active, discovering known repositories including nested
+repositories without activating a component that may be configured for
+autofetch. Repository roots must equal or descend from a current trusted
+workspace folder; an ancestor repository is never authorized merely because a
+subfolder was opened. Repository identity combines workspace folder URI and
+repository path relative to it; path identity is case-sensitive except on
+Windows, and worktrees remain distinct even when they share a common Git
+directory.
 
 If `vscode.git` is unavailable, discovery probes each workspace folder with `git rev-parse --show-toplevel` and supports at least one repository per folder. The CLI remains the authority for comparison calculations.
 
@@ -191,6 +215,12 @@ every read-modify-write starts from the last persisted state; colliding order
 values from concurrent creation are moved to the next available order. It
 sorts pinned comparisons first while preserving explicit order within pinned
 and unpinned groups.
+
+Persisted comparisons remain stored when a workspace folder is removed, but
+the controller hides them immediately and revalidates the repository against
+fresh discovery before every calculation, export, copy, or document-opening
+action. They become visible again only if the same repository returns to the
+trusted workspace.
 
 ### ComparisonReviewStore
 
@@ -214,9 +244,12 @@ Accepts a comparison specification and cancellation token, resolves both refs, c
 
 For immutable endpoints the engine also requests a read-only merge forecast:
 `merge-tree --write-tree` computes in memory whether merging the target into
-the base would conflict, touching no worktree, index, or ref. Failures and
-older Git versions degrade to an absent forecast rather than an error, and
-Working Tree comparisons never request one because their endpoint is mutable.
+the base would conflict, touching no worktree, index, or ref. Before invoking
+it, the adapter checks every effective config scope and suppresses the forecast
+if an external `merge.*.driver` exists or the check fails; renormalization is
+disabled as an additional content-filter boundary. Failures and older Git
+versions degrade to an absent forecast rather than an error, and Working Tree
+comparisons never request one because their endpoint is mutable.
 
 ### CommitDetailsController and provider
 
@@ -302,7 +335,7 @@ that node's path to the tree root.
 
 ### Revision document provider
 
-The readonly `refhaven:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be canonical forward-slash Git paths and cannot be absolute, traverse, or change meaning on Windows. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
+The readonly `refhaven:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be repository-relative and traversal-free; Windows filesystem restrictions apply only on Windows, so valid POSIX names remain usable. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
 
 Renames use the old path at the from-SHA and the new path at the to-SHA. Binary files do not pass through the text provider; UI actions offer opening available revisions instead of a misleading text diff.
 
@@ -320,19 +353,52 @@ The provider filters cached metadata in memory and records changed-file
 statistics only after explicit expansion; refresh aborts and clears both
 in-flight and resolved per-stash state.
 
-`StashController` owns the single allowed mutation, **Stash This File...**.
-The Git adapter validates the literal repository-relative path, detects a
-rename pair, rejects conflicts and active content filters, and creates standard
-stash index/worktree commits from an isolated temporary index. `refs/stash` is
-updated with a compare-and-swap expected value before only the selected paths
-are restored to `HEAD`. Immediately before cleanup, the selected real-index
-entries and worktree paths are independently re-snapshotted and compared with
-the captured index/worktree trees, and HEAD is re-resolved. A mismatch leaves
-the newer state untouched; a match proceeds through one path-limited restore.
-Every plumbing command that can update an index or ref uses a private empty
-`core.hooksPath`; unrelated real index and worktree state is never copied into
-the stash or reset. The progress notification becomes non-cancellable once
-this bounded mutation begins.
+`StashController` also owns the explicit **Stash This File...** mutation. The
+file-action boundary resolves a canonical repository-relative target, prompts
+before touching a dirty matching VS Code document, saves it after the user
+confirms the stash message, and delegates the non-cancellable operation to
+`infrastructure/git/stashFile.ts`. A failed save stops before the Git mutation.
+The controller refreshes both RefHaven and built-in Source Control after any
+published stash. A complete transaction reports its stash SHA and, when one
+exists, offers the retained safety directory; an incomplete cleanup is
+presented as a warning that still identifies the already-created stash and
+offers the same directory.
+
+`stashFile.ts` serializes RefHaven mutations by canonical repository identity
+and implements the recovery contract independently of VS Code:
+
+- preflight accepts only changed, tracked regular files (and the two paths of a
+  detected rename), ordinary stage-zero index entries, no conflict, no active
+  content filter, no sparse or skip-worktree state, no symlink/gitlink, at most
+  64 MiB, and a worktree/Git safety directory on the same filesystem device;
+- repository-local temporary indices construct a standard stash whose first parent is
+  the captured `HEAD`, second parent records the selected index state, and main
+  tree records the selected worktree state; all non-selected paths match
+  `HEAD`;
+- `refs/stash` and a private recovery ref are published in one ref transaction,
+  with an expected-old-value compare-and-swap and Git hooks disabled. Failure
+  before publication leaves visible repository state untouched;
+- phase journals are synchronously written below the absolute Git directory's
+  `refhaven-recovery` folder before working-tree cleanup;
+- each existing selected path is atomically renamed into that folder and
+  verified, then the prepared `HEAD` file is linked into the now-empty path.
+  Hard-link creation is no-clobber: a concurrent recreation receives priority
+  and is never unlinked or overwritten;
+- selected-index cleanup prepares a full index from the raw captured index,
+  acquires the real `index.lock`, byte-compares the live index, synchronizes the
+  replacement, and atomically renames it into place. Movement of `HEAD`, the index, or
+  the working-tree path after stash publication produces a typed incomplete
+  result instead of a forced restore.
+
+Completed safety directories that contain an evacuated file are deliberately
+retained. This protects writes through a file handle opened before the atomic
+rename; automatic deletion would reintroduce a data-loss window. Incomplete
+journals are retained, and the command reports incomplete cleanup immediately
+with an action that reveals the directory. Recovery and deletion remain manual
+after the user has closed possible writers and verified the stash, worktree,
+and index. Successful finalization verifies `refs/stash` and removes the private
+recovery ref atomically. If that verification loses a race, the journal retains
+the ref for explicit cleanup with its expected stash SHA.
 
 ### Repository navigation
 

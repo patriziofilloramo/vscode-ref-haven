@@ -55,7 +55,7 @@ suite("git binary resolution", () => {
       isExecutableFile: (candidate) => candidate === "git" || candidate === "bin/git",
     });
     // "git" (empty entry → cwd) and "bin/git" (relative entry) must be rejected.
-    assert.equal(selectGitBinaryPath([], environment), "git");
+    assert.throws(() => selectGitBinaryPath([], environment), /absolute executable path/u);
   });
 
   test("probes Windows executable extensions including git.exe", () => {
@@ -63,13 +63,16 @@ suite("git binary resolution", () => {
     assert.equal(selectGitBinaryPath([], environment), "C:\\Program Files\\Git\\cmd\\git.exe");
   });
 
-  test("falls back to the bare name when nothing resolves", () => {
-    assert.equal(selectGitBinaryPath([], posixEnv([])), "git");
-    assert.equal(selectGitBinaryPath(["relative/git"], posixEnv([])), "git");
+  test("fails closed instead of returning a bare executable name", () => {
+    assert.throws(() => selectGitBinaryPath([], posixEnv([])), /absolute executable path/u);
+    assert.throws(
+      () => selectGitBinaryPath(["relative/git"], posixEnv([])),
+      /absolute executable path/u,
+    );
   });
 
-  test("treats an absent PATH as unresolved rather than throwing", () => {
+  test("treats an absent PATH as unresolved", () => {
     const environment = posixEnv([], { pathValue: undefined });
-    assert.equal(selectGitBinaryPath([], environment), "git");
+    assert.throws(() => selectGitBinaryPath([], environment), /absolute executable path/u);
   });
 });

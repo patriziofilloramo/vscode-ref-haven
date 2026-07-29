@@ -115,6 +115,13 @@ Statistics are obtained separately:
 git diff --no-ext-diff --no-textconv --numstat -z --find-renames <fromSha> <toSha> --
 ```
 
+For comparisons involving the working tree, RefHaven first neutralizes every
+configured executable content-filter driver. It then inspects only the paths
+reported by the protected diff with `git check-attr --stdin -z filter`. An
+active filter makes that working-tree operation fail explicitly; immutable
+revision-to-revision comparisons remain available because they do not invoke
+or approximate worktree conversion.
+
 The parser also honours NUL-delimited rename/copy path forms. Results are associated with name-status records using normalized path or old/new path pairs without losing original display paths. A binary marker of `-` additions and `-` deletions is represented as binary, never as zero changes.
 
 Totals are present only when meaningful. Missing or truncated statistics do not fabricate values.
@@ -145,37 +152,73 @@ Ref resolution distinguishes missing base from missing target. Missing objects m
 
 Raw stderr may inform redacted technical diagnostics but is never shown verbatim as the main user-facing error. A failed or invalid calculation never removes its saved comparison.
 
-## Single-file stash
+## Stash inspection and single-file creation
 
-`Stash This File...` is defined as:
+RefHaven reads existing stash commits using the same immutable-revision and
+literal-path rules as commit inspection. It can list stashes, expand changed
+files, open revisions and native comparisons, and search recent stash history.
 
-- include the selected tracked file's staged and unstaged state;
-- preserve the index parent so `git stash apply --index` can restore partial
-  staging;
-- treat a detected rename as one logical change containing its old and new
-  paths;
-- exclude all unrelated index/worktree changes and every untracked file;
-- reject unmerged paths, `.git` metadata, active `filter` attributes, and
-  invalid or stale workspace/repository context.
+**Stash This File...** accepts one changed tracked regular file. A detected
+rename selects both its old and new paths so the rename is represented as one
+operation. The input message is trimmed, must contain 1–500 characters, and is
+used in the ordinary `On <branch>: <message>` stash subject. Confirming the
+message saves a matching dirty VS Code document before the Git mutation begins;
+a failed or incomplete save stops the operation.
 
-RefHaven does not use `git stash push -- <path>` because supported Git versions
-cannot represent a complete staged rename through that path-limited command.
-Instead it starts a temporary index from `HEAD`, imports only the selected real
-index entries, updates only those paths from the worktree, writes the index and
-worktree trees, and creates the standard two-parent stash shape:
+For captured `HEAD` commit `H`, selected index state `I`, and selected
+working-tree state `W`, RefHaven constructs the standard two-parent stash
+shape:
 
 ```text
-stash commit W
-  parent 1: H (HEAD)
-  parent 2: I (selected index state)
+I-commit tree = H with only the selected path(s) replaced by I
+stash tree    = H with only the selected path(s) replaced by W
+stash parents = H, I-commit
 ```
 
-`refs/stash` is updated with `git update-ref --create-reflog` and an
-expected-old value. Only after the ref is safely reachable are selected paths
-restored to `HEAD`; a cleanup failure reports the new stash SHA and leaves the
-recoverable stash in place. Mutating commands override `core.hooksPath` with a
-private empty path, and the operation refuses content filters before any
-worktree/index mutation. Once started, it is intentionally not cancellable.
+This preserves separate staged and unstaged states, including partial staging,
+and remains compatible with Git's ordinary stash inspection and
+`git stash apply --index`. Every unselected entry in both trees is taken from
+`H`; unrelated staged and working-tree changes are therefore absent from the
+stash and remain untouched locally. There is no untracked third parent.
+
+Publication and cleanup have distinct outcomes. RefHaven verifies `HEAD`, the
+selected stage-zero index entries, and stable on-disk file fingerprints before
+atomically updating `refs/stash` and a private recovery ref. The stash update
+supplies the previously observed stash tip as the expected old value, so a concurrent stash publication fails without
+changing the selected file. After successful publication, the stash remains a
+valid result even if cleanup cannot safely finish.
+
+Working-tree cleanup never performs an unconditional checkout or restore. The
+captured path is atomically renamed into a same-filesystem Git metadata safety
+directory and verified there. The `H` version is materialized beforehand and
+installed with a hard link only while the destination name is absent. A
+concurrent writer that recreates the destination wins; `EEXIST` stops cleanup
+and the newer path is not removed or replaced. Deletions use the same
+absence/no-clobber rule. RefHaven derives a clean full index from the captured
+index, acquires the real `index.lock`, compares the live index byte for byte,
+synchronizes the lock, and atomically renames it into place. A mismatch or busy
+lock preserves newer index state.
+
+Before path evacuation, RefHaven writes a durable phase journal under
+`<absolute-git-dir>/refhaven-recovery/stash-*`. An incomplete post-publication
+operation reports both the stash and recovery directory immediately. When an
+existing file was evacuated, the completed journal and safety copy are also
+retained: an editor holding the pre-rename file open may continue writing that
+inode. RefHaven never automatically deletes these directories; removal is
+manual only after closing possible writers and verifying the stash, visible
+path, and index. Successful completion normally removes the private recovery
+ref. If the journal retains a non-null `recoveryRef`, delete it using the
+journal's `stashSha` as the expected old value before removing the directory.
+
+The command fails closed before publication for clean or untracked paths,
+conflicts, active `filter` attributes, sparse checkout, symlinks, gitlinks and
+other non-regular entries, special/non-stage-zero index entries, content over
+64 MiB, or a different filesystem device between the selected path and Git
+recovery directory. Failure of a required rename or no-clobber hard link after
+publication retains recovery state and reports incomplete cleanup. Git hooks
+are disabled throughout stash construction and ref publication. RefHaven does
+not expose apply, pop, drop, multi-file stash, include-untracked, or keep-index
+commands.
 
 ## GitLab browser URL semantics
 

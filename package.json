@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.13.5",
+  "version": "0.13.6",
   "publisher": "patriziofilloramo",
   "license": "MIT",
   "private": true,
@@ -45,7 +45,7 @@
     }
   },
   "engines": {
-    "node": ">=20 <21",
+    "node": "^22.13.0 || ^24.0.0",
     "vscode": "^1.105.0"
   },
   "categories": [
@@ -1315,16 +1315,11 @@
       "explorer/context": [
         {
           "submenu": "refhaven.fileActions",
-          "when": "resourceScheme == file",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
           "group": "navigation@19"
         }
       ],
       "scm/resourceState/context": [
-        {
-          "command": "refhaven.stashFile",
-          "when": "scmProvider == git",
-          "group": "navigation@18"
-        },
         {
           "submenu": "refhaven.fileActions",
           "when": "scmProvider == git",
@@ -1388,7 +1383,7 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "compile": "tsc -p tsconfig.json",
-    "compile:tests": "tsc -p test/tsconfig.json",
+    "compile:tests": "node scripts/clean-test-output.mjs && tsc -p test/tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint src test scripts *.mjs --max-warnings 0",

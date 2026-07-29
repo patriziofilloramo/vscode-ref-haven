@@ -1,21 +1,26 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 const WINDOWS_DRIVE_PATH = /^[a-z]:[\\/]/i;
+const WINDOWS_RESERVED_SEGMENT =
+  /^(?:(?:com|lpt)[1-9¹²³]|aux|clock\$|con|conin\$|conout\$|nul|prn)(?:\..*)?$/iu;
 
-/**
- * Git paths use forward slashes on every platform. Backslashes are rejected so
- * a path created on POSIX cannot become a directory traversal on Windows.
- */
+/** Validates Git paths for the filesystem semantics of the current host. */
 export function isRepositoryRelativeGitPath(filePath: unknown): filePath is string {
   if (typeof filePath !== "string" || filePath.length === 0 || filePath.includes("\0")) {
     return false;
   }
-  if (filePath.includes("\\") || filePath.startsWith("/") || WINDOWS_DRIVE_PATH.test(filePath)) {
+  if (filePath.startsWith("/")) {
+    return false;
+  }
+  if (
+    process.platform === "win32" &&
+    (filePath.includes("\\") || WINDOWS_DRIVE_PATH.test(filePath))
+  ) {
     return false;
   }
 
   const segments = filePath.split("/");
-  return segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+  return segments.every(isSafePathSegment);
 }
 
 export function assertRepositoryRelativeGitPath(filePath: unknown): asserts filePath is string {
@@ -49,4 +54,15 @@ export function resolvePathWithinRepository(repositoryRoot: string, filePath: un
 export function pathIdentityKey(filePath: string): string {
   const normalized = resolve(filePath);
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function isSafePathSegment(segment: string): boolean {
+  if (segment.length === 0 || segment === "." || segment === "..") return false;
+  if (process.platform !== "win32") return true;
+  return (
+    !segment.includes(":") &&
+    !segment.endsWith(".") &&
+    !segment.endsWith(" ") &&
+    !WINDOWS_RESERVED_SEGMENT.test(segment)
+  );
 }

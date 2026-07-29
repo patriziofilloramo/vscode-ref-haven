@@ -1,7 +1,3 @@
-import { lstat, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import * as vscode from "vscode";
 
 import type { FileBlameLine, LineBlame } from "../../domain/blame";
@@ -18,7 +14,6 @@ import {
   assertRepositoryRelativeGitPath,
   assertRepositoryWorktreeGitPath,
   pathIdentityKey,
-  resolvePathWithinRepository,
 } from "../../domain/pathValidation";
 import type { StashEntry } from "../../domain/stash";
 import type { WorktreeInfo } from "../../domain/worktree";
@@ -27,11 +22,13 @@ import { parseBranchRefs, parseComparisonRefs } from "./branchRefs";
 import { BRANCH_DETAILS_FORMAT, parseBranchDetails } from "./branchDetails";
 import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
 import { COMMIT_DETAILS_FORMAT, parseCommitDetails } from "./commitDetails";
+import { assertNoActiveContentFilters } from "./contentFilterGuard";
 import { parseChangedLineRanges } from "./diffHunks";
 import { FILE_HISTORY_LOG_FORMAT, parseFileHistory } from "./fileHistory";
 import { parseNameStatusZ } from "./nameStatus";
 import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
 import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
+import { createPathLimitedStash, type StashFileResult, type StashFileTestHooks } from "./stashFile";
 import { parseWorktreeList } from "./worktreeList";
 import { parseWorktreeStatus } from "./worktreeStatus";
 import {
@@ -40,19 +37,22 @@ import {
   runGit,
   runGitBuffer,
   runGitWithInput,
-  runGitWithTemporaryIndex,
 } from "./GitProcess";
 import { buildRepositoryIdentities } from "./repositoryDiscovery";
 
 const MAX_HOVER_DIFF_BYTES = 64 * 1024;
 const MAX_PATCH_BYTES = 64 * 1024 * 1024;
 export { GitOperationError } from "./GitProcess";
+export { findRepositoryRoot } from "./repositoryRoot";
+export { listPendingStashFileRecoveries, StashCleanupIncompleteError } from "./stashFile";
 
 interface GitApiRepository {
   readonly rootUri: vscode.Uri;
 }
 
 interface GitApi {
+  readonly onDidCloseRepository: vscode.Event<GitApiRepository>;
+  readonly onDidOpenRepository: vscode.Event<GitApiRepository>;
   readonly repositories: readonly GitApiRepository[];
 }
 
@@ -82,6 +82,14 @@ export async function discoverRepositories(signal?: AbortSignal): Promise<Reposi
       uri: folder.uri.toString(),
     })),
   );
+}
+
+/** Observes nested repositories opened or closed by VS Code's built-in Git extension. */
+export function watchGitRepositories(listener: () => void): vscode.Disposable {
+  const api = readActiveGitApi();
+  return api
+    ? vscode.Disposable.from(api.onDidOpenRepository(listener), api.onDidCloseRepository(listener))
+    : new vscode.Disposable(() => undefined);
 }
 
 export async function listBranchRefs(
@@ -181,7 +189,12 @@ export async function readWorktreeState(
     ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal"],
     signal,
   ).catch((error: unknown) => failGitOperation(error, "Git could not read the worktree state."));
-  return parseWorktreeStatus(stdout);
+  const state = parseWorktreeStatus(stdout);
+  if (state.unstaged > 0) {
+    const changedPaths = await readWorkingTreePathCandidates(worktreePath, undefined, signal);
+    await assertNoActiveContentFilters(worktreePath, changedPaths, signal);
+  }
+  return state;
 }
 
 export async function readCurrentBranch(
@@ -303,7 +316,12 @@ export async function listWorkingTreeChanges(
       signal,
     ),
   ]).catch((error: unknown) => failGitOperation(error, "Git could not compare the working tree."));
-  return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
+  const changes = mergeChangesWithStats(
+    parseNameStatusZ(nameStatusOutput),
+    parseNumstatZ(numstatOutput),
+  );
+  await assertNoActiveContentFilters(repositoryRoot, fileChangePaths(changes), signal);
+  return changes;
 }
 
 export async function listWorkingTreeFileChanges(
@@ -313,6 +331,7 @@ export async function listWorkingTreeFileChanges(
   signal?: AbortSignal,
 ): Promise<FileChange[]> {
   assertRepositoryRelativeGitPath(filePath);
+  await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   const baseArgs = ["diff", "--no-ext-diff", "--no-textconv"];
   const [nameStatusOutput, numstatOutput] = await Promise.all([
     runGit(
@@ -328,7 +347,12 @@ export async function listWorkingTreeFileChanges(
   ]).catch((error: unknown) =>
     failGitOperation(error, "Git could not compare this file with the working tree."),
   );
-  return mergeChangesWithStats(parseNameStatusZ(nameStatusOutput), parseNumstatZ(numstatOutput));
+  const changes = mergeChangesWithStats(
+    parseNameStatusZ(nameStatusOutput),
+    parseNumstatZ(numstatOutput),
+  );
+  await assertNoActiveContentFilters(repositoryRoot, fileChangePaths(changes), signal);
+  return changes;
 }
 
 export async function countAheadBehind(
@@ -497,6 +521,8 @@ export async function searchCommits(
     repositoryRoot,
     [
       "log",
+      "--no-ext-diff",
+      "--no-textconv",
       "--all",
       `--max-count=${limit.toString()}`,
       `--format=${COMMIT_LOG_FORMAT}`,
@@ -566,11 +592,17 @@ export async function listStashes(
   return parseStashList(stdout);
 }
 
+/**
+ * Creates a standard two-parent stash for one tracked path (or both sides of
+ * its rename), then cleans only that selection with exclusive filesystem
+ * publication and a durable recovery journal.
+ */
 export async function stashTrackedFile(
   repositoryRoot: string,
   filePath: string,
   message: string,
-): Promise<string> {
+  testHooks?: StashFileTestHooks,
+): Promise<StashFileResult> {
   assertRepositoryWorktreeGitPath(filePath);
   const normalizedMessage = message.trim();
   if (
@@ -578,12 +610,13 @@ export async function stashTrackedFile(
     normalizedMessage.length > MAX_STASH_MESSAGE_LENGTH ||
     normalizedMessage.includes("\0")
   ) {
-    throw new Error("The stash message must contain between 1 and 500 characters.");
+    throw new Error(
+      `The stash message must contain between 1 and ${MAX_STASH_MESSAGE_LENGTH.toString()} characters.`,
+    );
   }
 
   const headSha = await resolveRef(repositoryRoot, "HEAD");
   const branchName = (await readCurrentBranch(repositoryRoot)) ?? "(no branch)";
-  const stashSubject = `On ${branchName}: ${normalizedMessage}`;
   const workingTreeChanges = await listWorkingTreeChanges(repositoryRoot, headSha);
   const selectedChange = workingTreeChanges.find(
     ({ newPath, oldPath }) => newPath === filePath || oldPath === filePath,
@@ -592,141 +625,16 @@ export async function stashTrackedFile(
     selectedChange?.status === "renamed" && selectedChange.oldPath
       ? [selectedChange.oldPath, selectedChange.newPath]
       : [filePath];
-  const [status, unmerged, attributes] = await Promise.all([
-    runGit(repositoryRoot, [
-      "status",
-      "--porcelain=v2",
-      "-z",
-      "--untracked-files=no",
-      "--",
-      ...pathspecs,
-    ]),
-    runGit(repositoryRoot, ["ls-files", "--unmerged", "-z", "--", ...pathspecs]),
-    runGit(repositoryRoot, ["check-attr", "-z", "filter", "--", ...pathspecs]),
-  ]).catch((error: unknown) =>
-    failGitOperation(error, "Git could not inspect the selected file before stashing it."),
-  );
-  if (status.length === 0) {
-    throw new Error("The selected file has no tracked changes to stash.");
-  }
-  if (unmerged.length > 0) {
-    throw new Error("Resolve the selected file's merge conflicts before stashing it.");
-  }
-  if (hasActiveGitFilter(attributes)) {
-    throw new Error(
-      "RefHaven will not stash a file with an active Git content filter. Use an approved local workflow for this repository.",
-    );
-  }
+  for (const pathspec of pathspecs) assertRepositoryWorktreeGitPath(pathspec);
 
-  const previousStash = await resolveOptionalCommit(repositoryRoot, "refs/stash");
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), "refhaven-stash-index-")).catch(
-    (error: unknown) =>
-      failGitOperation(error, "RefHaven could not create secure temporary Git state."),
-  );
-  const temporaryIndex = join(temporaryDirectory, "index");
-  const disabledHooksPath = join(temporaryDirectory, "hooks-disabled");
-  try {
-    const { indexTree, stashCommit, worktreeTree } = await createPathLimitedStashCommit(
-      repositoryRoot,
-      headSha,
-      branchName,
-      normalizedMessage,
-      pathspecs,
-      temporaryIndex,
-      disabledHooksPath,
-    ).catch((error: unknown) =>
-      failGitOperation(
-        error,
-        "Git could not safely create the file stash. The selected file was not changed.",
-      ),
-    );
-    const expectedOldValue = previousStash ?? "0".repeat(stashCommit.length);
-    await runGit(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, [
-        "update-ref",
-        "--create-reflog",
-        "-m",
-        stashSubject,
-        "refs/stash",
-        stashCommit,
-        expectedOldValue,
-      ]),
-    ).catch((error: unknown) =>
-      failGitOperation(
-        error,
-        "Another process changed the stash list. RefHaven left the selected file untouched.",
-      ),
-    );
-
-    // The index or worktree may have gained new edits while the stash commit
-    // was being built. Re-snapshot both selected states and only clean them
-    // when they still match the captured trees.
-    const verificationIndexTree = await snapshotSelectedIndexTree(
-      repositoryRoot,
-      headSha,
-      pathspecs,
-      temporaryIndex,
-      disabledHooksPath,
-    ).catch((error: unknown) =>
-      failGitOperation(
-        error,
-        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not re-verify the selected index state. The file was left untouched.`,
-      ),
-    );
-    if (verificationIndexTree !== indexTree) {
-      throw new Error(
-        `The stash was created as ${stashCommit.slice(0, 8)}, but the selected index state changed while stashing. RefHaven left the newer state untouched; review both states before retrying.`,
-      );
-    }
-
-    const verificationWorktreeTree = await snapshotWorktreeTree(
-      repositoryRoot,
-      pathspecs,
-      temporaryIndex,
-      disabledHooksPath,
-    ).catch((error: unknown) =>
-      failGitOperation(
-        error,
-        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not re-verify the selected file. The file was left untouched.`,
-      ),
-    );
-    if (verificationWorktreeTree !== worktreeTree) {
-      throw new Error(
-        `The stash was created as ${stashCommit.slice(0, 8)}, but the selected file changed while stashing. RefHaven left the newer content untouched; review both states before retrying.`,
-      );
-    }
-    const verificationHeadSha = await resolveRef(repositoryRoot, "HEAD").catch((error: unknown) =>
-      failGitOperation(
-        error,
-        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not re-verify HEAD. The file was left untouched.`,
-      ),
-    );
-    if (verificationHeadSha !== headSha) {
-      throw new Error(
-        `The stash was created as ${stashCommit.slice(0, 8)}, but HEAD changed while stashing. RefHaven left the newer repository state untouched; review both states before retrying.`,
-      );
-    }
-
-    try {
-      await restorePathsFromHead(repositoryRoot, headSha, pathspecs, disabledHooksPath);
-    } catch (error) {
-      throw new Error(
-        `The stash was created as ${stashCommit.slice(0, 8)}, but Git could not fully clean the selected file. Refresh Source Control and inspect both states before continuing.`,
-        { cause: error },
-      );
-    }
-    return stashCommit;
-  } finally {
-    await rm(temporaryDirectory, { force: true, recursive: true }).catch(() => undefined);
-  }
-}
-
-/** Resolves the repository root containing `directory`, or null outside a repo. */
-export async function findRepositoryRoot(directory: string): Promise<string | null> {
-  const stdout = await runGit(directory, ["rev-parse", "--show-toplevel"]).catch(() => null);
-  const rootPath = stdout?.trim();
-  return rootPath && rootPath.length > 0 ? rootPath : null;
+  return createPathLimitedStash({
+    branchName,
+    headSha,
+    message: normalizedMessage,
+    pathspecs,
+    repositoryRoot,
+    ...(testHooks ? { testHooks } : {}),
+  });
 }
 
 export async function readGitUserName(repositoryRoot: string): Promise<string | null> {
@@ -755,8 +663,12 @@ export async function blameLine(
       throw new Error("Blame accepts either buffer contents or a revision, not both.");
     }
   }
+  if (revision === undefined) {
+    await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
+  }
   const args = [
     "blame",
+    "--no-textconv",
     "--porcelain",
     "-L",
     `${line.toString()},${line.toString()}`,
@@ -781,8 +693,10 @@ export async function blameFile(
   signal?: AbortSignal,
 ): Promise<FileBlameLine[]> {
   assertRepositoryRelativeGitPath(filePath);
+  await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   const args = [
     "blame",
+    "--no-textconv",
     "--line-porcelain",
     "--root",
     ...(contents === undefined ? [] : ["--contents", "-"]),
@@ -803,6 +717,7 @@ export async function listChangedLineRanges(
 ): Promise<ChangedLineRange[]> {
   assertRepositoryRelativeGitPath(filePath);
   if (!isGitObjectId(baseSha)) throw new Error("The base commit SHA is invalid.");
+  await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   const stdout = await runGit(
     repositoryRoot,
     ["diff", "--no-ext-diff", "--no-textconv", "--unified=0", baseSha, "--", filePath],
@@ -905,33 +820,39 @@ export async function readComparisonPatch(
       throw new Error("The patch revision is invalid.");
     }
   }
-  const pathspecArgs = filePaths.length > 0 ? ["--", ...filePaths] : [];
-  let args: string[];
-  if (fromSha !== null) {
-    args = [
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--find-renames",
-      "--patch",
-      fromSha,
-      ...(toSha === null ? [] : [toSha]),
-      ...pathspecArgs,
-    ];
-  } else if (toSha !== null) {
-    args = [
-      "show",
-      "--format=",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--find-renames",
-      "--patch",
-      toSha,
-      ...pathspecArgs,
-    ];
-  } else {
+  if (fromSha === null && toSha === null) {
     throw new Error("A patch needs at least one resolved revision.");
   }
+  const pathspecArgs = filePaths.length > 0 ? ["--", ...filePaths] : [];
+  if (toSha === null) {
+    const candidatePaths =
+      filePaths.length > 0
+        ? filePaths
+        : await readWorkingTreePathCandidates(repositoryRoot, fromSha ?? undefined, signal);
+    await assertNoActiveContentFilters(repositoryRoot, candidatePaths, signal);
+  }
+  const args =
+    fromSha !== null
+      ? [
+          "diff",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--find-renames",
+          "--patch",
+          fromSha,
+          ...(toSha === null ? [] : [toSha]),
+          ...pathspecArgs,
+        ]
+      : [
+          "show",
+          "--format=",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--find-renames",
+          "--patch",
+          requirePatchTarget(toSha),
+          ...pathspecArgs,
+        ];
   const stdout = await runGitBuffer(repositoryRoot, args, signal, MAX_PATCH_BYTES).catch(
     (error: unknown) =>
       failGitOperation(error, "Git could not produce a patch for this selection."),
@@ -955,187 +876,6 @@ export async function resolveGitMetadataPaths(
       }),
     ).values(),
   ];
-}
-
-function hasActiveGitFilter(output: string): boolean {
-  const fields = output.split("\0");
-  if (fields.at(-1) === "") fields.pop();
-  if (fields.length % 3 !== 0) return true;
-  for (let index = 2; index < fields.length; index += 3) {
-    const value = fields[index];
-    if (value !== "unspecified" && value !== "unset") return true;
-  }
-  return false;
-}
-
-async function createPathLimitedStashCommit(
-  repositoryRoot: string,
-  headSha: string,
-  branchName: string,
-  message: string,
-  pathspecs: readonly string[],
-  temporaryIndex: string,
-  disabledHooksPath: string,
-): Promise<{
-  readonly indexTree: string;
-  readonly stashCommit: string;
-  readonly worktreeTree: string;
-}> {
-  const indexTree = await snapshotSelectedIndexTree(
-    repositoryRoot,
-    headSha,
-    pathspecs,
-    temporaryIndex,
-    disabledHooksPath,
-  );
-  const indexCommit = parseObjectId(
-    await runGitWithInput(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, ["commit-tree", indexTree, "-p", headSha]),
-      `index on ${branchName}: ${headSha.slice(0, 8)} ${message}\n`,
-    ),
-    "Git returned an invalid stash index commit.",
-  );
-
-  const worktreeTree = await snapshotWorktreeTree(
-    repositoryRoot,
-    pathspecs,
-    temporaryIndex,
-    disabledHooksPath,
-  );
-  const stashCommit = parseObjectId(
-    await runGitWithInput(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, [
-        "commit-tree",
-        worktreeTree,
-        "-p",
-        headSha,
-        "-p",
-        indexCommit,
-      ]),
-      `On ${branchName}: ${message}\n`,
-    ),
-    "Git returned an invalid stash commit.",
-  );
-  return { indexTree, stashCommit, worktreeTree };
-}
-
-/** Snapshots only the selected real-index entries on top of HEAD. */
-async function snapshotSelectedIndexTree(
-  repositoryRoot: string,
-  headSha: string,
-  pathspecs: readonly string[],
-  temporaryIndex: string,
-  disabledHooksPath: string,
-): Promise<string> {
-  await runGitWithTemporaryIndex(
-    repositoryRoot,
-    withoutGitHooks(disabledHooksPath, ["read-tree", headSha]),
-    temporaryIndex,
-  );
-  await runGitWithTemporaryIndex(
-    repositoryRoot,
-    withoutGitHooks(disabledHooksPath, ["update-index", "--force-remove", "--", ...pathspecs]),
-    temporaryIndex,
-  );
-  const selectedIndexEntries = await runGit(repositoryRoot, [
-    "ls-files",
-    "--stage",
-    "-z",
-    "--",
-    ...pathspecs,
-  ]);
-  if (selectedIndexEntries.length > 0) {
-    await runGitWithInput(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, ["update-index", "-z", "--index-info"]),
-      selectedIndexEntries,
-      undefined,
-      temporaryIndex,
-    );
-  }
-  const indexTree = parseObjectId(
-    await runGitWithTemporaryIndex(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, ["write-tree"]),
-      temporaryIndex,
-    ),
-    "Git returned an invalid temporary index tree.",
-  );
-  return indexTree;
-}
-
-/** Snapshots the selected worktree paths into the temporary index and returns their tree. */
-async function snapshotWorktreeTree(
-  repositoryRoot: string,
-  pathspecs: readonly string[],
-  temporaryIndex: string,
-  disabledHooksPath: string,
-): Promise<string> {
-  await updateTemporaryIndexFromWorktree(
-    repositoryRoot,
-    pathspecs,
-    temporaryIndex,
-    disabledHooksPath,
-  );
-  return parseObjectId(
-    await runGitWithTemporaryIndex(
-      repositoryRoot,
-      withoutGitHooks(disabledHooksPath, ["write-tree"]),
-      temporaryIndex,
-    ),
-    "Git returned an invalid temporary worktree tree.",
-  );
-}
-
-async function updateTemporaryIndexFromWorktree(
-  repositoryRoot: string,
-  pathspecs: readonly string[],
-  temporaryIndex: string,
-  disabledHooksPath: string,
-): Promise<void> {
-  for (const filePath of pathspecs) {
-    try {
-      await lstat(resolvePathWithinRepository(repositoryRoot, filePath));
-      await runGitWithTemporaryIndex(
-        repositoryRoot,
-        withoutGitHooks(disabledHooksPath, ["add", "--", filePath]),
-        temporaryIndex,
-      );
-    } catch (error) {
-      const candidate = error as { readonly code?: unknown };
-      if (candidate.code !== "ENOENT") throw error;
-      await runGitWithTemporaryIndex(
-        repositoryRoot,
-        withoutGitHooks(disabledHooksPath, ["update-index", "--force-remove", "--", filePath]),
-        temporaryIndex,
-      );
-    }
-  }
-}
-
-async function restorePathsFromHead(
-  repositoryRoot: string,
-  headSha: string,
-  pathspecs: readonly string[],
-  disabledHooksPath: string,
-): Promise<void> {
-  await runGit(
-    repositoryRoot,
-    withoutGitHooks(disabledHooksPath, [
-      "restore",
-      `--source=${headSha}`,
-      "--staged",
-      "--worktree",
-      "--",
-      ...pathspecs,
-    ]),
-  );
-}
-
-function withoutGitHooks(hooksPath: string, args: readonly string[]): string[] {
-  return ["-c", `core.hooksPath=${hooksPath}`, ...args];
 }
 
 function isSafeRemoteName(value: string): boolean {
@@ -1163,26 +903,56 @@ function isBlobLsTreeHeader(value: string): boolean {
   );
 }
 
-async function resolveOptionalCommit(repositoryRoot: string, ref: string): Promise<string | null> {
-  const stdout = await runGit(repositoryRoot, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
-    `${ref}^{commit}`,
-  ]).catch((error: unknown) => preserveControlErrorOrNull(error));
-  return stdout === null ? null : parseObjectId(stdout, `Git returned an invalid ${ref} revision.`);
+function discoverFromGitExtension(): string[] {
+  const api = readActiveGitApi();
+  return api?.repositories.map(({ rootUri }) => rootUri.fsPath) ?? [];
 }
 
-function discoverFromGitExtension(): string[] {
+function readActiveGitApi(): GitApi | null {
   try {
     const extension = vscode.extensions.getExtension<GitExtensionExports>("vscode.git");
-    if (!extension?.isActive) return [];
+    if (!extension?.isActive) return null;
     const exports = extension.exports;
-    if (!exports.enabled) return [];
-    return exports.getAPI(1).repositories.map(({ rootUri }) => rootUri.fsPath);
+    return exports.enabled ? exports.getAPI(1) : null;
   } catch {
-    return [];
+    return null;
   }
+}
+
+function fileChangePaths(changes: readonly FileChange[]): string[] {
+  return changes.flatMap(({ newPath, oldPath }) =>
+    oldPath === undefined ? [newPath] : [newPath, oldPath],
+  );
+}
+
+function requirePatchTarget(sha: string | null): string {
+  if (sha === null) throw new Error("A patch needs at least one resolved revision.");
+  return sha;
+}
+
+async function readWorkingTreePathCandidates(
+  repositoryRoot: string,
+  fromSha: string | undefined,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const output = await runGit(
+    repositoryRoot,
+    [
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--name-only",
+      "-z",
+      ...(fromSha === undefined ? [] : [fromSha]),
+      "--",
+    ],
+    signal,
+  );
+  if (output.length === 0) return [];
+  if (!output.endsWith("\0")) throw new Error("Git returned an invalid changed-path list.");
+  const paths = output.slice(0, -1).split("\0");
+  for (const filePath of paths) assertRepositoryWorktreeGitPath(filePath);
+  return paths;
 }
 
 function failGitOperation(error: unknown, safeMessage: string): never {

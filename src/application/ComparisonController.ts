@@ -66,8 +66,12 @@ const FILES_LAYOUT_CONTEXT_KEY = "refhaven.filesLayout";
 const FILE_FILTER_STORAGE_KEY = "refhaven.view.comparisonFileFilter";
 const FILE_SORT_STORAGE_KEY = "refhaven.view.comparisonFileSort";
 
+type RepositoryDiscovery = () => Promise<readonly RepositoryIdentity[]>;
+
 export class ComparisonController {
+  private readonly availableRepositoryRoots = new Set<string>();
   private readonly reviewNavigationAnchors = new Map<string, string>();
+  private workspaceRepositoryRefreshGeneration = 0;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
@@ -77,6 +81,7 @@ export class ComparisonController {
     private readonly logger: Logger,
     private readonly revisionProvider: GitRevisionContentProvider,
     private readonly reviewStore: ComparisonReviewStore,
+    private readonly repositoryDiscovery: RepositoryDiscovery = discoverRepositories,
   ) {}
 
   public initialize(): void {
@@ -88,7 +93,10 @@ export class ComparisonController {
     this.treeProvider.setFileSort(isComparisonFileSort(sort) ? sort : "path");
     this.treeProvider.setReviewStateProvider((result) => this.reviewStore.getSummary(result));
     const comparisons = this.store.getAll();
-    this.treeProvider.setComparisons(comparisons);
+    // Repository discovery is asynchronous. Keep persisted comparisons hidden
+    // until their repository roots have been re-established from the current
+    // trusted workspace rather than trusting paths restored from storage.
+    this.setVisibleComparisons(comparisons);
     void this.reviewStore
       .prune(new Set(comparisons.map(({ id }) => id)))
       .catch((error: unknown) => {
@@ -97,6 +105,35 @@ export class ComparisonController {
           errorLogMetadata(error, "pruneComparisonReviews"),
         );
       });
+  }
+
+  /**
+   * Re-evaluates which persisted comparisons belong to the current workspace.
+   * Stored comparisons are intentionally retained so they can reappear if their
+   * workspace folder is added again later.
+   */
+  public async refreshAvailableComparisons(clearBeforeDiscovery = true): Promise<void> {
+    const generation = ++this.workspaceRepositoryRefreshGeneration;
+
+    if (clearBeforeDiscovery) {
+      // Close the time-of-check gap on workspace-folder removal: stale nodes
+      // become unavailable before asynchronous discovery starts.
+      this.availableRepositoryRoots.clear();
+      this.treeProvider.invalidateAllResults();
+      this.setVisibleComparisons(this.store.getAll());
+    }
+
+    const repositories = await this.repositoryDiscovery();
+    if (generation !== this.workspaceRepositoryRefreshGeneration) return;
+
+    this.availableRepositoryRoots.clear();
+    for (const { rootPath } of repositories) {
+      this.availableRepositoryRoots.add(pathIdentityKey(rootPath));
+    }
+    // Discovery changes which comparisons are available, not their immutable
+    // Git results. setComparisons removes state for comparisons that disappeared
+    // while preserving cached results for those that remain visible.
+    this.setVisibleComparisons(this.store.getAll());
   }
 
   public async newComparison(): Promise<void> {
@@ -112,7 +149,7 @@ export class ComparisonController {
     targetRef: BranchRef,
   ): Promise<void> {
     const expectedRoot = pathIdentityKey(repository.rootPath);
-    const canonicalRepository = (await discoverRepositories()).find(
+    const canonicalRepository = (await this.repositoryDiscovery()).find(
       ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
     );
     if (!canonicalRepository) {
@@ -153,7 +190,7 @@ export class ComparisonController {
     targetRef: BranchRef,
   ): Promise<void> {
     const expectedRoot = pathIdentityKey(repository.rootPath);
-    const canonicalRepository = (await discoverRepositories()).find(
+    const canonicalRepository = (await this.repositoryDiscovery()).find(
       ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
     );
     if (!canonicalRepository) {
@@ -183,15 +220,17 @@ export class ComparisonController {
   public refreshAll(): void {
     const comparisons = this.store.getAll();
     this.treeProvider.invalidateAllResults();
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info("Refreshed saved comparisons", {
-      count: comparisons.length,
+      count: this.visibleComparisons(comparisons).length,
       operation: "refreshAll",
     });
   }
 
   public refreshComparison(comparison: SavedComparisonV1): void {
-    this.treeProvider.invalidateResult(comparison.id);
+    const current = this.requireStoredComparison(comparison);
+    this.assertCachedRepositoryRoot(current.repository.rootPath);
+    this.treeProvider.invalidateResult(current.id);
     this.logger.info("Refreshed comparison", { operation: "refreshComparison" });
   }
 
@@ -199,7 +238,11 @@ export class ComparisonController {
   public refreshWorkingTreeComparisons(): void {
     const workingTreeComparisons = this.store
       .getAll()
-      .filter((comparison) => comparison.mode === "workingTree");
+      .filter(
+        (comparison) =>
+          comparison.mode === "workingTree" &&
+          this.availableRepositoryRoots.has(pathIdentityKey(comparison.repository.rootPath)),
+      );
     this.treeProvider.invalidateResults(new Set(workingTreeComparisons.map(({ id }) => id)));
     if (workingTreeComparisons.length > 0) {
       this.logger.debug("Invalidated working-tree comparisons", {
@@ -210,6 +253,7 @@ export class ComparisonController {
   }
 
   public async swapComparison(comparison: SavedComparisonV1): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     if (comparison.mode === "workingTree") {
       void vscode.window.showInformationMessage("Working-tree comparisons cannot be swapped.");
       return;
@@ -231,7 +275,7 @@ export class ComparisonController {
     await this.reviewStore.removeComparison(comparison.id);
     this.reviewNavigationAnchors.delete(comparison.id);
     this.treeProvider.invalidateResult(comparison.id);
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info("Swapped comparison direction", { operation: "swapComparison" });
   }
 
@@ -241,6 +285,7 @@ export class ComparisonController {
    * target has no commits of its own, which branch-changes renders as empty.
    */
   public async changeComparisonMode(comparison: SavedComparisonV1): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     if (comparison.mode === "workingTree") {
       void vscode.window.showInformationMessage(
         "Working-tree comparisons have a fixed comparison mode.",
@@ -287,7 +332,7 @@ export class ComparisonController {
     await this.reviewStore.removeComparison(comparison.id);
     this.reviewNavigationAnchors.delete(comparison.id);
     this.treeProvider.invalidateResult(comparison.id);
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info("Changed comparison mode", {
       mode: selected.mode,
       operation: "changeComparisonMode",
@@ -295,10 +340,11 @@ export class ComparisonController {
   }
 
   public async setPinned(comparison: SavedComparisonV1, pinned: boolean): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     const comparisons = await this.store.replace(comparison.id, (current) =>
       withPinned(current, pinned, Date.now()),
     );
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info(pinned ? "Pinned comparison" : "Unpinned comparison", {
       operation: "setPinned",
     });
@@ -306,6 +352,7 @@ export class ComparisonController {
 
   /** Sets or clears the comparison's display name; an empty input restores the default. */
   public async renameComparison(comparison: SavedComparisonV1): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     const defaultLabel = `${comparison.targetRef.displayName} relative to ${comparison.baseRef.displayName}`;
     const value = await vscode.window.showInputBox({
       ignoreFocusOut: true,
@@ -326,21 +373,23 @@ export class ComparisonController {
     const comparisons = await this.store.replace(comparison.id, (current) =>
       withCustomLabel(current, trimmed.length === 0 ? undefined : trimmed, Date.now()),
     );
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info(trimmed.length === 0 ? "Restored comparison label" : "Renamed comparison", {
       operation: "renameComparison",
     });
   }
 
   public async closeComparison(comparison: SavedComparisonV1): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     const comparisons = await this.store.remove(comparison.id);
     await this.reviewStore.removeComparison(comparison.id);
     this.reviewNavigationAnchors.delete(comparison.id);
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info("Closed comparison", { operation: "closeComparison" });
   }
 
   public async copyComparisonSummary(comparison: SavedComparisonV1): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     let summary = `${comparisonLabel(comparison)} (${comparison.repository.label})`;
     try {
       const result = await this.calculateComparison(comparison);
@@ -372,6 +421,7 @@ export class ComparisonController {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
     }
+    await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
     if (file.status === "deleted") {
       void vscode.window.showInformationMessage(`${file.newPath} was deleted in this comparison.`);
       return;
@@ -395,6 +445,7 @@ export class ComparisonController {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
     }
+    await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
 
     if (file.status !== "deleted" && scope.toSha === null) {
       await this.openWorkingTreeFile(scope, file);
@@ -421,7 +472,9 @@ export class ComparisonController {
     comparison: SavedComparisonV1,
     destination: "clipboard" | "file",
   ): Promise<void> {
+    comparison = await this.requireAvailableStoredComparison(comparison);
     const result = await this.treeProvider.loadComparisonResult(comparison.id);
+    await this.assertKnownRepositoryRoot(result.comparison.repository.rootPath);
     const patch = await readComparisonPatch(
       result.comparison.repository.rootPath,
       result.fromSha,
@@ -483,6 +536,7 @@ export class ComparisonController {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
     }
+    await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
     await vscode.env.clipboard.writeText(
       resolvePathWithinRepository(scope.repositoryRootPath, file.newPath),
     );
@@ -493,6 +547,7 @@ export class ComparisonController {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
     }
+    await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
     await vscode.env.clipboard.writeText(file.newPath);
     showTransientSuccess("Relative file path copied");
   }
@@ -584,24 +639,30 @@ export class ComparisonController {
       void vscode.window.showWarningMessage("The active file is not inside a Git repository.");
       return;
     }
-    const relativePath = relative(repositoryRoot, fsPath).replaceAll("\\", "/");
+    const canonicalRepository = await this.assertKnownRepositoryRoot(repositoryRoot);
+    const canonicalRepositoryRoot = canonicalRepository.rootPath;
+    const relativePath = relative(canonicalRepositoryRoot, fsPath).replaceAll("\\", "/");
 
-    const branches = await listComparisonRefs(repositoryRoot);
+    const branches = await listComparisonRefs(canonicalRepositoryRoot);
     if (branches.length === 0) {
       void vscode.window.showWarningMessage("This repository has no branches to open from.");
       return;
     }
-    const currentBranchName = await readCurrentBranch(repositoryRoot);
+    const currentBranchName = await readCurrentBranch(canonicalRepositoryRoot);
     const ref = await pickBranch(
       branches,
       `Select the revision of ${relativePath} to open`,
       currentBranchName,
-      repositoryRoot,
+      canonicalRepositoryRoot,
     );
     if (!ref) return;
 
-    const revisionSha = await resolveRef(repositoryRoot, ref.fullName);
-    const uri = this.revisionProvider.createRevisionUri(repositoryRoot, revisionSha, relativePath);
+    const revisionSha = await resolveRef(canonicalRepositoryRoot, ref.fullName);
+    const uri = this.revisionProvider.createRevisionUri(
+      canonicalRepositoryRoot,
+      revisionSha,
+      relativePath,
+    );
     await vscode.window.showTextDocument(uri, { preview: true });
     this.logger.info("Opened file at revision", { operation: "openFileAtRevision" });
   }
@@ -681,6 +742,7 @@ export class ComparisonController {
 
   public async markFileReviewed(node: FileNode, reviewed: boolean): Promise<void> {
     if (!node.review) throw new Error("Select a file from a saved comparison first.");
+    await this.requireAvailableStoredComparisonById(node.review.comparisonId);
     const result = await this.treeProvider.loadComparisonResult(node.review.comparisonId);
     await this.reviewStore.setReviewed(
       result,
@@ -712,9 +774,10 @@ export class ComparisonController {
     const candidateComparison = candidate && "schemaVersion" in candidate ? candidate : undefined;
     const candidateFile = candidate && "kind" in candidate ? candidate : undefined;
     const comparison = candidateComparison
-      ? this.requireStoredComparison(candidateComparison)
+      ? await this.requireAvailableStoredComparison(candidateComparison)
       : await this.pickReviewComparison(candidateFile?.review?.comparisonId);
     if (!comparison) return;
+    await this.assertKnownRepositoryRoot(comparison.repository.rootPath);
     const result = await this.treeProvider.loadComparisonResult(comparison.id);
     const review = this.reviewStore.getSummary(result);
     const files = filterAndSortComparisonFiles(
@@ -753,9 +816,10 @@ export class ComparisonController {
 
   public async quickOpenComparisonFile(comparison?: SavedComparisonV1): Promise<void> {
     const selectedComparison = comparison
-      ? this.requireStoredComparison(comparison)
+      ? await this.requireAvailableStoredComparison(comparison)
       : await this.pickReviewComparison();
     if (!selectedComparison) return;
+    await this.assertKnownRepositoryRoot(selectedComparison.repository.rootPath);
     const result = await this.treeProvider.loadComparisonResult(selectedComparison.id);
     const review = this.reviewStore.getSummary(result);
     const files = filterAndSortComparisonFiles(
@@ -790,21 +854,24 @@ export class ComparisonController {
     await this.openFileDiff(comparisonScope(result), selected.file);
   }
 
-  public calculateComparison(
+  public async calculateComparison(
     comparison: SavedComparisonV1,
     signal?: AbortSignal,
   ): Promise<ComparisonResult> {
+    const current = this.requireStoredComparison(comparison);
+    const repository = await this.assertKnownRepositoryRoot(current.repository.rootPath);
     this.logger.info("Calculating comparison", {
-      mode: comparison.mode,
+      mode: current.mode,
       operation: "calculateComparison",
     });
-    return calculateComparison(comparison, signal);
+    return calculateComparison({ ...current, repository }, signal);
   }
 
   public async openFileDiff(scope: FileDiffScope, file: FileChange): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
     }
+    await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
 
     const { left, right } = this.createFileDiffUris(scope, file);
 
@@ -823,8 +890,9 @@ export class ComparisonController {
   }
 
   public async openAllComparisonChanges(comparison: SavedComparisonV1): Promise<void> {
-    const current = this.requireStoredComparison(comparison);
+    const current = await this.requireAvailableStoredComparison(comparison);
     const result = await this.treeProvider.loadComparisonResult(current.id);
+    await this.assertKnownRepositoryRoot(result.comparison.repository.rootPath);
     const scope = comparisonScope(result);
     const textFiles = result.files.filter(
       ({ additions, deletions }) => additions !== undefined || deletions !== undefined,
@@ -879,7 +947,7 @@ export class ComparisonController {
   }
 
   private async pickReviewComparison(preferredId?: string): Promise<SavedComparisonV1 | undefined> {
-    const comparisons = this.store.getAll();
+    const comparisons = await this.availableStoredComparisons();
     const preferred = preferredId
       ? comparisons.find((comparison) => comparison.id === preferredId)
       : undefined;
@@ -904,29 +972,78 @@ export class ComparisonController {
     return selected?.comparison;
   }
 
+  private async availableStoredComparisons(): Promise<readonly SavedComparisonV1[]> {
+    const repositories = await this.repositoryDiscovery();
+    const availableRoots = new Set(repositories.map(({ rootPath }) => pathIdentityKey(rootPath)));
+    return this.store
+      .getAll()
+      .filter(({ repository }) => availableRoots.has(pathIdentityKey(repository.rootPath)));
+  }
+
+  private visibleComparisons(
+    comparisons: readonly SavedComparisonV1[],
+  ): readonly SavedComparisonV1[] {
+    return comparisons.filter(({ repository }) =>
+      this.availableRepositoryRoots.has(pathIdentityKey(repository.rootPath)),
+    );
+  }
+
+  private setVisibleComparisons(comparisons: readonly SavedComparisonV1[]): void {
+    this.treeProvider.setComparisons(this.visibleComparisons(comparisons));
+  }
+
+  private assertCachedRepositoryRoot(repositoryRootPath: string): void {
+    if (!this.availableRepositoryRoots.has(pathIdentityKey(repositoryRootPath))) {
+      throw new Error("The selected repository is not part of the current workspace.");
+    }
+  }
+
   private requireStoredComparison(comparison: SavedComparisonV1): SavedComparisonV1 {
     const current = this.store.getAll().find(({ id }) => id === comparison.id);
     if (!current) throw new Error("The selected comparison is no longer available.");
     return current;
   }
 
-  private async requireReviewResult(comparison: SavedComparisonV1): Promise<ComparisonResult> {
+  private async requireAvailableStoredComparison(
+    comparison: SavedComparisonV1,
+  ): Promise<SavedComparisonV1> {
     const current = this.requireStoredComparison(comparison);
+    await this.assertKnownRepositoryRoot(current.repository.rootPath);
+    return current;
+  }
+
+  private async requireAvailableStoredComparisonById(
+    comparisonId: string,
+  ): Promise<SavedComparisonV1> {
+    const current = this.store.getAll().find(({ id }) => id === comparisonId);
+    if (!current) throw new Error("The selected comparison is no longer available.");
+    await this.assertKnownRepositoryRoot(current.repository.rootPath);
+    return current;
+  }
+
+  private async requireReviewResult(comparison: SavedComparisonV1): Promise<ComparisonResult> {
+    const current = await this.requireAvailableStoredComparison(comparison);
     return this.treeProvider.loadComparisonResult(current.id);
   }
 
-  private async assertKnownRepositoryRoot(repositoryRootPath: string): Promise<void> {
+  private async assertKnownRepositoryRoot(repositoryRootPath: string): Promise<RepositoryIdentity> {
+    const generation = this.workspaceRepositoryRefreshGeneration;
     const expected = pathIdentityKey(repositoryRootPath);
-    const repositories = await discoverRepositories();
-    if (!repositories.some(({ rootPath }) => pathIdentityKey(rootPath) === expected)) {
+    const repositories = await this.repositoryDiscovery();
+    if (generation !== this.workspaceRepositoryRefreshGeneration) {
+      throw new Error("The workspace changed while validating the selected repository.");
+    }
+    const repository = repositories.find(({ rootPath }) => pathIdentityKey(rootPath) === expected);
+    if (!repository) {
       throw new Error("The selected repository is not part of the current workspace.");
     }
+    return repository;
   }
 
   private async createComparison(options: {
     readonly useCurrentBranchAsTarget: boolean;
   }): Promise<void> {
-    const repositories = await discoverRepositories();
+    const repositories = await this.repositoryDiscovery();
     if (repositories.length === 0) {
       void vscode.window.showWarningMessage("Open a Git workspace before creating a comparison.");
       return;
@@ -984,6 +1101,8 @@ export class ComparisonController {
     targetRef: BranchRef,
     mode: SavedComparisonV1["mode"],
   ): Promise<void> {
+    // Callers obtained this canonical identity from fresh workspace discovery.
+    this.availableRepositoryRoots.add(pathIdentityKey(repository.rootPath));
     const existingComparison = this.store.findByIdentity({ baseRef, mode, repository, targetRef });
     if (existingComparison) {
       this.logger.info("Skipped duplicate comparison", { mode, operation: "newComparison" });
@@ -1009,7 +1128,7 @@ export class ComparisonController {
     };
 
     const comparisons = await this.store.add(comparison);
-    this.treeProvider.setComparisons(comparisons);
+    this.setVisibleComparisons(comparisons);
     this.logger.info("Created comparison", { mode: comparison.mode, operation: "newComparison" });
     await this.revealComparison(comparison);
   }
