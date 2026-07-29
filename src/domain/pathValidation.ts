@@ -1,10 +1,11 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 const WINDOWS_DRIVE_PATH = /^[a-z]:[\\/]/i;
+const WINDOWS_INVALID_SEGMENT_CHARACTER = /[<>:"\\|?*]/u;
 const WINDOWS_RESERVED_SEGMENT =
   /^(?:(?:com|lpt)[1-9¹²³]|aux|clock\$|con|conin\$|conout\$|nul|prn)(?:\..*)?$/iu;
 
-/** Validates Git paths for the filesystem semantics of the current host. */
+/** Validates a repository-relative path exactly as stored in a Git tree. */
 export function isRepositoryRelativeGitPath(filePath: unknown): filePath is string {
   if (typeof filePath !== "string" || filePath.length === 0 || filePath.includes("\0")) {
     return false;
@@ -12,15 +13,8 @@ export function isRepositoryRelativeGitPath(filePath: unknown): filePath is stri
   if (filePath.startsWith("/")) {
     return false;
   }
-  if (
-    process.platform === "win32" &&
-    (filePath.includes("\\") || WINDOWS_DRIVE_PATH.test(filePath))
-  ) {
-    return false;
-  }
-
   const segments = filePath.split("/");
-  return segments.every(isSafePathSegment);
+  return segments.every(isGitTreePathSegment);
 }
 
 export function assertRepositoryRelativeGitPath(filePath: unknown): asserts filePath is string {
@@ -29,18 +23,30 @@ export function assertRepositoryRelativeGitPath(filePath: unknown): asserts file
   }
 }
 
-/** Rejects the repository metadata entry while accepting normal worktree paths. */
+/** Validates a Git path before it is exposed to the host working tree. */
+export function isRepositoryWorktreeGitPath(filePath: unknown): filePath is string {
+  return (
+    isRepositoryRelativeGitPath(filePath) &&
+    !isRepositoryMetadataPath(filePath) &&
+    isMaterializableOnCurrentHost(filePath)
+  );
+}
+
+/** Rejects host-incompatible paths and the repository metadata entry. */
 export function assertRepositoryWorktreeGitPath(filePath: unknown): asserts filePath is string {
   assertRepositoryRelativeGitPath(filePath);
-  if (filePath.split("/", 1)[0]?.toLowerCase() === ".git") {
+  if (isRepositoryMetadataPath(filePath)) {
     throw new Error("Repository metadata cannot be selected for this operation.");
+  }
+  if (!isMaterializableOnCurrentHost(filePath)) {
+    throw new Error("Git path cannot be materialized safely on this host.");
   }
 }
 
-/** Resolves a Git path and proves that the result remains below the repository root. */
+/** Resolves a worktree path and proves that it remains below the repository root. */
 export function resolvePathWithinRepository(repositoryRoot: string, filePath: unknown): string {
   if (!isAbsolute(repositoryRoot)) throw new Error("Repository root must be absolute.");
-  assertRepositoryRelativeGitPath(filePath);
+  assertRepositoryWorktreeGitPath(filePath);
 
   const root = resolve(repositoryRoot);
   const candidate = resolve(root, ...filePath.split("/"));
@@ -56,13 +62,33 @@ export function pathIdentityKey(filePath: string): string {
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
-function isSafePathSegment(segment: string): boolean {
-  if (segment.length === 0 || segment === "." || segment === "..") return false;
+function isGitTreePathSegment(segment: string): boolean {
+  return segment.length > 0 && segment !== "." && segment !== "..";
+}
+
+function isRepositoryMetadataPath(filePath: string): boolean {
+  return filePath.split("/", 1)[0]?.toLowerCase() === ".git";
+}
+
+function isMaterializableOnCurrentHost(filePath: string): boolean {
   if (process.platform !== "win32") return true;
+  if (filePath.includes("\\") || WINDOWS_DRIVE_PATH.test(filePath)) return false;
+  return filePath.split("/").every(isWindowsMaterializableSegment);
+}
+
+function isWindowsMaterializableSegment(segment: string): boolean {
   return (
-    !segment.includes(":") &&
+    !WINDOWS_INVALID_SEGMENT_CHARACTER.test(segment) &&
+    !hasAsciiControlCharacter(segment) &&
     !segment.endsWith(".") &&
     !segment.endsWith(" ") &&
     !WINDOWS_RESERVED_SEGMENT.test(segment)
   );
+}
+
+function hasAsciiControlCharacter(value: string): boolean {
+  for (const character of value) {
+    if (character.charCodeAt(0) < 0x20) return true;
+  }
+  return false;
 }

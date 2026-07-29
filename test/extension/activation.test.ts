@@ -5,7 +5,11 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 
 import { listStashes, readFileAtRevision } from "../../src/infrastructure/git/GitCli";
-import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
+import {
+  resolveFileContextTarget,
+  resolveKnownFileTarget,
+  resolveKnownGitTarget,
+} from "../../src/ui/commands/fileContext";
 
 const EXTENSION_ID = "patriziofilloramo.refhaven";
 const FIXTURE_FILE = "fixture.txt";
@@ -90,6 +94,12 @@ suite("RefHaven extension", () => {
       vscode.Uri.file(join(tmpdir(), "refhaven-outside-workspace.txt")),
     );
     assert.equal(outsideTarget, null);
+
+    const gitOnlyPath = "NUL.txt";
+    const gitTarget = await resolveKnownGitTarget(workspaceFolder.uri.fsPath, gitOnlyPath);
+    assert.equal(gitTarget?.filePath, gitOnlyPath);
+    const fileTarget = await resolveKnownFileTarget(workspaceFolder.uri.fsPath, gitOnlyPath);
+    assert.equal(fileTarget === null, process.platform === "win32");
   });
 
   test("accepts a real change object from the Git extension API", async () => {

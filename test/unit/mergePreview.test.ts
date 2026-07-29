@@ -101,13 +101,11 @@ suite("merge preview", () => {
     ]);
   });
 
-  test("rejects unsafe conflicted paths and degrades malformed output", async () => {
+  test("rejects traversal while accepting host-incompatible tree paths", async () => {
     const invalidOutput = `${"3".repeat(40)}\0../outside.ts\0`;
-    for (const path of ["../outside.ts", "safe.ts:alternate-stream", "NUL.txt"]) {
-      assert.throws(
-        () => parseConflictedPaths(`${"3".repeat(40)}\0${path}\0`),
-        /invalid merge-conflict path/u,
-      );
+    assert.throws(() => parseConflictedPaths(invalidOutput), /invalid merge-conflict path/u);
+    for (const path of ["aux.c", "safe.ts:alternate-stream", "trailing.", "trailing "]) {
+      assert.deepEqual(parseConflictedPaths(`${"3".repeat(40)}\0${path}\0`), [path]);
     }
 
     let calls = 0;

@@ -4,14 +4,21 @@ import * as vscode from "vscode";
 
 import type { FileChange } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
-import { pathIdentityKey, resolvePathWithinRepository } from "../../domain/pathValidation";
+import {
+  assertRepositoryRelativeGitPath,
+  pathIdentityKey,
+  resolvePathWithinRepository,
+} from "../../domain/pathValidation";
 import { isFileChange, isFileDiffScope } from "../../domain/validation";
 import { discoverRepositories, findRepositoryRoot } from "../../infrastructure/git/GitCli";
 import type { FileNode } from "../tree/changeNodes";
 
-export interface FileContextTarget {
+export interface KnownGitTarget {
   readonly filePath: string;
   readonly repositoryRoot: string;
+}
+
+export interface FileContextTarget extends KnownGitTarget {
   readonly uri: vscode.Uri;
 }
 
@@ -20,13 +27,7 @@ export async function resolveFileContextTarget(
 ): Promise<FileContextTarget | null> {
   const fileNode = asFileNode(candidate);
   if (fileNode) {
-    return canonicalizeTarget({
-      filePath: fileNode.file.newPath,
-      repositoryRoot: fileNode.scope.repositoryRootPath,
-      uri: vscode.Uri.file(
-        resolvePathWithinRepository(fileNode.scope.repositoryRootPath, fileNode.file.newPath),
-      ),
-    });
+    return resolveKnownFileTarget(fileNode.scope.repositoryRootPath, fileNode.file.newPath);
   }
 
   const uri =
@@ -48,26 +49,38 @@ export async function resolveFileContextTarget(
     return null;
   }
 
-  return canonicalizeTarget({
-    filePath: nativePath.replaceAll("\\", "/"),
-    repositoryRoot,
-    uri,
-  });
+  return resolveKnownFileTarget(repositoryRoot, nativePath.replaceAll("\\", "/"));
+}
+
+/** Resolves a trusted repository/path pair without materializing a filesystem URI. */
+export async function resolveKnownGitTarget(
+  repositoryRoot: unknown,
+  filePath: unknown,
+): Promise<KnownGitTarget | null> {
+  if (typeof repositoryRoot !== "string" || !isAbsolute(repositoryRoot)) return null;
+  try {
+    assertRepositoryRelativeGitPath(filePath);
+  } catch {
+    return null;
+  }
+  const expectedRoot = pathIdentityKey(repositoryRoot);
+  const repository = (await discoverRepositories()).find(
+    ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
+  );
+  return repository ? { filePath, repositoryRoot: repository.rootPath } : null;
 }
 
 export async function resolveKnownFileTarget(
   repositoryRoot: unknown,
   filePath: unknown,
 ): Promise<FileContextTarget | null> {
-  if (typeof repositoryRoot !== "string" || typeof filePath !== "string" || filePath.length === 0) {
-    return null;
-  }
+  const target = await resolveKnownGitTarget(repositoryRoot, filePath);
+  if (!target) return null;
   try {
-    return await canonicalizeTarget({
-      filePath,
-      repositoryRoot,
-      uri: vscode.Uri.file(resolvePathWithinRepository(repositoryRoot, filePath)),
-    });
+    return {
+      ...target,
+      uri: vscode.Uri.file(resolvePathWithinRepository(target.repositoryRoot, target.filePath)),
+    };
   } catch {
     return null;
   }
@@ -95,19 +108,6 @@ export function asFileNode(candidate: unknown): FileNode | null {
   return node?.kind === "file" && isFileChange(node.file) && isFileDiffScope(node.scope)
     ? (candidate as FileNode)
     : null;
-}
-
-async function canonicalizeTarget(target: FileContextTarget): Promise<FileContextTarget | null> {
-  const expectedRoot = pathIdentityKey(target.repositoryRoot);
-  const repository = (await discoverRepositories()).find(
-    ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
-  );
-  if (!repository) return null;
-  return {
-    filePath: target.filePath,
-    repositoryRoot: repository.rootPath,
-    uri: vscode.Uri.file(resolvePathWithinRepository(repository.rootPath, target.filePath)),
-  };
 }
 
 function resourceUri(candidate: unknown): vscode.Uri | undefined {

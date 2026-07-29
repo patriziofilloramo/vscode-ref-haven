@@ -24,11 +24,13 @@ import {
   readCommitDiffPreview,
   readCommitDetails,
   readComparisonPatch,
+  readFileAtRevision,
   readWorktreeState,
   searchCommits,
 } from "../../src/infrastructure/git/GitCli";
 import { previewMerge } from "../../src/infrastructure/git/mergePreview";
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
+import { GitRevisionContentProvider } from "../../src/ui/documents/GitRevisionContentProvider";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
 
 const EXTENSION_ID = "patriziofilloramo.refhaven";
@@ -138,6 +140,112 @@ suite("native branch diff", () => {
     } finally {
       treeProvider.dispose();
       await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    }
+  });
+
+  test("keeps host-incompatible tree names inside immutable Git operations", async () => {
+    const baseSha = git("rev-parse", "HEAD");
+    const entries = [
+      { contents: "immutable backslash path\n", path: "back\\slash.txt" },
+      { contents: "immutable aux path\n", path: "aux.c" },
+      { contents: "immutable device path\n", path: "NUL.txt" },
+      { contents: "immutable pathspec-like path\n", path: ":(top)name.txt" },
+      { contents: "immutable stream-like path\n", path: "safe.txt:alternate-stream" },
+      { contents: "immutable trailing-space path\n", path: "trailing " },
+      { contents: "immutable trailing-dot path\n", path: "trailing." },
+    ] as const;
+    const pathspecCollision = {
+      contents: "must not match the literal backslash path\n",
+      path: "backXslash.txt",
+    } as const;
+    const targetSha = createImmutableTreeCommit(baseSha, [...entries, pathspecCollision]);
+    const comparison: SavedComparisonV1 = {
+      ...createComparison(repositoryRoot),
+      baseRef: { displayName: baseSha, fullName: baseSha, kind: "revision" },
+      id: "immutable-host-path-test",
+      mode: "tipToTip",
+      targetRef: { displayName: targetSha, fullName: targetSha, kind: "revision" },
+    };
+
+    const result = await calculateComparison(comparison);
+    assert.deepEqual(
+      new Set(
+        result.files
+          .map(({ newPath }) => newPath)
+          .filter((filePath) => entries.some(({ path }) => path === filePath)),
+      ),
+      new Set(entries.map(({ path }) => path)),
+    );
+
+    const provider = new GitRevisionContentProvider();
+    try {
+      for (const { contents, path } of entries) {
+        assert.equal(
+          (await readFileAtRevision(repositoryRoot, targetSha, path)).toString(),
+          contents,
+        );
+        const uri = provider.createRevisionUri(repositoryRoot, targetSha, path);
+        assert.equal(uri.scheme, "refhaven");
+        assert.equal(await provider.provideTextDocumentContent(uri), contents);
+      }
+    } finally {
+      provider.dispose();
+    }
+
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    await vscode.commands.executeCommand("refhaven.openChangedFileAtRevision", {
+      file: { newPath: "NUL.txt", status: "added" },
+      kind: "file",
+      scope: {
+        fromSha: baseSha,
+        label: "Immutable host paths",
+        repositoryRootPath: repositoryRoot,
+        toSha: targetSha,
+      },
+    });
+    try {
+      const activeEditor = vscode.window.activeTextEditor;
+      assert.ok(activeEditor);
+      assert.equal(activeEditor.document.uri.scheme, "refhaven");
+      assert.equal(activeEditor.document.getText(), "immutable device path\n");
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+    }
+    if (process.platform === "win32") {
+      const activeEditorUri = vscode.window.activeTextEditor?.document.uri.toString();
+      await vscode.commands.executeCommand("refhaven.openChangedFileAtRevision", {
+        file: { newPath: "NUL.txt", status: "modified" },
+        kind: "file",
+        scope: {
+          fromSha: baseSha,
+          label: "Immutable host paths against Working Tree",
+          repositoryRootPath: repositoryRoot,
+          toSha: null,
+        },
+      });
+      assert.equal(vscode.window.activeTextEditor?.document.uri.toString(), activeEditorUri);
+    }
+
+    const patch = await readComparisonPatch(
+      repositoryRoot,
+      baseSha,
+      targetSha,
+      entries.map(({ path }) => path),
+    );
+    for (const { contents, path } of entries) {
+      assert.ok(patch.includes(contents.trimEnd()), `missing patch content for ${path}`);
+    }
+    assert.equal(patch.includes(pathspecCollision.contents.trimEnd()), false);
+
+    if (process.platform === "win32") {
+      for (const { path } of entries) {
+        await assert.rejects(
+          listWorkingTreeFileChanges(repositoryRoot, baseSha, path),
+          /materialized/iu,
+        );
+      }
     }
   });
 
@@ -487,6 +595,41 @@ suite("native branch diff", () => {
       encoding: "utf8",
       windowsHide: true,
     }).trim();
+  }
+
+  function createImmutableTreeCommit(
+    parentSha: string,
+    entries: readonly { readonly contents: string; readonly path: string }[],
+  ): string {
+    const tree = Buffer.concat(
+      [...entries]
+        .sort(({ path: left }, { path: right }) =>
+          Buffer.compare(Buffer.from(left), Buffer.from(right)),
+        )
+        .map(({ contents, path }) => {
+          const blobSha = gitWithInput(["hash-object", "-w", "--stdin"], contents)
+            .toString("utf8")
+            .trim();
+          return Buffer.concat([
+            Buffer.from(`100644 ${path}\0`, "utf8"),
+            Buffer.from(blobSha, "hex"),
+          ]);
+        }),
+    );
+    const treeSha = gitWithInput(["hash-object", "-w", "-t", "tree", "--stdin"], tree)
+      .toString("utf8")
+      .trim();
+    return gitWithInput(["commit-tree", treeSha, "-p", parentSha], "immutable tree paths\n")
+      .toString("utf8")
+      .trim();
+  }
+
+  function gitWithInput(args: readonly string[], input: Buffer | string): Buffer {
+    return execFileSync("git", args, {
+      cwd: repositoryRoot,
+      input,
+      windowsHide: true,
+    });
   }
 
   function mergeTreeWriteTreeSupported(): boolean {

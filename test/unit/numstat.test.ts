@@ -50,14 +50,16 @@ suite("parseNumstatZ", () => {
     }
   });
 
-  test("applies Windows filename restrictions only on Windows", () => {
-    for (const path of ["NUL.txt", "safe.txt:alternate-stream"]) {
+  test("accepts host-incompatible names from immutable Git trees", () => {
+    for (const path of [
+      "aux.c",
+      "NUL.txt",
+      "safe.txt:alternate-stream",
+      "trailing.",
+      "trailing ",
+    ]) {
       const output = `1\t2\t${path}\0`;
-      if (process.platform === "win32") {
-        assert.throws(() => parseNumstatZ(output), GitNumstatParseError);
-      } else {
-        assert.deepEqual(parseNumstatZ(output), [{ additions: 1, deletions: 2, newPath: path }]);
-      }
+      assert.deepEqual(parseNumstatZ(output), [{ additions: 1, deletions: 2, newPath: path }]);
     }
   });
 });

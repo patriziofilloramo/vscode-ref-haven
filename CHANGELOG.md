@@ -4,7 +4,9 @@ All notable changes to RefHaven are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.13.6] — 2026-07-28
+## [Unreleased]
+
+## [0.13.6] — 2026-07-30
 
 ### Security
 
@@ -22,6 +24,9 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ### Fixed
 
+- Keep immutable revision comparisons available when a Git tree contains names
+  that the current host cannot materialize, while continuing to reject those
+  paths before every working-tree or filesystem operation.
 - Run Extension Host tests with a fresh, locally owned Git fixture and isolated
   user profile, and clear compiled test output so stale or restored sessions
   cannot cause misleading failures.

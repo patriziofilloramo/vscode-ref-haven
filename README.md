@@ -284,7 +284,7 @@ user command.
 | 💻 **Your workstation**                          | Git processing, comparisons, history, blame, caches        |
 | 🗂️ **VS Code workspace state**                   | Saved comparison definitions and bounded review markers    |
 | 📋 **Operating-system clipboard**                | Only values you explicitly choose to copy                  |
-| 🌐 **Your validated GitLab origin**              | Only a browser URL opened after your explicit command      |
+| 🌐 **Your validated remote origin**              | Only a browser URL opened after your explicit command      |
 | 🚫 **RefHaven servers, analytics, AI providers** | Never—RefHaven has no such service, client, token, or path |
 
 Every Git process:
@@ -317,27 +317,27 @@ concise data-handling notice.
 
 Open `Ctrl+Shift+P` and type `RefHaven`.
 
-| Command                                 | Use it when you want to...                          |
-| --------------------------------------- | --------------------------------------------------- |
-| `New Comparison`                        | Review any two locally available refs               |
-| `Compare Current Branch With...`        | Start from the checked-out branch                   |
-| `Compare Selected Branches`             | Compare two branches selected under Repository      |
-| `Open All Changes`                      | Review every text change in one native editor       |
-| `Quick Open Comparison File...`         | Find a changed file without navigating the tree     |
-| `Open Next Unreviewed File`             | Continue a comparison review                        |
-| `Search Commits`                        | Find local history by metadata or changed content   |
-| `Show File History`                     | Follow the active file across revisions and renames |
-| `Show Line History`                     | Trace the current selection                         |
-| `Inspect Current Line`                  | Open rich blame actions for the cursor line         |
-| `Open File at Revision...`              | Read a historical version                           |
-| `Compare File with Revision...`         | Diff the current file against a local ref           |
-| `Reveal File in Branch Comparison`      | Find the active file in a saved comparison          |
-| `Change File Annotations...`            | Enable blame, heatmap, or changes markers           |
-| `Show File Actions`                     | Open the context-sensitive native action menu       |
-| `Stash This File...`                    | Safely set aside one tracked file                   |
-| `Open Local Reference on GitLab...`     | Open a validated immutable revision in the browser  |
-| `Open GitLab Issue or Merge Request...` | Open a `#issue` or `!merge-request` on your GitLab  |
-| `Configure Restricted GitLab Origin...` | Enable or clear the strict GitLab origin policy     |
+| Command                                     | Use it when you want to...                          |
+| ------------------------------------------- | --------------------------------------------------- |
+| `New Comparison`                            | Review any two locally available refs               |
+| `Compare Current Branch With...`            | Start from the checked-out branch                   |
+| `Compare Selected Branches`                 | Compare two branches selected under Repository      |
+| `Open All Changes`                          | Review every text change in one native editor       |
+| `Quick Open Comparison File...`             | Find a changed file without navigating the tree     |
+| `Open Next Unreviewed File`                 | Continue a comparison review                        |
+| `Search Commits`                            | Find local history by metadata or changed content   |
+| `Show File History`                         | Follow the active file across revisions and renames |
+| `Show Line History`                         | Trace the current selection                         |
+| `Inspect Current Line`                      | Open rich blame actions for the cursor line         |
+| `Open File at Revision...`                  | Read a historical version                           |
+| `Compare File with Revision...`             | Diff the current file against a local ref           |
+| `Reveal File in Branch Comparison`          | Find the active file in a saved comparison          |
+| `Change File Annotations...`                | Enable blame, heatmap, or changes markers           |
+| `Show File Actions`                         | Open the context-sensitive native action menu       |
+| `Stash This File...`                        | Safely set aside one tracked file                   |
+| `Open Local Reference in Browser...`        | Open a validated immutable revision in the browser  |
+| `Open Issue or Merge Request in Browser...` | Open a validated `#issue` or `!merge-request`       |
+| `Configure Restricted Remote Origin...`     | Enable or clear the strict remote-origin policy     |
 
 The editor, Explorer, Source Control resources, tree nodes, and blame status
 entry also expose context-sensitive RefHaven actions.
@@ -386,10 +386,12 @@ The project ships with zero production dependencies. Development dependencies
 are minimal, exact-pinned, lockfile-integrity pinned, and excluded from the
 VSIX.
 
-`npm run package` builds an internal VSIX. Public release packaging is
-deliberately blocked until the organisation-approved publisher, ownership,
-license, repository, support, homepage, and security-contact details are
-finalized. See the publishing checklist before changing those safeguards.
+`npm run package` builds an internal VSIX. For a public artifact,
+`npm run marketplace:check` validates the release metadata and publication
+safeguards, then `npm run package:release` builds the reviewed VSIX while
+`private: true` continues to block accidental npm publication. Complete the
+remaining account and repository checks in the publishing checklist before
+publishing it.
 
 ## Documentation
 

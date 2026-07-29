@@ -78,14 +78,16 @@ suite("Git name-status parser", () => {
     }
   });
 
-  test("applies Windows filename restrictions only on Windows", () => {
-    for (const path of ["NUL.txt", "safe.txt:alternate-stream"]) {
+  test("accepts host-incompatible names from immutable Git trees", () => {
+    for (const path of [
+      "aux.c",
+      "NUL.txt",
+      "safe.txt:alternate-stream",
+      "trailing.",
+      "trailing ",
+    ]) {
       const output = `M\0${path}\0`;
-      if (process.platform === "win32") {
-        assert.throws(() => parseNameStatusZ(output), GitNameStatusParseError);
-      } else {
-        assert.deepEqual(parseNameStatusZ(output), [{ newPath: path, status: "modified" }]);
-      }
+      assert.deepEqual(parseNameStatusZ(output), [{ newPath: path, status: "modified" }]);
     }
   });
 });

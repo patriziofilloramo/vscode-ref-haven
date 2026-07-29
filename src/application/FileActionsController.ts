@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import { isGitObjectId } from "../domain/gitObjectId";
 import { MAX_STASH_MESSAGE_LENGTH } from "../domain/inputLimits";
-import { pathIdentityKey } from "../domain/pathValidation";
+import { assertRepositoryWorktreeGitPath, pathIdentityKey } from "../domain/pathValidation";
 import type { FileChange } from "../domain/comparisonResult";
 import type { FileDiffScope } from "../domain/fileDiffScope";
 import {
@@ -19,7 +19,9 @@ import {
   asFileNode,
   resolveFileContextTarget,
   resolveKnownFileTarget,
+  resolveKnownGitTarget,
   type FileContextTarget,
+  type KnownGitTarget,
 } from "../ui/commands/fileContext";
 import { pickBranch } from "../ui/pickers/comparisonPickers";
 import type { FileNode } from "../ui/tree/changeNodes";
@@ -137,7 +139,7 @@ export class FileActionsController {
   }
 
   public async showFileHistory(candidate?: unknown): Promise<void> {
-    const target = await this.requireTarget(candidate);
+    const target = await this.requireGitTarget(candidate);
     await this.fileHistoryController.showFileHistory(target.repositoryRoot, target.filePath);
   }
 
@@ -200,8 +202,9 @@ export class FileActionsController {
 
   public async compareStashFileWithWorkingTree(candidate: unknown): Promise<void> {
     const node = await this.requireStashFileNode(candidate);
-    const stashSha = await resolveRef(node.scope.repositoryRootPath, node.scope.toSha);
     const paths = stashFilePaths(node.file);
+    for (const filePath of paths) assertRepositoryWorktreeGitPath(filePath);
+    const stashSha = await resolveRef(node.scope.repositoryRootPath, node.scope.toSha);
     let file: FileChange | undefined;
     for (const filePath of paths) {
       const changes = await listWorkingTreeFileChanges(
@@ -309,7 +312,7 @@ export class FileActionsController {
   }
 
   public async showFileHistoryAt(repositoryRoot: unknown, filePath: unknown): Promise<void> {
-    const target = await this.requireKnownTarget(repositoryRoot, filePath);
+    const target = await this.requireKnownGitTarget(repositoryRoot, filePath);
     await this.fileHistoryController.showFileHistory(target.repositoryRoot, target.filePath);
   }
 
@@ -346,12 +349,13 @@ export class FileActionsController {
   }
 
   public async openFileAtRevision(candidate?: unknown): Promise<void> {
-    const target = await this.requireTarget(candidate);
     const fileNode = asFileNode(candidate);
     if (fileNode) {
+      await this.requireKnownGitTarget(fileNode.scope.repositoryRootPath, fileNode.file.newPath);
       await this.comparisonController.openChangedFileAtRevision(fileNode.scope, fileNode.file);
       return;
     }
+    const target = await this.requireTarget(candidate);
     if (!(await activateFileContextTarget(target))) {
       throw new Error("The selected file does not exist in the working tree.");
     }
@@ -361,7 +365,7 @@ export class FileActionsController {
   public async openLineDiff(scope: unknown, file: unknown): Promise<void> {
     const candidateScope = scope as Partial<FileDiffScope> | undefined;
     const candidateFile = file as Partial<FileChange> | undefined;
-    await this.requireKnownTarget(candidateScope?.repositoryRootPath, candidateFile?.newPath);
+    await this.requireKnownGitTarget(candidateScope?.repositoryRootPath, candidateFile?.newPath);
     await this.comparisonController.openFileDiff(scope as FileDiffScope, file as FileChange);
   }
 
@@ -446,8 +450,15 @@ export class FileActionsController {
     if (!node?.scope.fromSha || !node.scope.toSha || !/^stash@\{\d+\}$/u.test(node.scope.label)) {
       throw new Error("Select a changed file in the Stashes view first.");
     }
-    await this.requireKnownTarget(node.scope.repositoryRootPath, node.file.newPath);
+    await this.requireKnownGitTarget(node.scope.repositoryRootPath, node.file.newPath);
     return node as StashFileNode;
+  }
+
+  private async requireGitTarget(candidate?: unknown): Promise<KnownGitTarget> {
+    const node = asFileNode(candidate);
+    return node
+      ? this.requireKnownGitTarget(node.scope.repositoryRootPath, node.file.newPath)
+      : this.requireTarget(candidate);
   }
 
   private async requireTarget(candidate?: unknown): Promise<FileContextTarget> {
@@ -461,6 +472,15 @@ export class FileActionsController {
     filePath: unknown,
   ): Promise<FileContextTarget> {
     const target = await resolveKnownFileTarget(repositoryRoot, filePath);
+    if (!target) throw new Error("The selected repository file is not available.");
+    return target;
+  }
+
+  private async requireKnownGitTarget(
+    repositoryRoot: unknown,
+    filePath: unknown,
+  ): Promise<KnownGitTarget> {
+    const target = await resolveKnownGitTarget(repositoryRoot, filePath);
     if (!target) throw new Error("The selected repository file is not available.");
     return target;
   }

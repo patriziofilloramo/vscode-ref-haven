@@ -29,8 +29,8 @@ RefHaven declares untrusted and virtual workspaces unsupported because its
 features execute the local Git binary and require a trusted filesystem-backed
 repository.
 
-The sole remote-aware feature builds GitLab browser URLs after an explicit user
-command. Copy actions place the same validated URL on the operating-system
+The sole remote-aware feature builds supported forge browser URLs after an
+explicit user command. Copy actions place the same validated URL on the operating-system
 clipboard without contacting it. With the default empty origin setting,
 RefHaven derives an exact
 browser origin from a validated local remote: HTTP(S) keeps its origin and SSH
@@ -76,6 +76,13 @@ trusted workspace folder; opening a subfolder never authorizes an ancestor
 repository. Persisted comparisons are hidden when their repository leaves the
 workspace and are revalidated against fresh discovery before calculation,
 export, clipboard, or document-opening actions.
+
+Repository paths have two explicit validation boundaries. Read-only operations
+against immutable Git objects accept traversal-free names exactly as stored in
+the tree, even when the current host cannot create such a file. Before a path
+can reach the working tree, a `file:` URI, content-filter inspection, or any
+filesystem mutation, RefHaven additionally enforces the current host's filename
+rules and rejects repository metadata paths.
 
 RefHaven exposes one explicit repository mutation: **Stash This File...**. It
 creates a standard two-parent Git stash containing the staged and unstaged
@@ -194,7 +201,7 @@ keyed by document version and line and are cleared on repository refresh. Git
 patch output is capped at 64 KiB and the displayed preview is capped again;
 neither hover metadata nor patch content is persisted or logged.
 
-GitLab links in line hovers are inert command URIs until clicked. Hover loading
+Browser links in line hovers are inert command URIs until clicked. Hover loading
 does not enumerate remotes, open a browser, or perform network activity. The
 same applies to autolinked `#issue`/`!merge-request` shorthand in commit
 summaries and Commit Details messages: the trusted-Markdown allowlist for
@@ -259,16 +266,16 @@ manual recovery from the retained local safety directory.
 
 For a fully isolated workstation, disable `git.autofetch`, disable clipboard synchronization, use approved local Git/VS Code builds, and install the VSIX from an internally verified artifact. These controls are defense in depth; RefHaven itself neither enables nor calls remote Git operations.
 
-For strict GitLab deployments, configure only organisation-controlled origins.
-The **Configure Restricted GitLab Origin...** command writes one exact origin
+For strict browser-link deployments, configure only organisation-controlled
+origins. The **Configure Restricted Remote Origin...** command writes one exact origin
 to the current workspace (or to the user profile when no workspace is open);
 an empty value restores zero-config inference. Configure the JSON array
 directly only when several exact origins are required.
-When the setting is empty, review repository remotes before using GitLab
+When the setting is empty, review repository remotes before using browser
 actions; an SSH remote with a non-default browser port should be mapped through
 the explicit setting. RefHaven validates the URL handed to the operating system
 but cannot constrain what an external browser does after navigation, including
-server-directed redirects. No GitLab API token or browser credential is read
+server-directed redirects. No forge API token or browser credential is read
 by the extension.
 
 ## Supply-chain policy

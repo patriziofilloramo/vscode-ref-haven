@@ -56,6 +56,7 @@ import {
   type FilesLayout,
 } from "../ui/tree/ComparisonTreeProvider";
 import type { FileNode } from "../ui/tree/changeNodes";
+import { createChangeUri } from "../ui/tree/ChangeDecorationProvider";
 import {
   BinaryRevisionError,
   type GitRevisionContentProvider,
@@ -908,7 +909,9 @@ export class ComparisonController {
     const resources: [vscode.Uri, vscode.Uri, vscode.Uri][] = textFiles.map((file) => {
       const { left, right } = this.createFileDiffUris(scope, file);
       return [
-        vscode.Uri.file(resolvePathWithinRepository(scope.repositoryRootPath, file.newPath)),
+        scope.toSha === null
+          ? vscode.Uri.file(resolvePathWithinRepository(scope.repositoryRootPath, file.newPath))
+          : createChangeUri(file.status, file.newPath),
         left,
         right,
       ];

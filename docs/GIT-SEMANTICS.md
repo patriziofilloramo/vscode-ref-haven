@@ -135,6 +135,10 @@ git show <sha>:<path>
 ```
 
 The provider uses resolved result SHAs, so an already opened diff cannot change when a branch moves.
+Paths read from immutable trees are validated using Git's repository-relative
+syntax rather than the current host's filename rules. Host-incompatible names
+stay inside Git commands and signed virtual document URIs; any working-tree
+side is promoted through the stricter host-specific boundary first.
 
 | Change                | Left side                | Right side                  |
 | --------------------- | ------------------------ | --------------------------- |
@@ -220,14 +224,19 @@ are disabled throughout stash construction and ref publication. RefHaven does
 not expose apply, pop, drop, multi-file stash, include-untracked, or keep-index
 commands.
 
-## GitLab browser URL semantics
+## Browser URL semantics
 
-GitLab actions enumerate only locally configured remotes. With the default
+Browser-link actions enumerate only locally configured remotes. With the default
 empty origin list, HTTP(S) remotes supply their exact browser origin and SSH or
 scp-style remotes infer HTTPS on the same hostname. A non-empty configured list
 becomes a strict allowlist: HTTP remotes match the complete origin, including
 the effective port, while SSH remotes match only the hostname and require an
 explicit choice when several allowed browser origins share it.
+
+The validated project, revision, comparison, and file target is rendered with
+the selected GitHub, GitLab, Bitbucket, or Gitea-compatible URL grammar. Host
+detection uses only the local remote hostname; an explicit grammar setting
+handles self-hosted instances whose hostname is ambiguous.
 
 Every symbolic reference is resolved locally to a full commit object ID before
 URL construction. Comparison URLs therefore use `<baseSha>...<targetSha>`,

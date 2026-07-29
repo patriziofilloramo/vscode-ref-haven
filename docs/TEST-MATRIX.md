@@ -53,8 +53,8 @@ that **Stash This File...** appears once inside the unified RefHaven submenu on
 each applicable surface; command routing accepts both Source Control resource
 state and Git API change objects, opens the message prompt without touching a
 dirty buffer, and saves and stashes that buffer only after confirmation.
-GitLab coverage includes zero-config HTTP-origin preservation, SSH-to-HTTPS
-inference, invalid/local remote rejection, `origin` preference, exact-origin
+Browser-link coverage includes zero-config HTTP-origin preservation,
+SSH-to-HTTPS inference, invalid/local remote rejection, `origin` preference, exact-origin
 normalization, strict allowlist scheme/port/path enforcement, credential
 stripping, unsafe encoded project paths, immutable commit/tree/compare/file
 URLs, line ranges, issue/MR validation, final-origin enforcement, bounded local
@@ -153,7 +153,7 @@ validator.
 - custom comparison labels set, prefer, and clear cleanly against the
   ref-derived default; persisted labels are rejected when empty, untrimmed,
   oversized, or contain non-printable characters;
-- GitLab autolinks linkify only boundary-checked `#`/`!` references, keep all
+- reference autolinks linkify only boundary-checked `#`/`!` references, keep all
   surrounding text escaped, reject ASCII and Unicode word-adjacent candidates,
   percent-encode parentheses, and declare exactly one trusted command; hover
   summaries and the time-travel action render with validated arguments;
@@ -223,7 +223,8 @@ and worktree around each operation. It covers:
   canonical file boundary; cancelling the message leaves an unsaved selected
   editor untouched, while confirmation saves it and creates the expected
   single-file stash through the public command;
-- GitLab commands register without enumerating remotes or opening a browser;
+- browser-link commands register without enumerating remotes or opening a
+  browser;
   remote URLs are read only in an explicit command path;
 - restricted-origin input accepts only exact HTTP(S) origins, empty input
   restores zero-config inference, and copied links pass through the same
@@ -281,7 +282,7 @@ Before delivering `refhaven-x.y.z.vsix`:
     before manually removing that directory. Also confirm an unsaved selected
     editor is saved only after accepting the stash message, while every
     documented unsupported case fails without mutation.
-12. With an empty GitLab origin list, verify HTTP and SSH remotes immediately
+12. With an empty approved-origin list, verify HTTP and SSH remotes immediately
     open the expected project/commit/comparison/file-line/issue/MR targets.
     Add the exact internal origin and verify strict allowlist behavior, then
     configure a non-matching port and verify fail-closed behavior. For an SSH

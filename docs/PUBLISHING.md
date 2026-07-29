@@ -50,9 +50,9 @@ documentation, screenshots, command IDs, or marketing artwork.
   history.
 - Confirm that the icon, screenshots, and future marketing assets are original
   or have documented distribution rights.
-- Once the public repository URL exists, add the logo to the README head
-  (`assets/refhaven-logo.svg`); vsce rejects relative README images while the
-  manifest has no repository, so the mark currently ships only as the icon.
+- Keep README and Marketplace image references on stable absolute HTTPS URLs,
+  or omit them. The manifest already declares the canonical public repository;
+  the packaged extension icon remains repository-owned.
 - Select the project license with the legal owner; do not copy a third-party
   license merely because another product uses it.
 - Add the exact copyright and attribution notices required by any approved
@@ -104,3 +104,28 @@ npx vsce ls --no-dependencies
 Inspect the final VSIX contents, install it into a clean VS Code profile, and
 repeat the privacy-critical smoke tests in [TEST-MATRIX.md](TEST-MATRIX.md).
 Publish only the reviewed artifact produced from the tagged commit.
+
+## Manual GitHub release
+
+This repository has no GitHub Actions release workflow. `package:release`
+validates and packages the extension; it does not create a tag, publish a
+GitHub Release, or upload to the Visual Studio Marketplace.
+
+1. Run `npm version X.Y.Z --no-git-tag-version` to update `package.json` and
+   `package-lock.json`; update the manifest unit test and move the release notes
+   from `Unreleased` to a dated `X.Y.Z` changelog section.
+2. Commit those release inputs, run every release gate above from a clean
+   checkout, and inspect and install `build/refhaven-X.Y.Z.vsix`.
+3. Record the artifact digest with
+   `Get-FileHash build/refhaven-X.Y.Z.vsix -Algorithm SHA256` on Windows or
+   `shasum -a 256 build/refhaven-X.Y.Z.vsix` on macOS/Linux.
+4. Tag the exact reviewed commit with
+   `git tag -a vX.Y.Z -m "RefHaven X.Y.Z"`, then push the branch and tag.
+5. In GitHub, create a release from `vX.Y.Z`, title it `RefHaven X.Y.Z`, use
+   the changelog section as the release notes, attach the exact VSIX, include
+   its SHA-256 digest, and publish the release.
+6. Marketplace publication is separate. Upload that same reviewed VSIX in the
+   Marketplace portal or run
+   `vsce publish --packagePath build/refhaven-X.Y.Z.vsix` with approved
+   publisher credentials. Keep `private: true`; it blocks npm publication, not
+   VSCE packaging or Marketplace publication.

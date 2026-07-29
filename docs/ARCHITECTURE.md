@@ -37,7 +37,7 @@ src/
     comparisonReview.ts
     comparisonResult.ts
     fileDiffScope.ts
-    gitLab.ts
+    browserLinks.ts
     stash.ts
     validation.ts
   application/             // orchestration; owns runtime state
@@ -335,7 +335,7 @@ that node's path to the tree root.
 
 ### Revision document provider
 
-The readonly `refhaven:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Paths must be repository-relative and traversal-free; Windows filesystem restrictions apply only on Windows, so valid POSIX names remain usable. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
+The readonly `refhaven:` provider parses validated opaque URIs and obtains content on demand with `git show <sha>:<path>`. Every URI is authenticated with a session-scoped HMAC before parsing. Immutable tree paths must be repository-relative and traversal-free but remain independent of host filesystem naming rules. A separate worktree boundary enforces those host rules before any `file:` URI or filesystem access. Resolved text uses a 64-entry/16 MiB LRU cache; rejected loads are not cached. An explicit empty-document URI supplies the missing side of added/deleted changes.
 
 Renames use the old path at the from-SHA and the new path at the to-SHA. Binary files do not pass through the text provider; UI actions offer opening available revisions instead of a misleading text diff.
 
@@ -503,8 +503,8 @@ remain user-facing only and are never copied into logs.
 - Logs redact repository identity and exclude credentials, environment, tokens, remote URLs, and file data.
 - There is no telemetry, HTTP/API client, Git remote operation, or automatic
   fetch; Git transports and partial-clone lazy fetch are blocked at process
-  level. Explicit GitLab commands may hand one fully validated, policy-matched
-  URL to the external browser.
+  level. Explicit browser-link commands may hand one fully validated,
+  policy-matched URL to the external browser.
 
 ## Decisions requiring an ADR
 

@@ -122,7 +122,7 @@ while keeping the native-UI, no-webview, no-telemetry principles:
 - **Commit search and details:** local history can be searched by message, author, SHA, or changed content, with full metadata and changed files shown in a native tree view.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
 - **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
-- **GitLab browser links:** validated local remotes enable zero-config explicit
+- **Forge browser links:** validated local remotes enable zero-config explicit
   browser actions for project, commit, local branch/tag/HEAD revision,
   comparison, file/line, issue, and merge request. Validated target URLs may
   also be copied without opening a browser. A non-empty exact-origin list
@@ -130,7 +130,7 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   cleared from the Command Palette. All ref links use locally resolved SHAs;
   no HTTP request, API token, background discovery, or RefHaven service
   exists.
-- **GitLab autolinks:** `#issue` and `!merge-request` shorthand in commit
+- **Reference autolinks:** `#issue` and `!merge-request` shorthand in commit
   summaries and full commit messages becomes inert command links that run the
   validated origin-policy flow only when clicked. Word-adjacent, zero-padded,
   path-like, and HTML-entity-like candidates never linkify.
@@ -223,7 +223,7 @@ directory is removed. Missing local objects fail
 closed. Typed revisions pass strict syntax validation and must resolve through
 the transport-blocked local Git boundary before use.
 
-GitLab browser actions work from validated local remotes without setup.
+Browser-link actions work from validated local remotes without setup.
 HTTP(S) remotes retain their exact origin and SSH remotes infer HTTPS on the
 same hostname. A configured non-empty origin list switches to strict allowlist
 enforcement and supports custom browser ports. Authenticated remote user

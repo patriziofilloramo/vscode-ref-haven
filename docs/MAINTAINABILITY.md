@@ -84,7 +84,7 @@ npx vsce ls --no-dependencies
 ```
 
 Reviewers also verify that repository data remains within the documented local
-and explicitly approved GitLab trust boundary.
+and explicitly approved browser-handoff trust boundary.
 
 Public releases additionally require `npm run marketplace:check` and
 `npm run package:release`. The public/runtime surface must use RefHaven's own

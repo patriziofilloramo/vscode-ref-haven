@@ -20,7 +20,7 @@ native VS Code views and editors.
 Saved comparison definitions and bounded reviewed-file markers are stored in
 VS Code workspace state. Outside an explicit **Stash This File...** operation,
 file contents, patches, commit messages, blame results, history results, and
-generated GitLab URLs are not persisted by RefHaven. A single-file stash
+generated browser URLs are not persisted by RefHaven. A single-file stash
 writes the selected staged and working-tree states to the local Git object
 database and `refs/stash`. Its fail-safe cleanup may also retain the original
 file bytes, a recovery journal, and, while cleanup is incomplete, a private
@@ -40,14 +40,15 @@ RefHaven transfers data outside its process only after a direct user action:
   operating-system clipboard;
 - save commands write a patch only to the local filesystem location selected
   by the user;
-- GitLab commands construct a validated URL for the repository's configured
-  GitLab origin and either copy it or ask VS Code to open it in the external
-  browser.
+- browser-link commands construct a validated URL for the repository's
+  configured or inferred remote origin and either copy it or ask VS Code to
+  open it in the external browser.
 
-GitLab support uses no API, token, authentication flow, redirect handling, or
-background discovery. By default, the browser origin is inferred from a
-validated local Git remote. If `refhaven.browserLinks.approvedOrigins` is configured,
-its exact origins become a strict allowlist.
+Browser-link support uses no API, token, authentication flow, redirect
+handling, or background discovery. By default, the browser origin is inferred
+from a validated local Git remote. If
+`refhaven.browserLinks.approvedOrigins` is configured, its exact origins become
+a strict allowlist.
 
 ## Verify it yourself
 
@@ -56,8 +57,9 @@ bytes you install:
 
 - **No runtime dependencies.** `package.json` declares an empty `dependencies`
   object, so no third-party code runs inside the extension host. The packaged
-  VSIX contains only compiled JavaScript, the icon, and three documents — no
-  source, no `node_modules`, no other payload. Inspect it with any archive
+  VSIX contains only compiled JavaScript, package metadata, the icon, and the
+  documentation declared in `package.json` — no source, no `node_modules`, no
+  other payload. Inspect it with any archive
   tool, or run `npx --yes @vscode/vsce ls` in the extension folder.
 - **No network egress, enforced by the build.** The test suite includes a
   data-egress guard (`test/unit/egressGuard.test.ts`) that scans every source

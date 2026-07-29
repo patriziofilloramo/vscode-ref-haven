@@ -30,7 +30,8 @@ suite("revision document security", () => {
 
       const tampered = uri.with({ query: `${uri.query.slice(0, -1)}x` });
       await assert.rejects(provider.provideTextDocumentContent(tampered), /unknown/i);
-      assert.throws(() => provider.createEmptyUri("..\\outside.txt"), /invalid/i);
+      assert.doesNotThrow(() => provider.createEmptyUri("..\\literal-git-name.txt"));
+      assert.throws(() => provider.createEmptyUri("../outside.txt"), /invalid/i);
     } finally {
       provider.dispose();
     }

@@ -63,7 +63,9 @@ suite("domain boundary validation", () => {
   });
 
   test("rejects file changes and scopes that can escape their repository", () => {
-    assert.equal(isFileChange({ newPath: "..\\outside.txt", status: "modified" }), false);
+    assert.equal(isFileChange({ newPath: "../outside.txt", status: "modified" }), false);
+    assert.equal(isFileChange({ newPath: "aux.c", status: "modified" }), true);
+    assert.equal(isFileChange({ newPath: "..\\outside.txt", status: "modified" }), true);
     assert.equal(isFileChange({ newPath: "safe.txt", oldPath: 42, status: "renamed" }), false);
     assert.equal(
       isFileDiffScope({

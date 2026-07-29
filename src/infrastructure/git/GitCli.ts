@@ -290,8 +290,16 @@ export async function listChangedFilesForPath(
   assertRepositoryRelativeGitPath(filePath);
   const baseArgs = ["diff", "--no-ext-diff", "--no-textconv", "--find-renames", fromSha, toSha];
   const [nameStatusOutput, numstatOutput] = await Promise.all([
-    runGit(repositoryRoot, [...baseArgs, "--name-status", "-z", "--", filePath], signal),
-    runGit(repositoryRoot, [...baseArgs, "--numstat", "-z", "--", filePath], signal),
+    runGit(
+      repositoryRoot,
+      withPortableLiteralPathspecs([...baseArgs, "--name-status", "-z"], [filePath]),
+      signal,
+    ),
+    runGit(
+      repositoryRoot,
+      withPortableLiteralPathspecs([...baseArgs, "--numstat", "-z"], [filePath]),
+      signal,
+    ),
   ]).catch((error: unknown) =>
     failGitOperation(error, "Git could not compare this file between the selected revisions."),
   );
@@ -330,7 +338,7 @@ export async function listWorkingTreeFileChanges(
   filePath: string,
   signal?: AbortSignal,
 ): Promise<FileChange[]> {
-  assertRepositoryRelativeGitPath(filePath);
+  assertRepositoryWorktreeGitPath(filePath);
   await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   const baseArgs = ["diff", "--no-ext-diff", "--no-textconv"];
   const [nameStatusOutput, numstatOutput] = await Promise.all([
@@ -433,17 +441,18 @@ export async function listFileHistory(
   assertRepositoryRelativeGitPath(filePath);
   const stdout = await runGit(
     repositoryRoot,
-    [
-      "log",
-      "--follow",
-      `--max-count=${limit.toString()}`,
-      `--format=${FILE_HISTORY_LOG_FORMAT}`,
-      "--name-status",
-      "-z",
-      "--find-renames",
-      "--",
-      filePath,
-    ],
+    withPortableLiteralPathspecs(
+      [
+        "log",
+        "--follow",
+        `--max-count=${limit.toString()}`,
+        `--format=${FILE_HISTORY_LOG_FORMAT}`,
+        "--name-status",
+        "-z",
+        "--find-renames",
+      ],
+      [filePath],
+    ),
     signal,
   ).catch((error: unknown) => failGitOperation(error, "Git could not load the file history."));
   return parseFileHistory(stdout);
@@ -656,14 +665,14 @@ export async function blameLine(
   signal?: AbortSignal,
   revision?: string,
 ): Promise<LineBlame | null> {
-  assertRepositoryRelativeGitPath(filePath);
   if (revision !== undefined) {
+    assertRepositoryRelativeGitPath(filePath);
     if (!isGitObjectId(revision)) throw new Error("The blame revision is invalid.");
     if (contents !== undefined) {
       throw new Error("Blame accepts either buffer contents or a revision, not both.");
     }
-  }
-  if (revision === undefined) {
+  } else {
+    assertRepositoryWorktreeGitPath(filePath);
     await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   }
   const args = [
@@ -692,7 +701,7 @@ export async function blameFile(
   contents?: string,
   signal?: AbortSignal,
 ): Promise<FileBlameLine[]> {
-  assertRepositoryRelativeGitPath(filePath);
+  assertRepositoryWorktreeGitPath(filePath);
   await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   const args = [
     "blame",
@@ -715,7 +724,7 @@ export async function listChangedLineRanges(
   filePath: string,
   signal?: AbortSignal,
 ): Promise<ChangedLineRange[]> {
-  assertRepositoryRelativeGitPath(filePath);
+  assertRepositoryWorktreeGitPath(filePath);
   if (!isGitObjectId(baseSha)) throw new Error("The base commit SHA is invalid.");
   await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
   const stdout = await runGit(
@@ -734,6 +743,8 @@ export async function readFileAtRevision(
   filePath: string,
   signal?: AbortSignal,
 ): Promise<Buffer> {
+  assertRepositoryRelativeGitPath(filePath);
+  if (!isGitObjectId(sha)) throw new Error("The file revision SHA is invalid.");
   try {
     return await runGitBuffer(repositoryRoot, ["show", `${sha}:${filePath}`], signal);
   } catch (error) {
@@ -753,7 +764,7 @@ export async function fileExistsAtRevision(
   if (!isGitObjectId(sha)) throw new Error("The file revision SHA is invalid.");
   const output = await runGit(
     repositoryRoot,
-    ["ls-tree", "-z", "--full-tree", sha, "--", filePath],
+    withPortableLiteralPathspecs(["ls-tree", "-z", "--full-tree", sha], [filePath]),
     signal,
   ).catch((error: unknown) => failGitOperation(error, "Git could not verify this file revision."));
   const separator = output.indexOf("\t");
@@ -771,21 +782,17 @@ export async function readCommitDiffPreview(
   signal?: AbortSignal,
 ): Promise<string | null> {
   assertRepositoryRelativeGitPath(filePath);
-  const args =
+  const commandArgs =
     fromSha === null
-      ? [
-          "show",
-          "--format=",
-          "--no-ext-diff",
-          "--no-textconv",
-          "--unified=2",
-          toSha,
-          "--",
-          filePath,
-        ]
-      : ["diff", "--no-ext-diff", "--no-textconv", "--unified=2", fromSha, toSha, "--", filePath];
+      ? ["show", "--format=", "--no-ext-diff", "--no-textconv", "--unified=2", toSha]
+      : ["diff", "--no-ext-diff", "--no-textconv", "--unified=2", fromSha, toSha];
   try {
-    const output = await runGit(repositoryRoot, args, signal, MAX_HOVER_DIFF_BYTES);
+    const output = await runGit(
+      repositoryRoot,
+      withPortableLiteralPathspecs(commandArgs, [filePath]),
+      signal,
+      MAX_HOVER_DIFF_BYTES,
+    );
     return output.trim().length > 0 ? output.trimEnd() : null;
   } catch (error) {
     const normalized = normalizeGitError(error);
@@ -823,7 +830,6 @@ export async function readComparisonPatch(
   if (fromSha === null && toSha === null) {
     throw new Error("A patch needs at least one resolved revision.");
   }
-  const pathspecArgs = filePaths.length > 0 ? ["--", ...filePaths] : [];
   if (toSha === null) {
     const candidatePaths =
       filePaths.length > 0
@@ -831,7 +837,7 @@ export async function readComparisonPatch(
         : await readWorkingTreePathCandidates(repositoryRoot, fromSha ?? undefined, signal);
     await assertNoActiveContentFilters(repositoryRoot, candidatePaths, signal);
   }
-  const args =
+  const commandArgs =
     fromSha !== null
       ? [
           "diff",
@@ -841,7 +847,6 @@ export async function readComparisonPatch(
           "--patch",
           fromSha,
           ...(toSha === null ? [] : [toSha]),
-          ...pathspecArgs,
         ]
       : [
           "show",
@@ -851,8 +856,8 @@ export async function readComparisonPatch(
           "--find-renames",
           "--patch",
           requirePatchTarget(toSha),
-          ...pathspecArgs,
         ];
+  const args = withPortableLiteralPathspecs(commandArgs, filePaths);
   const stdout = await runGitBuffer(repositoryRoot, args, signal, MAX_PATCH_BYTES).catch(
     (error: unknown) =>
       failGitOperation(error, "Git could not produce a patch for this selection."),
@@ -928,6 +933,24 @@ function fileChangePaths(changes: readonly FileChange[]): string[] {
 function requirePatchTarget(sha: string | null): string {
   if (sha === null) throw new Error("A patch needs at least one resolved revision.");
   return sha;
+}
+
+/**
+ * Selects Git-tree names without letting Git for Windows reinterpret a
+ * backslash as a directory separator. The explicit magic is safe because the
+ * validated path is anchored at the repository root and parsed as literal.
+ */
+function withPortableLiteralPathspecs(
+  commandArgs: readonly string[],
+  filePaths: readonly string[],
+): string[] {
+  if (filePaths.length === 0) return [...commandArgs];
+  return [
+    "--no-literal-pathspecs",
+    ...commandArgs,
+    "--",
+    ...filePaths.map((filePath) => `:(top,literal)${filePath}`),
+  ];
 }
 
 async function readWorkingTreePathCandidates(

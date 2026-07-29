@@ -195,10 +195,10 @@
     <span class="check" aria-hidden="true">✓</span>
     <div>
       <h3 data-i18n="c3_h">Zero runtime dependencies</h3>
-      <p data-i18n="c3_p">No third-party code runs in the extension host. The VSIX contains only compiled JavaScript, the icon, and three documents — no source, no node_modules, no other payload.</p>
+      <p data-i18n="c3_p">No third-party code runs in the extension host. The VSIX contains only compiled JavaScript, package metadata, the icon, and declared documentation — no source, no node_modules, no other payload.</p>
     </div>
     <div class="proof"><span class="c" data-i18n="c3_code_a">// package.json</span><br>"dependencies": <span class="ok">{}</span><br>
-      <span class="c" data-i18n="c3_code_b">// package verified: 89 files · 0 .ts · 0 node_modules</span></div>
+      <span class="c" data-i18n="c3_code_b">// package verified · 0 .ts · 0 node_modules</span></div>
   </div>
 
   <div class="claim">
@@ -275,8 +275,8 @@ npx --yes @vscode/vsce ls
       c2_h: "Git kann das Netzwerk nicht erreichen",
       c2_p: "Jeder Git-Prozess startet mit deaktivierten Transporten: jeder fetch-/push-Versuch würde vom Protokoll selbst abgelehnt. Proxy, SSH, externe Diffs und geerbte Umgebungsvariablen zur Repository-Umleitung werden entfernt; keine Shell.",
       c3_h: "Null Laufzeitabhängigkeiten",
-      c3_p: "Kein Fremdcode läuft im Extension-Host. Das VSIX enthält nur kompiliertes JavaScript, das Icon und drei Dokumente — kein Quellcode, kein node_modules, keine sonstige Nutzlast.",
-      c3_code_a: "// package.json", c3_code_b: "// Paket geprüft: 89 Dateien · 0 .ts · 0 node_modules",
+      c3_p: "Kein Fremdcode läuft im Extension-Host. Das VSIX enthält nur kompiliertes JavaScript, Paketmetadaten, das Icon und die deklarierte Dokumentation — kein Quellcode, kein node_modules, keine sonstige Nutzlast.",
+      c3_code_a: "// package.json", c3_code_b: "// Paket geprüft · 0 .ts · 0 node_modules",
       c4_h: "Keine Telemetrie, kein Konto, keine automatische Erkennung",
       c4_p: "Keine Telemetrie-API, keine Nutzungsereignisse, kein Kontosystem, kein Remote-Konfigurationsdienst. Die Erweiterung aktiviert sich ohne Netzwerkereignisse und Logs bleiben im lokalen Panel, mit redigierten sensiblen Metadaten.",
       c4_code_a: "// Manifest-Beiträge",
@@ -315,8 +315,8 @@ npx --yes @vscode/vsce ls
       c2_h: "Git non può raggiungere la rete",
       c2_p: "Ogni processo Git parte con i trasporti disabilitati: qualunque tentativo di fetch/push verrebbe rifiutato dal protocollo stesso. Proxy, SSH, diff esterni e le variabili d’ambiente ereditate di redirezione del repository vengono azzerate; nessuna shell.",
       c3_h: "Zero dipendenze a runtime",
-      c3_p: "Nessun codice di terze parti gira nell’host dell’estensione. Il VSIX contiene solo JavaScript compilato, l’icona e tre documenti — nessun sorgente, nessun node_modules, nessun altro payload.",
-      c3_code_a: "// package.json", c3_code_b: "// pacchetto verificato: 89 file · 0 .ts · 0 node_modules",
+      c3_p: "Nessun codice di terze parti gira nell’host dell’estensione. Il VSIX contiene solo JavaScript compilato, metadati del pacchetto, icona e documentazione dichiarata — nessun sorgente, nessun node_modules, nessun altro payload.",
+      c3_code_a: "// package.json", c3_code_b: "// pacchetto verificato · 0 .ts · 0 node_modules",
       c4_h: "Nessuna telemetria, nessun account, nessuna scoperta automatica",
       c4_p: "Nessuna API di telemetria, nessun evento d’uso, nessun sistema di account, nessun servizio di configurazione remota. L’estensione si attiva senza eventi di rete e i log restano nel pannello locale, con i metadati sensibili redatti.",
       c4_code_a: "// contributi manifest",
