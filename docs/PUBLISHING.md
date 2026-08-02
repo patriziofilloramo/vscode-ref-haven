@@ -119,11 +119,35 @@ GitHub Release, or upload to the Visual Studio Marketplace.
 3. Record the artifact digest with
    `Get-FileHash build/refhaven-X.Y.Z.vsix -Algorithm SHA256` on Windows or
    `shasum -a 256 build/refhaven-X.Y.Z.vsix` on macOS/Linux.
+
+   Run this as its own command after packaging has fully finished, never
+   chained onto `package:release` in the same shell invocation. A digest read
+   while the archive is still being flushed to disk does not match the file
+   that is later uploaded, and the published hash would fail the verification
+   this project asks every user to perform. Confirm the digest is reproducible
+   by reading it twice, and confirm the archive is complete before recording
+   it — `npx vsce ls --no-dependencies` must list the packaged files, or on
+   Windows:
+
+   ```powershell
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path build/refhaven-X.Y.Z.vsix))
+   $zip.Entries.Count
+   $zip.Dispose()
+   ```
+
+   Write the recorded digest to `build/refhaven-X.Y.Z.vsix.sha256` in
+   `<hash>  <filename>` form, and never edit a digest by hand afterwards.
+   Repackaging for any reason produces a different archive, so re-record the
+   digest and re-upload the artifact together.
+
 4. Tag the exact reviewed commit with
    `git tag -a vX.Y.Z -m "RefHaven X.Y.Z"`, then push the branch and tag.
 5. In GitHub, create a release from `vX.Y.Z`, title it `RefHaven X.Y.Z`, use
    the changelog section as the release notes, attach the exact VSIX, include
-   its SHA-256 digest, and publish the release.
+   its SHA-256 digest, and publish the release. Before publishing, re-verify
+   the attached file against `build/refhaven-X.Y.Z.vsix.sha256`; the digest in
+   the notes must describe the artifact actually uploaded.
 6. Marketplace publication is separate. Upload that same reviewed VSIX in the
    Marketplace portal or run
    `vsce publish --packagePath build/refhaven-X.Y.Z.vsix` with approved
