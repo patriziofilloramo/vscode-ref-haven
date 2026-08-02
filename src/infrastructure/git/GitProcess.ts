@@ -12,9 +12,11 @@ import { selectGitBinaryPath } from "./gitBinary";
 import {
   buildLocalOnlyGitArguments,
   buildLocalOnlyGitEnvironment,
+  isFilterInertGitInvocation,
   parseConfiguredFilterDrivers,
 } from "./gitProcessPolicy";
 import { GitScheduler } from "./GitScheduler";
+import { SingleFlight } from "./singleFlight";
 
 const execFileAsync = promisify(execFile);
 
@@ -30,8 +32,20 @@ const FILTER_CONFIG_QUERY = [
   "^filter\\.",
 ] as const;
 const scheduler = new GitScheduler(4, 2);
+const filterConfigurationProbes = new SingleFlight<string>();
 
 let cachedGitBinary: string | undefined;
+let filterProbeObserver: ((report: GitFilterProbeReport) => void) | undefined;
+
+export interface GitFilterProbeReport {
+  readonly durationMs: number;
+  readonly sharedCommands: number;
+}
+
+/** Observes completed filter-configuration probes for diagnostic timing logs. */
+export function setGitFilterProbeObserver(observer?: (report: GitFilterProbeReport) => void): void {
+  filterProbeObserver = observer;
+}
 
 /**
  * Resolves and memoizes the absolute Git executable. Resolution reads the
@@ -59,39 +73,47 @@ function isRegularFile(candidate: string): boolean {
  * Reads the effective system/global/repository filter configuration, then
  * adds command-scoped no-op overrides for every executable filter driver.
  * The probe is a read-only Git builtin and cannot itself invoke a filter.
+ * Provably filter-inert plumbing skips the probe, and commands that run
+ * concurrently on one repository share a single in-flight probe.
  */
-async function buildProtectedGitArguments(
-  cwd: string,
-  args: readonly string[],
-  signal?: AbortSignal,
-): Promise<string[]> {
-  let output = "";
+async function buildProtectedGitArguments(cwd: string, args: readonly string[]): Promise<string[]> {
+  if (isFilterInertGitInvocation(args)) return buildLocalOnlyGitArguments(args);
+  const output = await filterConfigurationProbes.run(
+    pathIdentityKey(cwd),
+    () => readFilterConfiguration(cwd),
+    ({ durationMs, sharedCallers }) =>
+      filterProbeObserver?.({ durationMs, sharedCommands: sharedCallers }),
+  );
+  return buildLocalOnlyGitArguments(args, parseConfiguredFilterDrivers(output));
+}
+
+/**
+ * The shared probe deliberately runs without a caller's abort signal so one
+ * cancelled command cannot fail the concurrent commands coalesced onto the
+ * same probe; its runtime stays bounded by the configured Git timeout.
+ */
+async function readFilterConfiguration(cwd: string): Promise<string> {
   try {
-    const result = await execFileAsync(
+    const { stdout } = await execFileAsync(
       gitBinary(),
       buildLocalOnlyGitArguments(FILTER_CONFIG_QUERY),
       {
         cwd,
         env: buildLocalOnlyGitEnvironment(process.env),
         maxBuffer: MAX_FILTER_CONFIG_OUTPUT_BYTES,
-        signal,
         timeout: readGitTimeoutMilliseconds(),
         windowsHide: true,
       },
     );
-    output = result.stdout;
+    return stdout;
   } catch (error) {
-    const candidate = error as {
-      readonly code?: unknown;
-      readonly killed?: unknown;
-      readonly name?: unknown;
-    };
+    const candidate = error as { readonly code?: unknown; readonly killed?: unknown };
     // `git config --get-regexp` uses exit 1 for a valid empty result.
-    if (candidate.code !== 1 || candidate.killed === true || candidate.name === "AbortError") {
+    if (candidate.code !== 1 || candidate.killed === true) {
       throw normalizeGitError(error);
     }
+    return "";
   }
-  return buildLocalOnlyGitArguments(args, parseConfiguredFilterDrivers(output));
 }
 
 /** Test seam: clears the memoized Git binary so a new environment is resolved. */
@@ -124,7 +146,7 @@ export function runGit(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+        const protectedArgs = await buildProtectedGitArguments(cwd, args);
         const { stdout } = await execFileAsync(gitBinary(), protectedArgs, {
           cwd,
           env: buildLocalOnlyGitEnvironment(process.env),
@@ -157,7 +179,7 @@ export function runGitWithExitCode(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+        const protectedArgs = await buildProtectedGitArguments(cwd, args);
         const { stdout } = await execFileAsync(gitBinary(), protectedArgs, {
           cwd,
           env: buildLocalOnlyGitEnvironment(process.env),
@@ -199,7 +221,7 @@ export function runGitBuffer(
     pathIdentityKey(cwd),
     async () => {
       try {
-        const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+        const protectedArgs = await buildProtectedGitArguments(cwd, args);
         const { stdout } = await execFileAsync(gitBinary(), protectedArgs, {
           cwd,
           encoding: "buffer",
@@ -250,7 +272,7 @@ export function runGitWithInput(
   return scheduler.run(
     pathIdentityKey(cwd),
     async () => {
-      const protectedArgs = await buildProtectedGitArguments(cwd, args, signal);
+      const protectedArgs = await buildProtectedGitArguments(cwd, args);
       return new Promise((resolve, reject) => {
         const child = execFile(
           gitBinary(),

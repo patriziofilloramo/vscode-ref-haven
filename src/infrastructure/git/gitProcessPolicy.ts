@@ -70,6 +70,27 @@ const UNSAFE_FILTER_CONFIGURATION_MESSAGE =
   "Git filter configuration is too large or contains an unsupported driver name. RefHaven stopped before running the requested operation.";
 
 /**
+ * Git subcommands that cannot invoke a clean, smudge, process, or textconv
+ * command under any argument, not merely the arguments RefHaven passes today:
+ * they read or write refs, configuration, attribute metadata, or existing
+ * objects without converting working-tree content. Subcommands that gain
+ * conversion behaviour from a flag — `ls-files --eol`, `cat-file --filters`,
+ * `hash-object` — are deliberately absent. Every other subcommand keeps the
+ * per-command filter probe and neutralization.
+ */
+const FILTER_INERT_SUBCOMMANDS = new Set([
+  "check-attr",
+  "commit-tree",
+  "config",
+  "for-each-ref",
+  "ls-tree",
+  "rev-parse",
+  "symbolic-ref",
+  "update-ref",
+  "write-tree",
+]);
+
+/**
  * Builds a deterministic Git environment that cannot prompt, trace repository
  * data, use a transport, or inherit a parent process' repository redirection.
  */
@@ -128,6 +149,27 @@ function isSafeFilterDriver(driver: string): boolean {
     if (codePoint <= 0x20 || codePoint === 0x7f) return false;
   }
   return true;
+}
+
+/**
+ * Reports whether an argv provably cannot execute a content filter, so the
+ * filter-configuration probe would protect nothing. The subcommand is located
+ * by skipping only the leading flags RefHaven itself prepends (`-c key=value`
+ * pairs and pathspec-mode toggles); any other leading flag fails closed and
+ * keeps the probe.
+ */
+export function isFilterInertGitInvocation(args: readonly string[]): boolean {
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "-c") {
+      index += 1;
+      continue;
+    }
+    if (argument === "--literal-pathspecs" || argument === "--no-literal-pathspecs") continue;
+    if (argument === undefined || argument.length === 0 || argument.startsWith("-")) return false;
+    return FILTER_INERT_SUBCOMMANDS.has(argument);
+  }
+  return false;
 }
 
 /** Applies command-scoped policy after all inherited and repository config. */

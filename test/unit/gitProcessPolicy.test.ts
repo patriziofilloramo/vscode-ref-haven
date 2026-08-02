@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildLocalOnlyGitArguments,
   buildLocalOnlyGitEnvironment,
+  isFilterInertGitInvocation,
   parseConfiguredFilterDrivers,
 } from "../../src/infrastructure/git/gitProcessPolicy";
 
@@ -111,6 +112,72 @@ suite("local-only Git process policy", () => {
       "filter.audit.required=false",
       "status",
     ]);
+  });
+
+  test("treats exactly the ref, config, attribute, and object plumbing as filter-inert", () => {
+    for (const inert of [
+      ["check-attr", "--stdin", "-z", "filter"],
+      ["commit-tree", "abc123", "-p", "def456"],
+      ["config", "--bool", "core.sparseCheckout"],
+      ["for-each-ref", "--format=%(refname)"],
+      ["ls-tree", "-z", "--full-tree", "HEAD"],
+      ["rev-parse", "--verify", "HEAD^{commit}"],
+      ["symbolic-ref", "--short", "HEAD"],
+      ["update-ref", "--stdin", "--create-reflog"],
+      ["write-tree"],
+    ]) {
+      assert.equal(isFilterInertGitInvocation(inert), true, inert.join(" "));
+    }
+
+    for (const contentConverting of [
+      ["add", "--", "file.txt"],
+      ["blame", "--porcelain", "file.txt"],
+      ["cat-file", "--filters", "abc123"],
+      ["checkout", "--", "file.txt"],
+      ["diff", "--no-ext-diff"],
+      ["hash-object", "-w", "--", "file.txt"],
+      ["log", "--format=%H"],
+      ["ls-files", "--eol", "-z"],
+      ["ls-files", "--stage", "-z", "--", "file.txt"],
+      ["merge-tree", "--write-tree"],
+      ["read-tree", "HEAD"],
+      ["restore", "--", "file.txt"],
+      ["show", "abc123:file.txt"],
+      ["stash", "list"],
+      ["status", "--porcelain=v2"],
+      ["update-index", "--force-remove"],
+    ]) {
+      assert.equal(
+        isFilterInertGitInvocation(contentConverting),
+        false,
+        contentConverting.join(" "),
+      );
+    }
+  });
+
+  test("locates the subcommand only behind RefHaven's own leading flags", () => {
+    assert.equal(
+      isFilterInertGitInvocation(["-c", "core.hooksPath=/tmp/disabled", "update-ref", "--stdin"]),
+      true,
+    );
+    assert.equal(
+      isFilterInertGitInvocation(["--no-literal-pathspecs", "ls-tree", "-z", "HEAD"]),
+      true,
+    );
+    assert.equal(
+      isFilterInertGitInvocation(["-c", "core.hooksPath=/tmp/disabled", "commit-tree", "abc123"]),
+      true,
+    );
+  });
+
+  test("fails closed when the subcommand cannot be identified", () => {
+    assert.equal(isFilterInertGitInvocation([]), false);
+    assert.equal(isFilterInertGitInvocation(["-c"]), false);
+    assert.equal(isFilterInertGitInvocation(["-c", "key=value"]), false);
+    assert.equal(isFilterInertGitInvocation([""]), false);
+    assert.equal(isFilterInertGitInvocation(["-C", "/repo", "rev-parse"]), false);
+    assert.equal(isFilterInertGitInvocation(["--exec-path=/elsewhere", "rev-parse"]), false);
+    assert.equal(isFilterInertGitInvocation(["--git-dir=/elsewhere/.git", "config"]), false);
   });
 
   test("fails closed on malformed, unsafe, or excessive filter configuration", () => {

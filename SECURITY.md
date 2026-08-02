@@ -56,11 +56,15 @@ Every Git child process is started without a shell and receives a centrally test
 - path arguments use Git's global literal-pathspec mode;
 - diff, blame, and content-search operations explicitly disable external
   diff/textconv execution;
-- before every Git operation, a read-only bounded config probe enumerates the
-  effective content-filter drivers. Command-scoped overrides clear each
-  driver's `clean`, `smudge`, and `process` commands and set `required=false`;
-  malformed, unsupported, or excessive filter configuration fails closed
-  before the requested operation runs;
+- before every Git operation that could execute a content filter, a read-only
+  bounded config probe enumerates the effective content-filter drivers.
+  Command-scoped overrides clear each driver's `clean`, `smudge`, and
+  `process` commands and set `required=false`; malformed, unsupported, or
+  excessive filter configuration fails closed before the requested operation
+  runs. Only a fixed allowlist of ref, config, attribute, and object plumbing
+  that provably cannot invoke a filter skips the probe, and operations that
+  run concurrently on one repository share a single in-flight probe rather
+  than widening the window between probe and invocation;
 - working-tree operations use `git check-attr` without executing drivers and
   fail explicitly when one of the affected paths has an active content filter,
   rather than returning an approximation of filtered content;

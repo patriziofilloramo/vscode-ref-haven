@@ -6,6 +6,18 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.13.7] — 2026-07-30
+
+### Changed
+
+- Reduce Git process overhead without changing the fail-closed filter policy:
+  commands that run concurrently on one repository now share a single
+  filter-configuration probe, and a fixed allowlist of ref, config, attribute,
+  and object plumbing that provably cannot invoke a content filter skips the
+  probe entirely. Every other command keeps its own probe and neutralization.
+- Report filter-probe duration and sharing at debug level in the RefHaven
+  output channel so the remaining per-command overhead can be observed.
+
 ## [0.13.6] — 2026-07-30
 
 ### Security

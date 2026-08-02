@@ -24,6 +24,7 @@ import {
   readCommitDetails,
   watchGitRepositories,
 } from "./infrastructure/git/GitCli";
+import { setGitFilterProbeObserver } from "./infrastructure/git/GitProcess";
 import { OutputChannelLogger } from "./infrastructure/logging/OutputChannelLogger";
 import { registerCommands } from "./ui/commands/registerCommands";
 import { LineHoverProvider } from "./ui/blame/LineHoverProvider";
@@ -44,6 +45,13 @@ import { WorktreesTreeProvider } from "./ui/tree/WorktreesTreeProvider";
 export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel("RefHaven");
   const logger = new OutputChannelLogger(outputChannel);
+  setGitFilterProbeObserver(({ durationMs, sharedCommands }) => {
+    logger.debug("Probed Git filter configuration", {
+      durationMs,
+      operation: "gitFilterProbe",
+      sharedCommands,
+    });
+  });
   const store = new ComparisonStore(context.workspaceState);
   const reviewStore = new ComparisonReviewStore(context.workspaceState);
   const commitDetailsTreeProvider = new CommitDetailsTreeProvider();
@@ -249,6 +257,9 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    new vscode.Disposable(() => {
+      setGitFilterProbeObserver();
+    }),
     logger,
     revisionProviderRegistration,
     revisionProvider,
