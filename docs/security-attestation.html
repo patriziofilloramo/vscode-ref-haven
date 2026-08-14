@@ -207,7 +207,7 @@
       <h3 data-i18n="c4_h">No telemetry, no account, no automatic discovery</h3>
       <p data-i18n="c4_p">No telemetry API, no usage events, no account system, no remote configuration service. The extension activates without network events and logs stay in the local panel, with sensitive metadata redacted.</p>
     </div>
-    <div class="proof"><span class="c" data-i18n="c4_code_a">// manifest contributions</span><br>"activationEvents": <span class="ok">[]</span> · untrustedWorkspaces: <span class="k">supported: false</span></div>
+    <div class="proof"><span class="c" data-i18n="c4_code_a">// manifest contributions</span><br>"activationEvents": <span class="ok">["onStartupFinished"]</span> · untrustedWorkspaces: <span class="k">supported: false</span></div>
   </div>
 
   <h2 data-i18n="h2_verify">Verify it yourself</h2>
@@ -235,7 +235,7 @@ npx --yes @vscode/vsce ls
       <th scope="col">RefHaven</th>
     </tr></thead>
     <tbody>
-      <tr><th scope="row" data-i18n="r1a">Usage telemetry</th><td class="other" data-i18n="r1b">Collected, often on by default</td><td class="rh">none · [ ] activationEvents</td></tr>
+      <tr><th scope="row" data-i18n="r1a">Usage telemetry</th><td class="other" data-i18n="r1b">Collected, often on by default</td><td class="rh">none · local startup activation</td></tr>
       <tr><th scope="row" data-i18n="r2a">Account / subscription</th><td class="other" data-i18n="r2b">Features tied to a login</td><td class="rh" data-i18n="r2c">none</td></tr>
       <tr><th scope="row" data-i18n="r3a">Cloud AI features</th><td class="other" data-i18n="r3b">Send diffs/code to a service</td><td class="rh" data-i18n="r3c">none · zero HTTP clients</td></tr>
       <tr><th scope="row" data-i18n="r4a">Runtime dependencies</th><td class="other" data-i18n="r4b">Dozens, transitive</td><td class="rh">"dependencies": {}</td></tr>

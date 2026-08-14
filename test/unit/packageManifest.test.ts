@@ -93,7 +93,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "patriziofilloramo");
-    assert.equal(manifest.version, "0.13.7");
+    assert.equal(manifest.version, "0.13.8");
     assert.match(manifest.description, /local processing/u);
   });
 
@@ -151,8 +151,8 @@ suite("extension manifest", () => {
     ]);
     assert.deepEqual(
       manifest.activationEvents,
-      [],
-      "VS Code derives activation events from the view and command contributions",
+      ["onStartupFinished"],
+      "Always-on line intelligence must register its providers after startup",
     );
   });
 

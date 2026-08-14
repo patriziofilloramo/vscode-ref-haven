@@ -6,6 +6,24 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.13.8] — 2026-08-13
+
+### Security
+
+- Refresh development-only transitive dependencies to patched releases after
+  the release audit identified newly disclosed vulnerabilities. RefHaven
+  continues to ship with zero production dependencies.
+
+### Fixed
+
+- Activate RefHaven after VS Code finishes starting so the always-on line
+  intelligence providers are registered even when no RefHaven command or
+  Source Control view has been opened. Rich line hover, inline blame, and the
+  status-bar entry now work immediately after installing the VSIX or reloading
+  the window.
+- Exercise cold-start activation in an isolated Extension Host instead of
+  activating RefHaven explicitly before testing its rich line hover.
+
 ## [0.13.7] — 2026-07-31
 
 ### Changed

@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.13.7",
+  "version": "0.13.8",
   "publisher": "patriziofilloramo",
   "license": "MIT",
   "private": true,
@@ -51,7 +51,9 @@
   "categories": [
     "SCM Providers"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "files": [
     "dist/**/*.js",
@@ -1411,7 +1413,7 @@
     "typescript-eslint": "8.64.0"
   },
   "overrides": {
-    "brace-expansion": "5.0.8",
+    "brace-expansion": "5.0.9",
     "serialize-javascript": "7.0.7"
   }
 }

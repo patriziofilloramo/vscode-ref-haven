@@ -34,11 +34,11 @@ interface GitExtensionExports {
 }
 
 suite("RefHaven extension", () => {
-  test("activates and registers its public commands", async () => {
+  test("activates after startup and registers its public commands", async () => {
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
 
     assert.ok(extension, `Expected extension ${EXTENSION_ID} to be installed`);
-    await extension.activate();
+    await waitForExtensionActivation(extension);
     assert.equal(extension.isActive, true);
 
     const commands = await vscode.commands.getCommands(true);
@@ -262,6 +262,14 @@ suite("RefHaven extension", () => {
     assert.match(markdown, /File History/u);
   });
 });
+
+async function waitForExtensionActivation(extension: vscode.Extension<unknown>): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!extension.isActive && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(extension.isActive, true, "RefHaven did not activate through onStartupFinished");
+}
 
 async function waitForGitChange(uri: vscode.Uri): Promise<GitChange> {
   const repository = await getGitRepository();
