@@ -1,5 +1,3 @@
-import { dirname, isAbsolute, relative, sep } from "node:path";
-
 import * as vscode from "vscode";
 
 import {
@@ -13,7 +11,12 @@ import type { Logger } from "./Logger";
 import { runInBackground } from "./errorHandling";
 import type { LineBlame } from "../domain/blame";
 import { shortSha } from "../domain/comparisonResult";
-import { blameLine, findRepositoryRoot, readGitUserName } from "../infrastructure/git/GitCli";
+import {
+  blameLine,
+  readGitUserName,
+  resolveWorkspaceRepositoryFile,
+  type WorkspaceRepositoryFile,
+} from "../infrastructure/git/GitCli";
 import {
   BLAME_HOVER_COMMANDS,
   blameCommitInfo,
@@ -47,7 +50,7 @@ export class BlameController implements vscode.Disposable {
   });
   private readonly disposables: vscode.Disposable[] = [];
   private generation = 0;
-  private readonly repositoryRoots = new Map<string, string>();
+  private readonly repositoryFiles = new Map<string, WorkspaceRepositoryFile>();
   private readonly statusBarItem: vscode.StatusBarItem;
   private updateTimer: NodeJS.Timeout | undefined;
   private readonly userNames = new Map<string, Promise<string | null>>();
@@ -98,7 +101,7 @@ export class BlameController implements vscode.Disposable {
 
   /** Re-blames the current line, e.g. after the repository state changed. */
   public refresh(): void {
-    this.repositoryRoots.clear();
+    this.repositoryFiles.clear();
     this.userNames.clear();
     this.scheduleUpdate();
   }
@@ -229,23 +232,13 @@ export class BlameController implements vscode.Disposable {
 
     const document = editor.document;
     const line = editor.selection.active.line;
-    const repositoryRootPath = await this.getRepositoryRoot(dirname(document.uri.fsPath));
+    const target = await this.getRepositoryFile(document.uri.fsPath);
     if (generation !== this.generation) return;
-    if (!repositoryRootPath) {
+    if (!target) {
       this.clearBlame();
       return;
     }
-
-    const nativeRelativePath = relative(repositoryRootPath, document.uri.fsPath);
-    if (
-      nativeRelativePath === ".." ||
-      nativeRelativePath.startsWith(`..${sep}`) ||
-      isAbsolute(nativeRelativePath)
-    ) {
-      this.clearBlame();
-      return;
-    }
-    const relativePath = nativeRelativePath.replaceAll("\\", "/");
+    const { filePath: relativePath, repositoryRoot: repositoryRootPath } = target;
 
     const blame = await blameLine(
       repositoryRootPath,
@@ -315,12 +308,12 @@ export class BlameController implements vscode.Disposable {
     this.statusBarItem.hide();
   }
 
-  private async getRepositoryRoot(directory: string): Promise<string | null> {
-    const cached = this.repositoryRoots.get(directory);
+  private async getRepositoryFile(filePath: string): Promise<WorkspaceRepositoryFile | null> {
+    const cached = this.repositoryFiles.get(filePath);
     if (cached) return cached;
-    const repositoryRoot = await findRepositoryRoot(directory);
-    if (repositoryRoot) this.repositoryRoots.set(directory, repositoryRoot);
-    return repositoryRoot;
+    const target = await resolveWorkspaceRepositoryFile(filePath);
+    if (target) this.repositoryFiles.set(filePath, target);
+    return target;
   }
 
   private getUserName(repositoryRootPath: string): Promise<string | null> {

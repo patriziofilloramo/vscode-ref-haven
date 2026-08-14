@@ -196,12 +196,15 @@ Provides typed operations for repository probing, branch listing, ref resolution
 Uses the exported API of VS Code's built-in Git extension only when that
 extension is already active, discovering known repositories including nested
 repositories without activating a component that may be configured for
-autofetch. Repository roots must equal or descend from a current trusted
-workspace folder; an ancestor repository is never authorized merely because a
-subfolder was opened. Repository identity combines workspace folder URI and
-repository path relative to it; path identity is case-sensitive except on
-Windows, and worktrees remain distinct even when they share a common Git
-directory.
+autofetch. Discovery canonicalizes repository roots and workspace folders,
+then accepts a root only when either path contains the other. This supports
+both repositories nested below a workspace folder and a containing repository
+whose subfolder was opened, while rejecting unrelated roots and symlink
+escapes. Trusting a subfolder explicitly grants RefHaven repository-wide local
+Git scope for that containing repository. Repository identity combines
+workspace folder URI and repository path relative to it; path identity is
+case-sensitive except on Windows, and worktrees remain distinct even when they
+share a common Git directory.
 
 If `vscode.git` is unavailable, discovery probes each workspace folder with `git rev-parse --show-toplevel` and supports at least one repository per folder. The CLI remains the authority for comparison calculations.
 

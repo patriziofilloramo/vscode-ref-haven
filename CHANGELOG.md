@@ -6,6 +6,20 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Canonicalize repository and workspace-folder paths before authorizing their
+  relationship. A trusted folder inside a repository grants RefHaven local
+  access to that containing repository, while unrelated roots and symlink
+  escapes remain rejected.
+
+### Fixed
+
+- Restore rich line hover, inline blame, status-bar blame, file history,
+  annotations, and active-file revision commands when a VS Code workspace
+  opens a subfolder of the Git repository instead of its root. This includes
+  Remote SSH workspaces, where the extension and Git run on the remote host.
+
 ## [0.13.8] — 2026-08-13
 
 ### Security

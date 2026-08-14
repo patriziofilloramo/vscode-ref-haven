@@ -63,7 +63,7 @@ Version 0.1 includes:
 - create, edit, swap, refresh, pin, reorder, and close comparisons;
 - refresh all and close-unpinned/repository actions;
 - automatic workspace-scoped persistence and restore;
-- one or many repositories, including multi-root workspaces, repositories discovered by VS Code, and nested repositories already known to the built-in Git extension;
+- one or many repositories, including multi-root workspaces, repositories containing an opened workspace folder, and nested repositories already known to the built-in Git extension;
 - local and locally available remote-tracking branches;
 - resolved base and target SHAs, merge base, ahead/behind counts and paginated commit lists;
 - changed files with added, modified, deleted, renamed, copied, type-changed, and applicable unmerged states;

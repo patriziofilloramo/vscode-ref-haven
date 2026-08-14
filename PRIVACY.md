@@ -17,6 +17,11 @@ commands to calculate comparisons, history, blame, stash information, commit
 details, patches, and repository navigation metadata. Results are rendered in
 native VS Code views and editors.
 
+If the trusted workspace opens a subfolder of a Git repository, RefHaven uses
+the containing repository as its local processing scope. Repository-wide
+comparisons, history, and navigation can therefore include paths and metadata
+outside the opened subfolder, but still inside that same local repository.
+
 Saved comparison definitions and bounded reviewed-file markers are stored in
 VS Code workspace state. Outside an explicit **Stash This File...** operation,
 file contents, patches, commit messages, blame results, history results, and

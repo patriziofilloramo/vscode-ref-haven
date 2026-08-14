@@ -75,11 +75,14 @@ Every Git child process is started without a shell and receives a centrally test
 
 If a required object is not already available locally, the operation fails instead of contacting a remote. RefHaven does not activate VS Code's built-in Git extension. If that extension is already active, RefHaven reads and watches only its repository list; all comparison data still comes from the restricted local Git process.
 
-A repository root is accepted only when it equals or descends from a current
-trusted workspace folder; opening a subfolder never authorizes an ancestor
-repository. Persisted comparisons are hidden when their repository leaves the
-workspace and are revalidated against fresh discovery before calculation,
-export, clipboard, or document-opening actions.
+A repository root is accepted only when its canonical filesystem path is
+related to a current trusted workspace folder: either path may contain the
+other. Opening and trusting a tracked subfolder therefore authorizes RefHaven
+to process local Git metadata and working-tree paths across that subfolder's
+containing repository. Unrelated repositories and roots reached only through
+a symlink escape remain rejected. Persisted comparisons are hidden when their
+repository leaves this boundary and are revalidated against fresh discovery
+before calculation, export, clipboard, or document-opening actions.
 
 Repository paths have two explicit validation boundaries. Read-only operations
 against immutable Git objects accept traversal-free names exactly as stored in

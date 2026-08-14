@@ -30,7 +30,7 @@ and Source Control sidebar.
 ## Start in under a minute
 
 1. Install the RefHaven VSIX.
-2. Open a trusted folder containing a Git repository.
+2. Open a trusted Git repository, or any folder inside one.
 3. Open **Source Control**.
 4. Run **RefHaven: New Comparison** from `Ctrl+Shift+P`.
 5. Pick the branch you want to review and its base.
@@ -40,6 +40,11 @@ expands it, and loads its differences locally.
 
 No account, token, server, repository configuration, or onboarding wizard is
 required.
+
+When the opened folder is below the repository root, RefHaven treats the
+containing repository as the local Git scope. This makes the same features
+available in `.code-workspace` and Remote SSH layouts without requiring the
+repository root itself to be a workspace folder.
 
 ## Using RefHaven with another blame extension
 

@@ -1,28 +1,54 @@
-import { dirname, isAbsolute, relative, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import * as vscode from "vscode";
 
+import { assertRepositoryWorktreeGitPath } from "../../domain/pathValidation";
 import { runGit } from "./GitProcess";
-import { buildRepositoryIdentities } from "./repositoryDiscovery";
+import { buildCanonicalRepositoryIdentities, canonicalPath } from "./repositoryDiscovery";
 
-/** Resolves a repository root inside the trusted workspace, or returns null. */
-export async function findRepositoryRoot(directory: string): Promise<string | null> {
-  const workingDirectory = await nearestExistingWorkspaceDirectory(directory);
+export interface WorkspaceRepositoryFile {
+  readonly filePath: string;
+  readonly repositoryRoot: string;
+}
+
+/** Resolves a workspace file against its canonical containing repository. */
+export async function resolveWorkspaceRepositoryFile(
+  filePath: string,
+): Promise<WorkspaceRepositoryFile | null> {
+  if (!isAbsolute(filePath)) return null;
+  const workingDirectory = await nearestExistingWorkspaceDirectory(dirname(filePath));
   if (!workingDirectory) return null;
 
   const stdout = await runGit(workingDirectory, ["rev-parse", "--show-toplevel"]).catch(() => null);
   const rootPath = stdout?.trim();
   if (!rootPath || rootPath.length === 0) return null;
 
-  const repository = buildRepositoryIdentities(
-    [rootPath],
-    (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
-      name: folder.name,
-      rootPath: folder.uri.fsPath,
-      uri: folder.uri.toString(),
-    })),
-  )[0];
-  return repository?.rootPath ?? null;
+  const [repository, canonicalWorkingDirectory] = await Promise.all([
+    buildCanonicalRepositoryIdentities(
+      [rootPath],
+      (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
+        name: folder.name,
+        rootPath: folder.uri.fsPath,
+        uri: folder.uri.toString(),
+      })),
+    ).then((repositories) => repositories[0]),
+    canonicalPath(workingDirectory),
+  ]);
+  if (!repository || !canonicalWorkingDirectory) return null;
+
+  const suffix = relative(workingDirectory, filePath);
+  if (!isPathAtOrBelow(".", suffix)) return null;
+  const canonicalFilePath = resolve(canonicalWorkingDirectory, suffix);
+  const nativeRelativePath = relative(repository.rootPath, canonicalFilePath);
+  if (!isPathAtOrBelow(".", nativeRelativePath) || nativeRelativePath.length === 0) return null;
+
+  const gitPath = nativeRelativePath.split(sep).join("/");
+  try {
+    assertRepositoryWorktreeGitPath(gitPath);
+  } catch {
+    return null;
+  }
+  return { filePath: gitPath, repositoryRoot: repository.rootPath };
 }
 
 async function nearestExistingWorkspaceDirectory(directory: string): Promise<string | null> {

@@ -1,4 +1,4 @@
-import { dirname, isAbsolute, relative, sep } from "node:path";
+import { isAbsolute } from "node:path";
 
 import * as vscode from "vscode";
 
@@ -10,7 +10,10 @@ import {
   resolvePathWithinRepository,
 } from "../../domain/pathValidation";
 import { isFileChange, isFileDiffScope } from "../../domain/validation";
-import { discoverRepositories, findRepositoryRoot } from "../../infrastructure/git/GitCli";
+import {
+  discoverRepositories,
+  resolveWorkspaceRepositoryFile,
+} from "../../infrastructure/git/GitCli";
 import type { FileNode } from "../tree/changeNodes";
 
 export interface KnownGitTarget {
@@ -37,19 +40,8 @@ export async function resolveFileContextTarget(
         (candidate === undefined ? vscode.window.activeTextEditor?.document.uri : undefined));
   if (uri?.scheme !== "file") return null;
 
-  const repositoryRoot = await findRepositoryRoot(dirname(uri.fsPath));
-  if (!repositoryRoot) return null;
-  const nativePath = relative(repositoryRoot, uri.fsPath);
-  if (
-    nativePath.length === 0 ||
-    nativePath === ".." ||
-    nativePath.startsWith(`..${sep}`) ||
-    isAbsolute(nativePath)
-  ) {
-    return null;
-  }
-
-  return resolveKnownFileTarget(repositoryRoot, nativePath.replaceAll("\\", "/"));
+  const target = await resolveWorkspaceRepositoryFile(uri.fsPath);
+  return target ? { ...target, uri } : null;
 }
 
 /** Resolves a trusted repository/path pair without materializing a filesystem URI. */

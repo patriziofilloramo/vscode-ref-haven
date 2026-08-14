@@ -1,5 +1,3 @@
-import { dirname, isAbsolute, relative, sep } from "node:path";
-
 import * as vscode from "vscode";
 
 import {
@@ -20,12 +18,13 @@ import {
 } from "../domain/fileAnnotations";
 import {
   blameFile,
-  findRepositoryRoot,
   listChangedLineRanges,
   listComparisonRefs,
   readCurrentBranch,
   readGitUserName,
+  resolveWorkspaceRepositoryFile,
   resolveRef,
+  type WorkspaceRepositoryFile,
 } from "../infrastructure/git/GitCli";
 import { blameAuthorLabel } from "../ui/blame/blamePresentation";
 import { formatRelativeTime } from "../ui/format";
@@ -90,7 +89,7 @@ export class FileAnnotationsController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private generation = 0;
   private mode: FileAnnotationMode;
-  private readonly repositoryRoots = new Map<string, string>();
+  private readonly repositoryFiles = new Map<string, WorkspaceRepositoryFile>();
   private updateTimer: NodeJS.Timeout | undefined;
   private readonly userNames = new Map<string, Promise<string | null>>();
 
@@ -129,7 +128,7 @@ export class FileAnnotationsController implements vscode.Disposable {
   }
 
   public refresh(): void {
-    this.repositoryRoots.clear();
+    this.repositoryFiles.clear();
     this.userNames.clear();
     this.scheduleUpdate();
   }
@@ -377,18 +376,14 @@ export class FileAnnotationsController implements vscode.Disposable {
   private async getActiveTarget(): Promise<ActiveFileTarget | null> {
     const editor = vscode.window.activeTextEditor;
     if (editor?.document.uri.scheme !== "file") return null;
-    const directory = dirname(editor.document.uri.fsPath);
-    let repositoryRoot = this.repositoryRoots.get(directory);
-    if (!repositoryRoot) {
-      repositoryRoot = (await findRepositoryRoot(directory)) ?? undefined;
-      if (!repositoryRoot) return null;
-      this.repositoryRoots.set(directory, repositoryRoot);
+    const filePath = editor.document.uri.fsPath;
+    let target = this.repositoryFiles.get(filePath);
+    if (!target) {
+      target = (await resolveWorkspaceRepositoryFile(filePath)) ?? undefined;
+      if (!target) return null;
+      this.repositoryFiles.set(filePath, target);
     }
-    const nativePath = relative(repositoryRoot, editor.document.uri.fsPath);
-    if (nativePath === ".." || nativePath.startsWith(`..${sep}`) || isAbsolute(nativePath)) {
-      return null;
-    }
-    return { editor, filePath: nativePath.replaceAll("\\", "/"), repositoryRoot };
+    return { editor, ...target };
   }
 
   private getUserName(repositoryRoot: string): Promise<string | null> {

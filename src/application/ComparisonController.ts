@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { dirname, join, relative } from "node:path";
+import { join } from "node:path";
 
 import * as vscode from "vscode";
 
@@ -41,11 +41,11 @@ import { formatDiffStats, pluralize } from "../ui/format";
 import { showTransientSuccess } from "../ui/feedback";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
-  findRepositoryRoot,
   listComparisonRefs,
   discoverRepositories,
   readComparisonPatch,
   readCurrentBranch,
+  resolveWorkspaceRepositoryFile,
   resolveRef,
 } from "../infrastructure/git/GitCli";
 import { pickBranch, pickRepository } from "../ui/pickers/comparisonPickers";
@@ -634,15 +634,14 @@ export class ComparisonController {
       void vscode.window.showWarningMessage("Open a file before opening one of its revisions.");
       return;
     }
-    const fsPath = editor.document.uri.fsPath;
-    const repositoryRoot = await findRepositoryRoot(dirname(fsPath));
-    if (!repositoryRoot) {
+    const target = await resolveWorkspaceRepositoryFile(editor.document.uri.fsPath);
+    if (!target) {
       void vscode.window.showWarningMessage("The active file is not inside a Git repository.");
       return;
     }
-    const canonicalRepository = await this.assertKnownRepositoryRoot(repositoryRoot);
+    const canonicalRepository = await this.assertKnownRepositoryRoot(target.repositoryRoot);
     const canonicalRepositoryRoot = canonicalRepository.rootPath;
-    const relativePath = relative(canonicalRepositoryRoot, fsPath).replaceAll("\\", "/");
+    const relativePath = target.filePath;
 
     const branches = await listComparisonRefs(canonicalRepositoryRoot);
     if (branches.length === 0) {

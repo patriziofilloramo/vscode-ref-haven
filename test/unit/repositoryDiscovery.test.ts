@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { buildRepositoryIdentities } from "../../src/infrastructure/git/repositoryDiscovery";
+import {
+  buildCanonicalRepositoryIdentities,
+  buildRepositoryIdentities,
+} from "../../src/infrastructure/git/repositoryDiscovery";
 
 suite("repository identity discovery", () => {
   test("keeps nested repositories discovered by the VS Code Git API", () => {
@@ -35,7 +40,7 @@ suite("repository identity discovery", () => {
     );
   });
 
-  test("rejects a repository root above the trusted workspace folder", () => {
+  test("accepts the containing repository when a trusted subfolder is opened", () => {
     const repository = resolve("repository");
     const workspace = join(repository, "packages", "opened-folder");
 
@@ -44,7 +49,59 @@ suite("repository identity discovery", () => {
         [repository],
         [{ name: "opened-folder", rootPath: workspace, uri: "file:///opened-folder" }],
       ),
-      [],
+      [
+        {
+          label: "repository (opened-folder)",
+          relativeRepositoryPath: join("..", ".."),
+          rootPath: repository,
+          workspaceFolderUri: "file:///opened-folder",
+        },
+      ],
     );
+  });
+
+  test("associates a repository with the nearest related workspace folder", () => {
+    const repository = resolve("repository");
+    const packageFolder = join(repository, "packages");
+    const openedFolder = join(packageFolder, "opened-folder");
+
+    assert.equal(
+      buildRepositoryIdentities(
+        [repository],
+        [
+          { name: "opened-folder", rootPath: openedFolder, uri: "file:///opened-folder" },
+          { name: "packages", rootPath: packageFolder, uri: "file:///packages" },
+        ],
+      )[0]?.workspaceFolderUri,
+      "file:///packages",
+    );
+  });
+
+  test("rejects a repository reached through a symlink escape", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "refhaven-repository-discovery-"));
+    const workspace = join(fixture, "workspace");
+    const outsideRepository = join(fixture, "outside-repository");
+    const linkedRepository = join(workspace, "linked-repository");
+    try {
+      await Promise.all([
+        mkdir(workspace, { recursive: true }),
+        mkdir(outsideRepository, { recursive: true }),
+      ]);
+      await symlink(
+        outsideRepository,
+        linkedRepository,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+
+      assert.deepEqual(
+        await buildCanonicalRepositoryIdentities(
+          [linkedRepository],
+          [{ name: "workspace", rootPath: workspace, uri: "file:///workspace" }],
+        ),
+        [],
+      );
+    } finally {
+      await rm(fixture, { force: true, recursive: true });
+    }
   });
 });

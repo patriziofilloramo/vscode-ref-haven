@@ -216,6 +216,9 @@ and worktree around each operation. It covers:
 ## Extension Host tests
 
 - extension activation stays independent of comparison calculation;
+- an isolated workspace opened below its Git root discovers the canonical
+  containing repository and provides rich line hover using the full
+  repository-relative path, covering local and Remote SSH workspace layouts;
 - all declared commands are registered;
 - Explorer/editor RefHaven file actions and the editor-title quick menu are
   contributed with file-only context clauses;

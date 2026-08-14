@@ -38,12 +38,13 @@ import {
   runGitBuffer,
   runGitWithInput,
 } from "./GitProcess";
-import { buildRepositoryIdentities } from "./repositoryDiscovery";
+import { buildCanonicalRepositoryIdentities } from "./repositoryDiscovery";
 
 const MAX_HOVER_DIFF_BYTES = 64 * 1024;
 const MAX_PATCH_BYTES = 64 * 1024 * 1024;
 export { GitOperationError } from "./GitProcess";
-export { findRepositoryRoot } from "./repositoryRoot";
+export { resolveWorkspaceRepositoryFile } from "./repositoryRoot";
+export type { WorkspaceRepositoryFile } from "./repositoryRoot";
 export { listPendingStashFileRecoveries, StashCleanupIncompleteError } from "./stashFile";
 
 interface GitApiRepository {
@@ -74,7 +75,7 @@ export async function discoverRepositories(signal?: AbortSignal): Promise<Reposi
     }),
   );
 
-  return buildRepositoryIdentities(
+  return buildCanonicalRepositoryIdentities(
     [...gitRoots, ...fallbackRoots].filter((root): root is string => root !== null),
     folders.map((folder) => ({
       name: folder.name,

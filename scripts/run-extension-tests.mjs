@@ -16,7 +16,9 @@ Reflect.deleteProperty(process.env, "ELECTRON_RUN_AS_NODE");
 Reflect.deleteProperty(process.env, "VSCODE_ESM_ENTRYPOINT");
 
 const fixtureRoot = await mkdtemp(join(tmpdir(), "refhaven-extension-workspace-"));
+const nestedFixtureRoot = await mkdtemp(join(tmpdir(), "refhaven-extension-ancestor-workspace-"));
 const userDataRoot = await mkdtemp(join(tmpdir(), "refhaven-extension-user-data-"));
+const nestedUserDataRoot = await mkdtemp(join(tmpdir(), "refhaven-extension-ancestor-user-data-"));
 try {
   await createFixtureRepository(fixtureRoot, userDataRoot);
   await runTests({
@@ -25,12 +27,23 @@ try {
     launchArgs: [fixtureRoot, "--disable-extensions", `--user-data-dir=${userDataRoot}`],
     version: "stable",
   });
+  const openedFolder = join(nestedFixtureRoot, "opened-folder");
+  await createFixtureRepository(nestedFixtureRoot, nestedUserDataRoot, "opened-folder");
+  await runTests({
+    extensionDevelopmentPath: projectRoot,
+    extensionTestsEnv: { REFHAVEN_EXTENSION_TEST_SUITE: "ancestor-workspace" },
+    extensionTestsPath: resolve(projectRoot, ".test-out", "test", "extension", "index.js"),
+    launchArgs: [openedFolder, "--disable-extensions", `--user-data-dir=${nestedUserDataRoot}`],
+    version: "stable",
+  });
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
+  await rm(nestedFixtureRoot, { force: true, recursive: true });
   await rm(userDataRoot, { force: true, recursive: true });
+  await rm(nestedUserDataRoot, { force: true, recursive: true });
 }
 
-async function createFixtureRepository(repositoryRoot, isolationRoot) {
+async function createFixtureRepository(repositoryRoot, isolationRoot, fixtureDirectory = ".") {
   const templateDirectory = join(isolationRoot, "empty-git-template");
   await mkdir(templateDirectory, { recursive: true });
   const environment = buildFixtureGitEnvironment(isolationRoot, templateDirectory);
@@ -50,10 +63,16 @@ async function createFixtureRepository(repositoryRoot, isolationRoot) {
     );
 
   await runGit("init");
-  await mkdir(join(repositoryRoot, "nested"));
-  await writeFile(join(repositoryRoot, "fixture.txt"), "tracked fixture line\n", "utf8");
-  await writeFile(join(repositoryRoot, "nested", "deleted.txt"), "tracked nested line\n", "utf8");
-  await runGit("add", "--", "fixture.txt", "nested/deleted.txt");
+  const fixtureDirectoryPath = join(repositoryRoot, fixtureDirectory);
+  await mkdir(join(fixtureDirectoryPath, "nested"), { recursive: true });
+  await writeFile(join(fixtureDirectoryPath, "fixture.txt"), "tracked fixture line\n", "utf8");
+  await writeFile(
+    join(fixtureDirectoryPath, "nested", "deleted.txt"),
+    "tracked nested line\n",
+    "utf8",
+  );
+  const gitPrefix = fixtureDirectory === "." ? "" : `${fixtureDirectory}/`;
+  await runGit("add", "--", `${gitPrefix}fixture.txt`, `${gitPrefix}nested/deleted.txt`);
   await runGit(
     "-c",
     "user.name=RefHaven Extension Tests",

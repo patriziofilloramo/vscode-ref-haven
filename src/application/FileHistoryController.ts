@@ -1,11 +1,9 @@
-import { dirname, relative } from "node:path";
-
 import * as vscode from "vscode";
 
 import { MAX_INTERACTIVE_INPUT_LENGTH } from "../domain/inputLimits";
 import type { Logger } from "./Logger";
 import type { ComparisonController } from "./ComparisonController";
-import { findRepositoryRoot, listLineHistory } from "../infrastructure/git/GitCli";
+import { listLineHistory, resolveWorkspaceRepositoryFile } from "../infrastructure/git/GitCli";
 import {
   FILE_HISTORY_FOCUS_COMMAND,
   type FileHistoryNode,
@@ -30,14 +28,13 @@ export class FileHistoryController implements vscode.Disposable {
       this.applyTarget(undefined);
       return;
     }
-    const repositoryRoot = await findRepositoryRoot(dirname(editor.document.uri.fsPath));
+    const target = await resolveWorkspaceRepositoryFile(editor.document.uri.fsPath);
     if (this.disposed || generation !== this.generation) return;
-    if (!repositoryRoot) {
+    if (!target) {
       this.applyTarget(undefined);
       return;
     }
-    const filePath = relative(repositoryRoot, editor.document.uri.fsPath).replaceAll("\\", "/");
-    this.treeProvider.setTarget({ filePath, repositoryRoot });
+    this.treeProvider.setTarget(target);
     if (force) this.treeProvider.refresh();
     this.logger.info("Refreshed file history target", { operation: "refreshFileHistory" });
   }
@@ -48,15 +45,14 @@ export class FileHistoryController implements vscode.Disposable {
       void vscode.window.showWarningMessage("Open a tracked file before viewing line history.");
       return;
     }
-    const repositoryRoot = await findRepositoryRoot(dirname(editor.document.uri.fsPath));
-    if (!repositoryRoot) {
+    const target = await resolveWorkspaceRepositoryFile(editor.document.uri.fsPath);
+    if (!target) {
       void vscode.window.showWarningMessage("The active file is not inside a Git repository.");
       return;
     }
-    const filePath = relative(repositoryRoot, editor.document.uri.fsPath).replaceAll("\\", "/");
     const startLine = Math.min(editor.selection.start.line, editor.selection.end.line) + 1;
     const endLine = Math.max(editor.selection.start.line, editor.selection.end.line) + 1;
-    await this.showLineHistoryAt(repositoryRoot, filePath, startLine, endLine);
+    await this.showLineHistoryAt(target.repositoryRoot, target.filePath, startLine, endLine);
   }
 
   public async showLineHistoryAt(
