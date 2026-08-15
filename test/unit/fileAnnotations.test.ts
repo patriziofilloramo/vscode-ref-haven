@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 
-import { heatmapBucket } from "../../src/domain/fileAnnotations";
+import {
+  DEFAULT_HEATMAP_LOCATIONS,
+  heatmapBucket,
+  normalizeHeatmapLocations,
+  toggledHeatmapMode,
+} from "../../src/domain/fileAnnotations";
 import { parseChangedLineRanges } from "../../src/infrastructure/git/diffHunks";
 
 suite("file annotations", () => {
@@ -8,10 +13,35 @@ suite("file annotations", () => {
     const now = Date.UTC(2026, 6, 15);
     const day = 86_400_000;
     assert.equal(heatmapBucket(now, now), "day");
+    assert.equal(heatmapBucket(now - day, now), "day");
+    assert.equal(heatmapBucket(now - day - 1, now), "week");
     assert.equal(heatmapBucket(now - 2 * day, now), "week");
+    assert.equal(heatmapBucket(now - 7 * day, now), "week");
+    assert.equal(heatmapBucket(now - 7 * day - 1, now), "month");
     assert.equal(heatmapBucket(now - 20 * day, now), "month");
+    assert.equal(heatmapBucket(now - 30 * day, now), "month");
+    assert.equal(heatmapBucket(now - 30 * day - 1, now), "year");
     assert.equal(heatmapBucket(now - 200 * day, now), "year");
+    assert.equal(heatmapBucket(now - 365 * day, now), "year");
+    assert.equal(heatmapBucket(now - 365 * day - 1, now), "old");
     assert.equal(heatmapBucket(now - 500 * day, now), "old");
+    assert.equal(heatmapBucket(now + day, now), "day");
+    assert.equal(heatmapBucket(null, now), "uncommitted");
+  });
+
+  test("normalizes heatmap locations in stable visual order", () => {
+    assert.deepEqual(normalizeHeatmapLocations(["line", "edge", "line"]), ["edge", "line"]);
+    assert.deepEqual(normalizeHeatmapLocations(["unknown", "overview"]), ["overview"]);
+    assert.deepEqual(normalizeHeatmapLocations([]), DEFAULT_HEATMAP_LOCATIONS);
+    assert.deepEqual(normalizeHeatmapLocations("line"), DEFAULT_HEATMAP_LOCATIONS);
+  });
+
+  test("toggles against persisted state while treating session-only changes as heatmap off", () => {
+    assert.equal(toggledHeatmapMode("off", "off"), "heatmap");
+    assert.equal(toggledHeatmapMode("blame", "blame"), "heatmap");
+    assert.equal(toggledHeatmapMode("heatmap", "heatmap"), "off");
+    assert.equal(toggledHeatmapMode("changes", "heatmap"), "heatmap");
+    assert.equal(toggledHeatmapMode("heatmap", "off"), "heatmap");
   });
 
   test("parses additions, changes, and deletion-only zero-context hunks", () => {

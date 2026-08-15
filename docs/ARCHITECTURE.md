@@ -468,11 +468,22 @@ revision, so successive hovers walk a line's history backwards.
 ### FileAnnotationsController
 
 Runs opt-in whole-file `git blame --line-porcelain` for gutter blame and the
-five-bucket age heatmap; unsaved text is supplied over stdin. Changes mode
-parses zero-context diff hunks against a locally resolved immutable base SHA
-and deliberately waits for a dirty editor to be saved. Updates are debounced,
-generation-checked, cancellable, capped at 5,000 lines, escaped before Markdown
-rendering, and never persisted.
+file heatmap; unsaved text is supplied over stdin. The heatmap maps every line
+to one working-tree state or one of five absolute commit-age bands. Absolute
+bands keep the same meaning across files, while a separate uncommitted bucket
+prevents working-tree edits from being mistaken for recent commits.
+
+Rendering uses contributed `ThemeColor` tokens rather than hard-coded runtime
+colors. `edge` and `overview` are the default locations; `line` is an optional
+translucent whole-line treatment. Changing locations disposes and recreates the
+decoration types before scheduling a fresh render. The controller retains only
+the active document's aggregate bucket counts for the textual legend; blame
+results and line-level heatmap data are not persisted.
+
+Changes mode parses zero-context diff hunks against a locally resolved
+immutable base SHA and deliberately waits for a dirty editor to be saved.
+Updates are debounced, generation-checked, cancellable, capped at 5,000 lines,
+escaped before Markdown rendering, and never persisted.
 
 ### RepositoryWatcher
 

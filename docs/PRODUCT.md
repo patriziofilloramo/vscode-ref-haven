@@ -115,7 +115,14 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   validated controllers as the Command Palette instead of introducing parallel
   implementations.
 - **Line blame and hover:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, full commit identity, local commit statistics, a bounded previous-revision patch, and native actions for details, diffs, history, revision opening, and copy.
-- **File annotations:** opt-in whole-file gutter blame, a five-bucket commit-age heatmap, and saved-working-tree change ranges relative to a locally resolved reference. Computation is cancellable, bounded to 5,000 editor lines, and never persisted.
+- **File annotations:** opt-in whole-file gutter blame, a file heatmap with a
+  distinct working-tree state and five fixed commit-age bands, and
+  saved-working-tree change ranges relative to a locally resolved reference.
+  Heatmap placement is configurable across editor edge, overview ruler, and
+  optional full-line tint; every band uses public theme colors. A textual
+  legend with live counts and percentages keeps the result understandable
+  without relying on color. Computation is cancellable, bounded to 5,000 editor
+  lines, and never persisted.
 - **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
 - **Line history:** a selection-aware quickpick backed by `git log -L`, opening the selected historical revision locally.
 - **Flexible local references:** comparisons accept branches, tags, HEAD, typed locally resolvable revisions, and the live Working Tree; typed revisions are resolved and persisted as immutable SHAs.

@@ -38,8 +38,12 @@ loading in the Extension Host.
 Repository-navigation coverage includes strict NUL-delimited worktree parser
 fixtures and real worktree enumeration in the Extension Host.
 Annotation coverage includes repeated line-porcelain parsing, duplicate-line
-rejection, heatmap age buckets, zero-context diff hunks, unsaved-buffer blame,
-and real changed-line range calculation.
+rejection, all five heatmap age buckets plus the distinct uncommitted state,
+stable location normalization with safe defaults, the complete public theme
+color contract, zero-context diff hunks, unsaved-buffer blame, and real changed-
+line range calculation. The direct toggle's persisted-state transition has
+unit coverage, while the Extension Host verifies both heatmap commands are
+registered.
 Interaction-surface coverage includes exact command and submenu contributions,
 Extension Host command registration, canonical URI/tree-node file resolution,
 and a real path-limited working-tree comparison that excludes changes in other

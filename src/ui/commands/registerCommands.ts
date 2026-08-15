@@ -207,6 +207,8 @@ export function registerCommands(
       typeof resource === "string" && typeof filePath === "string"
         ? fileActionsController.showFileHistoryAt(resource, filePath)
         : fileActionsController.showFileHistory(resource),
+    [COMMAND_IDS.showFileHeatmapLegend]: (resource) =>
+      fileActionsController.showFileHeatmapLegend(resource),
     [COMMAND_IDS.showLineBlameActions]: () => blameController.showLineBlameActions(),
     [COMMAND_IDS.inspectCurrentLine]: () => blameController.showLineBlameActions(),
     [COMMAND_IDS.showLineHistory]: (resource, filePath, lineNumber) =>
@@ -217,6 +219,8 @@ export function registerCommands(
     [COMMAND_IDS.stashFile]: (resource) => fileActionsController.stashFile(resource),
     [COMMAND_IDS.swapComparison]: (node) => controller.swapComparison(requireComparison(node)),
     [COMMAND_IDS.toggleInlineBlame]: () => blameController.toggleInlineBlame(),
+    [COMMAND_IDS.toggleFileHeatmap]: (resource) =>
+      fileActionsController.toggleFileHeatmap(resource),
     [COMMAND_IDS.unpinComparison]: (node) => controller.setPinned(requireComparison(node), false),
     [COMMAND_IDS.viewFilesAsList]: () => controller.setFilesLayout("list"),
     [COMMAND_IDS.viewFilesAsTree]: () => controller.setFilesLayout("tree"),

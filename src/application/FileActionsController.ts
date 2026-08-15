@@ -105,6 +105,18 @@ export class FileActionsController {
             vscode.commands.executeCommand(COMMAND_IDS.changeFileAnnotations, target.uri),
         },
         {
+          detail: "Enable or disable the file heatmap without opening a second picker",
+          label: "$(color-mode) Toggle File Heatmap",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.toggleFileHeatmap, target.uri),
+        },
+        {
+          detail: "Age bands, working-tree state, and live line counts",
+          label: "$(list-tree) Show File Heatmap Legend",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.showFileHeatmapLegend, target.uri),
+        },
+        {
           detail: "Search commit messages, authors, SHAs, or changed content",
           label: "$(search) Search Commits...",
           run: (): Thenable<unknown> => vscode.commands.executeCommand(COMMAND_IDS.searchCommits),
@@ -346,6 +358,22 @@ export class FileActionsController {
       throw new Error("The selected file does not exist in the working tree.");
     }
     await this.fileAnnotationsController.changeAnnotations();
+  }
+
+  public async toggleFileHeatmap(candidate?: unknown): Promise<void> {
+    const target = await this.requireTarget(candidate);
+    if (!(await activateFileContextTarget(target))) {
+      throw new Error("The selected file does not exist in the working tree.");
+    }
+    await this.fileAnnotationsController.toggleHeatmap();
+  }
+
+  public async showFileHeatmapLegend(candidate?: unknown): Promise<void> {
+    const target = await this.requireTarget(candidate);
+    if (!(await activateFileContextTarget(target))) {
+      throw new Error("The selected file does not exist in the working tree.");
+    }
+    await this.fileAnnotationsController.showHeatmapLegend();
   }
 
   public async openFileAtRevision(candidate?: unknown): Promise<void> {

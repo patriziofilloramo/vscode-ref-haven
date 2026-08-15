@@ -179,6 +179,18 @@
         "icon": "$(symbol-color)"
       },
       {
+        "command": "refhaven.toggleFileHeatmap",
+        "title": "Toggle File Heatmap",
+        "category": "RefHaven",
+        "icon": "$(color-mode)"
+      },
+      {
+        "command": "refhaven.showFileHeatmapLegend",
+        "title": "Show File Heatmap Legend",
+        "category": "RefHaven",
+        "icon": "$(list-tree)"
+      },
+      {
         "command": "refhaven.changeFileHistoryFilter",
         "title": "Filter File History...",
         "category": "RefHaven",
@@ -613,6 +625,30 @@
           "default": "off",
           "description": "Whole-file annotation mode. Changes-relative-to-ref annotations are selected per session from the command palette."
         },
+        "refhaven.fileAnnotations.heatmap.locations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "edge",
+              "overview",
+              "line"
+            ],
+            "enumDescriptions": [
+              "Show a compact color strip at the start of each editor line.",
+              "Show the file-wide age distribution in the overview ruler.",
+              "Tint the complete editor line with a translucent background."
+            ]
+          },
+          "default": [
+            "edge",
+            "overview"
+          ],
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "description": "Where the file heatmap is rendered. Edge and overview keep code readable; add line for a stronger full-line visualization."
+        },
         "refhaven.git.timeoutSeconds": {
           "type": "number",
           "default": 30,
@@ -622,6 +658,128 @@
         }
       }
     },
+    "colors": [
+      {
+        "id": "refhaven.heatmap.uncommittedForeground",
+        "description": "RefHaven heatmap indicator for uncommitted working-tree lines.",
+        "defaults": {
+          "dark": "#D2A8FF",
+          "light": "#8250DF",
+          "highContrast": "#D2A8FF",
+          "highContrastLight": "#6639BA"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.uncommittedBackground",
+        "description": "RefHaven heatmap background for uncommitted working-tree lines.",
+        "defaults": {
+          "dark": "#D2A8FF24",
+          "light": "#8250DF18",
+          "highContrast": "#D2A8FF26",
+          "highContrastLight": "#6639BA18"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.dayForeground",
+        "description": "RefHaven heatmap indicator for lines committed within the last 24 hours.",
+        "defaults": {
+          "dark": "#FF7B72",
+          "light": "#CF222E",
+          "highContrast": "#FF8080",
+          "highContrastLight": "#A40E26"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.dayBackground",
+        "description": "RefHaven heatmap background for lines committed within the last 24 hours.",
+        "defaults": {
+          "dark": "#FF7B7224",
+          "light": "#CF222E18",
+          "highContrast": "#FF808026",
+          "highContrastLight": "#A40E2618"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.weekForeground",
+        "description": "RefHaven heatmap indicator for lines committed more than 24 hours and up to seven days ago.",
+        "defaults": {
+          "dark": "#F0883E",
+          "light": "#BC4C00",
+          "highContrast": "#FFA657",
+          "highContrastLight": "#953800"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.weekBackground",
+        "description": "RefHaven heatmap background for lines committed more than 24 hours and up to seven days ago.",
+        "defaults": {
+          "dark": "#F0883E24",
+          "light": "#BC4C0018",
+          "highContrast": "#FFA65726",
+          "highContrastLight": "#95380018"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.monthForeground",
+        "description": "RefHaven heatmap indicator for lines committed more than seven and up to thirty days ago.",
+        "defaults": {
+          "dark": "#D29922",
+          "light": "#9A6700",
+          "highContrast": "#FFD700",
+          "highContrastLight": "#735C0F"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.monthBackground",
+        "description": "RefHaven heatmap background for lines committed more than seven and up to thirty days ago.",
+        "defaults": {
+          "dark": "#D2992224",
+          "light": "#9A670018",
+          "highContrast": "#FFD70026",
+          "highContrastLight": "#735C0F18"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.yearForeground",
+        "description": "RefHaven heatmap indicator for lines committed more than thirty and up to three hundred sixty-five days ago.",
+        "defaults": {
+          "dark": "#58A6FF",
+          "light": "#0969DA",
+          "highContrast": "#79C0FF",
+          "highContrastLight": "#0550AE"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.yearBackground",
+        "description": "RefHaven heatmap background for lines committed more than thirty and up to three hundred sixty-five days ago.",
+        "defaults": {
+          "dark": "#58A6FF24",
+          "light": "#0969DA18",
+          "highContrast": "#79C0FF26",
+          "highContrastLight": "#0550AE18"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.oldForeground",
+        "description": "RefHaven heatmap indicator for lines committed more than one year ago.",
+        "defaults": {
+          "dark": "#8B949E",
+          "light": "#57606A",
+          "highContrast": "#FFFFFF",
+          "highContrastLight": "#24292F"
+        }
+      },
+      {
+        "id": "refhaven.heatmap.oldBackground",
+        "description": "RefHaven heatmap background for lines committed more than one year ago.",
+        "defaults": {
+          "dark": "#8B949E24",
+          "light": "#57606A18",
+          "highContrast": "#FFFFFF26",
+          "highContrastLight": "#24292F18"
+        }
+      }
+    ],
     "submenus": [
       {
         "id": "refhaven.fileActions",
@@ -1358,6 +1516,16 @@
           "command": "refhaven.changeFileAnnotations",
           "when": "resourceScheme == file",
           "group": "3_annotations@1"
+        },
+        {
+          "command": "refhaven.toggleFileHeatmap",
+          "when": "resourceScheme == file",
+          "group": "3_annotations@2"
+        },
+        {
+          "command": "refhaven.showFileHeatmapLegend",
+          "when": "resourceScheme == file",
+          "group": "3_annotations@3"
         },
         {
           "command": "refhaven.stashFile",

@@ -5,6 +5,7 @@ export const EXTENSION_CONFIGURATION_SECTION = "refhaven";
 export const EXTENSION_SETTINGS = {
   approvedBrowserOrigins: "browserLinks.approvedOrigins",
   browserHostGrammar: "browserLinks.hostGrammar",
+  fileAnnotationsHeatmapLocations: "fileAnnotations.heatmap.locations",
   fileAnnotationsMode: "fileAnnotations.mode",
   gitTimeoutSeconds: "git.timeoutSeconds",
   inlineBlameEnabled: "inlineBlame.enabled",
@@ -18,6 +19,7 @@ export type ExtensionSetting = (typeof EXTENSION_SETTINGS)[keyof typeof EXTENSIO
 export const EXTENSION_SETTING_DEFAULTS = {
   approvedBrowserOrigins: [] as readonly string[],
   browserHostGrammar: "auto",
+  fileAnnotationsHeatmapLocations: ["edge", "overview"] as const,
   fileAnnotationsMode: "off",
   gitTimeoutSeconds: 30,
   inlineBlameEnabled: true,

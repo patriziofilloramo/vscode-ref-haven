@@ -49,6 +49,7 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.openFileDiff"));
     assert.ok(commands.includes("refhaven.showRefHavenMenu"));
     assert.ok(commands.includes("refhaven.showFileHistory"));
+    assert.ok(commands.includes("refhaven.showFileHeatmapLegend"));
     assert.ok(commands.includes("refhaven.compareFileWithRevision"));
     assert.ok(commands.includes("refhaven.stashFile"));
     assert.ok(commands.includes("refhaven.compareStashFileWithHead"));
@@ -71,6 +72,7 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.saveComparisonPatch"));
     assert.ok(commands.includes("refhaven.copyFilePatch"));
     assert.ok(commands.includes("refhaven.refreshAll"));
+    assert.ok(commands.includes("refhaven.toggleFileHeatmap"));
     assert.ok(commands.includes("refhaven.comparisons.focus"));
     assert.ok(commands.includes("refhaven.inspector.focus"));
     assert.ok(commands.includes("refhaven.repository.focus"));

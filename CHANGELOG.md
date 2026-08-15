@@ -6,6 +6,22 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Expand the file heatmap into a theme-aware, accessible overview with a
+  distinct uncommitted state, five fixed commit-age bands, compact editor-edge
+  and overview-ruler rendering, optional full-line tint, and customizable
+  foreground/background colors for every band.
+- Add direct **Toggle File Heatmap** and **Show File Heatmap Legend** commands.
+  The legend explains every band and reports live line counts and percentages
+  for the active file.
+
+### Changed
+
+- Heatmap hovers now name the active age band before showing the local blame
+  details, and working-tree lines are no longer grouped with commits from
+  today.
+
 ## [0.13.9] — 2026-08-15
 
 ### Security

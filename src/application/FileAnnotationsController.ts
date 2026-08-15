@@ -7,14 +7,20 @@ import {
   getExtensionConfiguration,
   readExtensionSetting,
 } from "../config/extensionConfiguration";
+import { HEATMAP_COLOR_IDS } from "../config/heatmapColors";
 import { runInBackground } from "./errorHandling";
 import type { Logger } from "./Logger";
 import type { FileBlameLine } from "../domain/blame";
 import {
+  HEATMAP_BUCKET_DETAILS,
+  HEATMAP_BUCKETS,
   heatmapBucket,
+  normalizeHeatmapLocations,
+  toggledHeatmapMode,
   type ChangedLineRange,
   type FileAnnotationMode,
   type HeatmapBucket,
+  type HeatmapLocation,
 } from "../domain/fileAnnotations";
 import {
   blameFile,
@@ -53,6 +59,21 @@ interface AnnotationModeItem extends vscode.QuickPickItem {
   readonly annotationMode: FileAnnotationMode;
 }
 
+interface HeatmapSummary {
+  readonly counts: Readonly<Record<HeatmapBucket, number>>;
+  readonly documentUri: string;
+  readonly total: number;
+}
+
+const HEATMAP_BUCKET_ICONS: Readonly<Record<HeatmapBucket, string>> = {
+  day: "flame",
+  month: "circle-large-filled",
+  old: "archive",
+  uncommitted: "edit",
+  week: "circle-filled",
+  year: "history",
+};
+
 export class FileAnnotationsController implements vscode.Disposable {
   private activeUpdate: AbortController | undefined;
   private readonly blameDecoration = vscode.window.createTextEditorDecorationType({
@@ -75,15 +96,8 @@ export class FileAnnotationsController implements vscode.Disposable {
     overviewRulerColor: new vscode.ThemeColor("editorOverviewRuler.deletedForeground"),
     overviewRulerLane: vscode.OverviewRulerLane.Left,
   });
-  private readonly heatmapDecorations: Readonly<
-    Record<HeatmapBucket, vscode.TextEditorDecorationType>
-  > = {
-    day: heatmapDecoration("rgba(56, 189, 113, 0.20)"),
-    month: heatmapDecoration("rgba(234, 179, 8, 0.13)"),
-    old: heatmapDecoration("rgba(128, 128, 128, 0.06)"),
-    week: heatmapDecoration("rgba(56, 189, 113, 0.12)"),
-    year: heatmapDecoration("rgba(249, 115, 22, 0.10)"),
-  };
+  private heatmapDecorations = createHeatmapDecorations();
+  private heatmapSummary: HeatmapSummary | undefined;
   private changesBase: ChangesBase | undefined;
   private decoratedEditor: vscode.TextEditor | undefined;
   private readonly disposables: vscode.Disposable[] = [];
@@ -104,12 +118,15 @@ export class FileAnnotationsController implements vscode.Disposable {
         if (document === vscode.window.activeTextEditor?.document) this.scheduleUpdate();
       }),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (
-          !event.affectsConfiguration(extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsMode))
-        ) {
-          return;
-        }
-        if (this.mode !== "changes") this.mode = readConfiguredMode();
+        const modeChanged = event.affectsConfiguration(
+          extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsMode),
+        );
+        const locationsChanged = event.affectsConfiguration(
+          extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations),
+        );
+        if (!modeChanged && !locationsChanged) return;
+        if (modeChanged && this.mode !== "changes") this.mode = readConfiguredMode();
+        if (locationsChanged) this.replaceHeatmapDecorations();
         this.scheduleUpdate();
       }),
     );
@@ -148,7 +165,7 @@ export class FileAnnotationsController implements vscode.Disposable {
       },
       {
         annotationMode: "heatmap",
-        detail: "Color lines by the age of their last commit",
+        detail: "Working-tree changes plus five fixed commit-age bands",
         label: "$(color-mode) File heatmap",
         ...(this.mode === "heatmap" ? { description: "current" } : {}),
       },
@@ -201,6 +218,46 @@ export class FileAnnotationsController implements vscode.Disposable {
     }
 
     await this.update(true);
+  }
+
+  public async toggleHeatmap(): Promise<void> {
+    this.mode = toggledHeatmapMode(this.mode, readConfiguredMode());
+    const enabled = this.mode === "heatmap";
+    this.changesBase = undefined;
+    await getExtensionConfiguration().update(
+      EXTENSION_SETTINGS.fileAnnotationsMode,
+      this.mode,
+      vscode.ConfigurationTarget.Global,
+    );
+    await this.update(true);
+    void vscode.window.showInformationMessage(
+      `RefHaven file heatmap ${enabled ? "enabled" : "off"}.`,
+    );
+  }
+
+  public async showHeatmapLegend(): Promise<void> {
+    const activeUri = vscode.window.activeTextEditor?.document.uri.toString();
+    const summary =
+      this.heatmapSummary?.documentUri === activeUri ? this.heatmapSummary : undefined;
+    await vscode.window.showQuickPick(
+      HEATMAP_BUCKETS.map((bucket) => {
+        const details = HEATMAP_BUCKET_DETAILS[bucket];
+        const count = summary?.counts[bucket];
+        const countDetail =
+          count === undefined || !summary || summary.total === 0
+            ? undefined
+            : `${count.toLocaleString()} ${count === 1 ? "line" : "lines"} (${Math.round((count / summary.total) * 100).toString()}%)`;
+        return {
+          description: details.age,
+          ...(countDetail ? { detail: countDetail } : {}),
+          label: `$(${HEATMAP_BUCKET_ICONS[bucket]}) ${details.label}`,
+        };
+      }),
+      {
+        placeHolder: "Colors follow the active theme and can be customized in VS Code settings",
+        title: "RefHaven: File Heatmap Legend",
+      },
+    );
   }
 
   private scheduleUpdate(): void {
@@ -301,25 +358,23 @@ export class FileAnnotationsController implements vscode.Disposable {
   ): void {
     this.prepareEditor(editor);
     const now = Date.now();
-    const options: Record<HeatmapBucket, vscode.DecorationOptions[]> = {
-      day: [],
-      month: [],
-      old: [],
-      week: [],
-      year: [],
-    };
+    const options = heatmapBucketRecord<vscode.DecorationOptions[]>(() => []);
+    const counts = heatmapBucketRecord(() => 0);
     for (const line of lines) {
       const range = lineRange(editor.document, line.lineNumber);
       if (!range) continue;
-      const bucket = line.blame.isCommitted ? heatmapBucket(line.blame.authorDate, now) : "day";
-      options[bucket].push({ hoverMessage: blameHover(line, userName), range });
+      const bucket = heatmapBucket(line.blame.isCommitted ? line.blame.authorDate : null, now);
+      counts[bucket] += 1;
+      options[bucket].push({ hoverMessage: heatmapHover(line, userName, bucket), range });
     }
-    for (const [bucket, decoration] of Object.entries(this.heatmapDecorations) as [
-      HeatmapBucket,
-      vscode.TextEditorDecorationType,
-    ][]) {
-      editor.setDecorations(decoration, options[bucket]);
+    for (const bucket of HEATMAP_BUCKETS) {
+      editor.setDecorations(this.heatmapDecorations[bucket], options[bucket]);
     }
+    this.heatmapSummary = {
+      counts,
+      documentUri: editor.document.uri.toString(),
+      total: Object.values(counts).reduce((total, count) => total + count, 0),
+    };
   }
 
   private renderChanges(
@@ -352,6 +407,7 @@ export class FileAnnotationsController implements vscode.Disposable {
   }
 
   private prepareEditor(editor: vscode.TextEditor): void {
+    this.heatmapSummary = undefined;
     if (this.decoratedEditor && this.decoratedEditor !== editor) {
       this.clearEditor(this.decoratedEditor);
     }
@@ -362,6 +418,7 @@ export class FileAnnotationsController implements vscode.Disposable {
   private clearDecorations(): void {
     if (this.decoratedEditor) this.clearEditor(this.decoratedEditor);
     this.decoratedEditor = undefined;
+    this.heatmapSummary = undefined;
   }
 
   private clearEditor(editor: vscode.TextEditor): void {
@@ -394,14 +451,49 @@ export class FileAnnotationsController implements vscode.Disposable {
     }
     return pending;
   }
+
+  private replaceHeatmapDecorations(): void {
+    if (this.decoratedEditor) {
+      for (const decoration of Object.values(this.heatmapDecorations)) {
+        this.decoratedEditor.setDecorations(decoration, []);
+      }
+    }
+    for (const decoration of Object.values(this.heatmapDecorations)) decoration.dispose();
+    this.heatmapDecorations = createHeatmapDecorations();
+    this.heatmapSummary = undefined;
+  }
 }
 
-function heatmapDecoration(backgroundColor: string): vscode.TextEditorDecorationType {
+function createHeatmapDecorations(): Record<HeatmapBucket, vscode.TextEditorDecorationType> {
+  const locations = readHeatmapLocations();
+  return heatmapBucketRecord((bucket) => heatmapDecoration(bucket, locations));
+}
+
+function heatmapDecoration(
+  bucket: HeatmapBucket,
+  locations: readonly HeatmapLocation[],
+): vscode.TextEditorDecorationType {
+  const colors = HEATMAP_COLOR_IDS[bucket];
+  const edge = locations.includes("edge");
+  const overview = locations.includes("overview");
   return vscode.window.createTextEditorDecorationType({
-    backgroundColor,
+    ...(locations.includes("line")
+      ? { backgroundColor: new vscode.ThemeColor(colors.background) }
+      : {}),
+    ...(edge
+      ? {
+          borderColor: new vscode.ThemeColor(colors.foreground),
+          borderStyle: "solid",
+          borderWidth: "0 0 0 3px",
+        }
+      : {}),
     isWholeLine: true,
-    overviewRulerColor: backgroundColor,
-    overviewRulerLane: vscode.OverviewRulerLane.Left,
+    ...(overview
+      ? {
+          overviewRulerColor: new vscode.ThemeColor(colors.foreground),
+          overviewRulerLane: vscode.OverviewRulerLane.Left,
+        }
+      : {}),
   });
 }
 
@@ -420,6 +512,46 @@ function blameHover(line: FileBlameLine, userName: string | null): vscode.Markdo
       escapeMarkdown(blame.summary),
       `\`${blame.sha.slice(0, 8)}\``,
     ].join("\n\n"),
+  );
+}
+
+function heatmapHover(
+  line: FileBlameLine,
+  userName: string | null,
+  bucket: HeatmapBucket,
+): vscode.MarkdownString {
+  const details = HEATMAP_BUCKET_DETAILS[bucket];
+  const { blame } = line;
+  const author = escapeMarkdown(blameAuthorLabel(blame, userName));
+  if (!blame.isCommitted) {
+    return new vscode.MarkdownString(
+      [`**Heatmap - ${details.label}**`, `**${author}** - Uncommitted changes`].join("\n\n"),
+    );
+  }
+  return new vscode.MarkdownString(
+    [
+      `**Heatmap - ${details.label}** - ${details.age}`,
+      `**${author}**, ${formatRelativeTime(blame.authorDate)}`,
+      escapeMarkdown(blame.summary),
+      `\`${blame.sha.slice(0, 8)}\``,
+    ].join("\n\n"),
+  );
+}
+
+function heatmapBucketRecord<T>(
+  createValue: (bucket: HeatmapBucket) => T,
+): Record<HeatmapBucket, T> {
+  return Object.fromEntries(
+    HEATMAP_BUCKETS.map((bucket) => [bucket, createValue(bucket)]),
+  ) as Record<HeatmapBucket, T>;
+}
+
+function readHeatmapLocations(): readonly HeatmapLocation[] {
+  return normalizeHeatmapLocations(
+    readExtensionSetting<unknown>(
+      EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations,
+      EXTENSION_SETTING_DEFAULTS.fileAnnotationsHeatmapLocations,
+    ),
   );
 }
 

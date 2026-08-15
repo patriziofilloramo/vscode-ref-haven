@@ -148,12 +148,35 @@ walk a line backwards through time.
 Use **RefHaven: Change File Annotations...** when you need a wider view:
 
 - **Blame** — author and age markers for every line.
-- **Heatmap** — color lines by the age of their last commit.
+- **Heatmap** — scan the file through fixed, predictable age bands. It uses a
+  compact editor-edge strip plus the overview ruler by default, distinguishes
+  uncommitted lines from recent commits, and keeps blame details on hover.
 - **Changes relative to...** — mark working-tree lines changed from a selected
   local revision.
 - **Off** — the default; no whole-file annotation cost.
 
-Annotations are native, cancellable, bounded, and never persisted.
+The heatmap legend is available through **RefHaven: Show File Heatmap Legend**.
+It reports live line counts and percentages for the active file, so the
+visualization never depends on color alone:
+
+| Band          | Meaning                                 |
+| ------------- | --------------------------------------- |
+| Working tree  | Uncommitted                             |
+| Last 24 hours | Committed within the last 24 hours      |
+| Last 7 days   | More than 24 hours and up to 7 days ago |
+| Last 30 days  | More than 7 and up to 30 days ago       |
+| Last year     | More than 30 and up to 365 days ago     |
+| Older         | Committed more than one year ago        |
+
+Use **RefHaven: Toggle File Heatmap** for a direct on/off action. Add `"line"`
+to `refhaven.fileAnnotations.heatmap.locations` if you prefer a stronger
+full-line tint. Every band exposes `Foreground` and `Background` theme tokens
+under `refhaven.heatmap.*`, customizable with VS Code's
+`workbench.colorCustomizations`.
+
+Annotations are native, cancellable, bounded to 5,000 editor lines, and their
+calculated results are never persisted. Whole-file annotations remain off by
+default so there is no repository-wide blame work unless you opt in.
 
 </details>
 
@@ -338,6 +361,8 @@ Open `Ctrl+Shift+P` and type `RefHaven`.
 | `Compare File with Revision...`             | Diff the current file against a local ref           |
 | `Reveal File in Branch Comparison`          | Find the active file in a saved comparison          |
 | `Change File Annotations...`                | Enable blame, heatmap, or changes markers           |
+| `Toggle File Heatmap`                       | Enable or disable the heatmap directly              |
+| `Show File Heatmap Legend`                  | Read age bands and live line counts                 |
 | `Show File Actions`                         | Open the context-sensitive native action menu       |
 | `Stash This File...`                        | Safely set aside one tracked file                   |
 | `Open Local Reference in Browser...`        | Open a validated immutable revision in the browser  |
@@ -351,14 +376,15 @@ entry also expose context-sensitive RefHaven actions.
 
 RefHaven works immediately with its defaults.
 
-| Setting                                 | Default | Purpose                                  |
-| --------------------------------------- | ------- | ---------------------------------------- |
-| `refhaven.inlineBlame.enabled`          | `true`  | Current-line inline blame                |
-| `refhaven.statusBarBlame.enabled`       | `true`  | Current-line blame in the status bar     |
-| `refhaven.lineHover.enabled`            | `true`  | Rich local hover on tracked lines        |
-| `refhaven.fileAnnotations.mode`         | `off`   | Default whole-file annotation mode       |
-| `refhaven.git.timeoutSeconds`           | `30`    | Per-command Git timeout, from 1 to 300 s |
-| `refhaven.browserLinks.approvedOrigins` | `[]`    | Optional strict browser-origin allowlist |
+| Setting                                      | Default                | Purpose                                  |
+| -------------------------------------------- | ---------------------- | ---------------------------------------- |
+| `refhaven.inlineBlame.enabled`               | `true`                 | Current-line inline blame                |
+| `refhaven.statusBarBlame.enabled`            | `true`                 | Current-line blame in the status bar     |
+| `refhaven.lineHover.enabled`                 | `true`                 | Rich local hover on tracked lines        |
+| `refhaven.fileAnnotations.mode`              | `off`                  | Default whole-file annotation mode       |
+| `refhaven.fileAnnotations.heatmap.locations` | `["edge", "overview"]` | Placement; optional `"line"` tint        |
+| `refhaven.git.timeoutSeconds`                | `30`                   | Per-command Git timeout, from 1 to 300 s |
+| `refhaven.browserLinks.approvedOrigins`      | `[]`                   | Optional strict browser-origin allowlist |
 
 ## Installation
 

@@ -9,12 +9,21 @@ import {
   extensionSettingPath,
   type ExtensionSetting,
 } from "../../src/config/extensionConfigurationSchema";
+import { HEATMAP_COLOR_IDS } from "../../src/config/heatmapColors";
 
 interface CommandContribution {
   readonly category?: string;
   readonly command: string;
   readonly icon?: string;
   readonly title?: string;
+}
+
+interface ColorContribution {
+  readonly defaults: Readonly<
+    Record<"dark" | "highContrast" | "highContrastLight" | "light", string>
+  >;
+  readonly description: string;
+  readonly id: string;
 }
 
 interface MenuContribution {
@@ -31,6 +40,7 @@ interface PackageManifest {
     readonly virtualWorkspaces: { readonly supported: boolean };
   };
   readonly contributes: {
+    readonly colors: readonly ColorContribution[];
     readonly commands: readonly CommandContribution[];
     readonly configuration: {
       readonly properties: Readonly<
@@ -40,7 +50,10 @@ interface PackageManifest {
             readonly default: unknown;
             readonly description?: string;
             readonly maximum?: number;
+            readonly maxItems?: number;
             readonly minimum?: number;
+            readonly minItems?: number;
+            readonly uniqueItems?: boolean;
           }
         >
       >;
@@ -234,6 +247,7 @@ suite("extension manifest", () => {
       "refhaven.saveComparisonPatch",
       "refhaven.searchCommits",
       "refhaven.showCommitDetails",
+      "refhaven.showFileHeatmapLegend",
       "refhaven.showFileHistory",
       "refhaven.showLineBlameActions",
       "refhaven.showLineHistory",
@@ -241,6 +255,7 @@ suite("extension manifest", () => {
       "refhaven.showStashCommitDetails",
       "refhaven.stashFile",
       "refhaven.swapComparison",
+      "refhaven.toggleFileHeatmap",
       "refhaven.toggleInlineBlame",
       "refhaven.unpinComparison",
       "refhaven.viewFilesAsList",
@@ -289,6 +304,8 @@ suite("extension manifest", () => {
       "refhaven.compareFileWithRevision",
       "refhaven.revealFileInComparison",
       "refhaven.changeFileAnnotations",
+      "refhaven.toggleFileHeatmap",
+      "refhaven.showFileHeatmapLegend",
       "refhaven.stashFile",
       "refhaven.openBrowserFile",
       "refhaven.copyBrowserFileUrl",
@@ -427,6 +444,10 @@ suite("extension manifest", () => {
         EXTENSION_SETTING_DEFAULTS.approvedBrowserOrigins,
       ],
       [EXTENSION_SETTINGS.fileAnnotationsMode, EXTENSION_SETTING_DEFAULTS.fileAnnotationsMode],
+      [
+        EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations,
+        EXTENSION_SETTING_DEFAULTS.fileAnnotationsHeatmapLocations,
+      ],
       [EXTENSION_SETTINGS.gitTimeoutSeconds, EXTENSION_SETTING_DEFAULTS.gitTimeoutSeconds],
       [EXTENSION_SETTINGS.inlineBlameEnabled, EXTENSION_SETTING_DEFAULTS.inlineBlameEnabled],
       [EXTENSION_SETTINGS.lineHoverEnabled, EXTENSION_SETTING_DEFAULTS.lineHoverEnabled],
@@ -447,6 +468,38 @@ suite("extension manifest", () => {
       extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsMode),
     );
     assert.equal(setting.default, EXTENSION_SETTING_DEFAULTS.fileAnnotationsMode);
+  });
+
+  test("declares an accessible and theme-customizable file heatmap", () => {
+    const manifest = loadManifest();
+    const setting = manifestSetting(
+      manifest,
+      extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations),
+    );
+    assert.deepEqual(setting.default, ["edge", "overview"]);
+    assert.equal(setting.minItems, 1);
+    assert.equal(setting.maxItems, 3);
+    assert.equal(setting.uniqueItems, true);
+
+    const heatmapColors = manifest.contributes.colors.filter(({ id }) =>
+      id.startsWith("refhaven.heatmap."),
+    );
+    assert.equal(heatmapColors.length, 12);
+    assert.deepEqual(
+      heatmapColors.map(({ id }) => id).sort(),
+      Object.values(HEATMAP_COLOR_IDS)
+        .flatMap(({ background, foreground }) => [background, foreground])
+        .sort(),
+    );
+    for (const color of heatmapColors) {
+      assert.ok(color.description.length > 0);
+      assert.deepEqual(Object.keys(color.defaults).sort(), [
+        "dark",
+        "highContrast",
+        "highContrastLight",
+        "light",
+      ]);
+    }
   });
 
   test("enables rich local line hover by default", () => {
@@ -475,7 +528,10 @@ function manifestSetting(
   readonly default: unknown;
   readonly description?: string;
   readonly maximum?: number;
+  readonly maxItems?: number;
   readonly minimum?: number;
+  readonly minItems?: number;
+  readonly uniqueItems?: boolean;
 } {
   const setting = manifest.contributes.configuration.properties[key];
   assert.ok(setting, `Expected manifest setting ${key}`);
