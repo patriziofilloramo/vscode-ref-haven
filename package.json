@@ -2,7 +2,7 @@
   "name": "refhaven",
   "displayName": "RefHaven",
   "description": "Private Git comparisons, history, blame, and stash inspection with local processing.",
-  "version": "0.13.8",
+  "version": "0.13.9",
   "publisher": "patriziofilloramo",
   "license": "MIT",
   "private": true,

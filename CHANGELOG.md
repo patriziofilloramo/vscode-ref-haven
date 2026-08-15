@@ -6,6 +6,8 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.13.9] — 2026-08-15
+
 ### Security
 
 - Canonicalize repository and workspace-folder paths before authorizing their
