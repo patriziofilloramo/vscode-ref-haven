@@ -10,6 +10,7 @@ npm run test:extension
 npm run lint
 npm run compile
 npm run format:check
+npm run benchmark:annotations
 npm run package
 ```
 
@@ -26,7 +27,10 @@ The security-hardening suite additionally covers repository-relative path contai
 | Extension Host         | Optional initially | Required | Optional initially |
 | Build and VSIX package |      Required      | Required | Optional initially |
 
-Windows is mandatory for process spawning, path, encoding, and filesystem edge cases. Linux is the initial Extension Host environment. macOS unit coverage guards platform-neutral domain and parser behaviour. A public beta should expand integration and packaging coverage where runner stability permits.
+Windows is mandatory for process spawning, path, encoding, and filesystem edge
+cases. Linux and Windows run the Extension Host suite. macOS unit coverage
+guards platform-neutral domain and parser behaviour. The tracked CI workflow
+enforces this matrix and validates VSIX packaging on Linux and Windows.
 
 ## Milestone acceptance coverage
 
@@ -38,12 +42,14 @@ loading in the Extension Host.
 Repository-navigation coverage includes strict NUL-delimited worktree parser
 fixtures and real worktree enumeration in the Extension Host.
 Annotation coverage includes repeated line-porcelain parsing, duplicate-line
-rejection, all five heatmap age buckets plus the distinct uncommitted state,
-stable location normalization with safe defaults, the complete public theme
-color contract, zero-context diff hunks, unsaved-buffer blame, and real changed-
-line range calculation. The direct toggle's persisted-state transition has
-unit coverage, while the Extension Host verifies both heatmap commands are
-registered.
+rejection, bounded detailed/compact blame presentation, all five heatmap age
+buckets plus the distinct uncommitted state, stable location and toggle-scope
+normalization with safe defaults, the complete public theme-color contract,
+zero-context diff hunks, unsaved-buffer blame, and real changed-line range
+calculation. The Extension Host verifies file-scoped toggles do not persist,
+window-scoped toggles do persist, dismissal stays temporary, and all annotation
+commands are registered. A 5,000-line presentation benchmark guards the bounded
+render-preparation path.
 Interaction-surface coverage includes exact command and submenu contributions,
 Extension Host command registration, canonical URI/tree-node file resolution,
 and a real path-limited working-tree comparison that excludes changes in other
@@ -304,5 +310,27 @@ Before delivering `refhaven-x.y.z.vsix`:
 15. Filter Stashes and File History, expand a stash and local branch, navigate
     commit parents and adjacent file revisions, and confirm Worktrees reports
     clean/dirty state without changing repository state or contacting a remote.
+16. Enable whole-file blame on a file containing several contiguous commit
+    blocks. Verify author, relative age, and summary are readable, block markers
+    are coherent, every line has hover details, compact/detailed and repeated
+    modes update live, and Escape dismisses only the active file.
+17. Toggle the heatmap with `toggleMode=file` across two editor tabs and verify
+    only the active file changes. Repeat with `toggleMode=window`, reload, and
+    verify the persisted mode. Press Escape and verify the setting is unchanged.
+18. Verify the heatmap on committed, dirty, empty, and non-ASCII files. Open the
+    legend, confirm counts and percentages, and select each populated band to
+    jump to its first matching line. Confirm a file over 5,000 lines is rejected
+    with a clear message when invoked interactively.
+19. Repeat whole-file blame and heatmap checks in light, dark, high-contrast,
+    and high-contrast-light themes, with edge/overview and optional line tint.
+    Record screenshots only from the real installed VSIX.
+20. Repeat annotation, hover, file history, and comparison checks in a multi-root
+    `.code-workspace`, a folder nested below the repository root, and Remote SSH
+    with the extension installed on the remote side. Confirm no repository-root
+    workspace assumption and no background network access.
 
 The release report records extension/version, commit SHA, VS Code and Git versions, operating systems, CI links, manual outcomes, known limitations, benchmark hardware/dataset, activation time, large-comparison responsiveness, and the final VSIX checksum.
+
+Feature promotion and sunset decisions are recorded in
+[`FEATURE-MATURITY.md`](FEATURE-MATURITY.md); a green automated suite alone does
+not promote a Beta visual feature to Stable.

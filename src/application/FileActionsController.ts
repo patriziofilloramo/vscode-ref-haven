@@ -368,6 +368,10 @@ export class FileActionsController {
     await this.fileAnnotationsController.toggleHeatmap();
   }
 
+  public async dismissFileAnnotations(): Promise<void> {
+    await this.fileAnnotationsController.dismiss();
+  }
+
   public async showFileHeatmapLegend(candidate?: unknown): Promise<void> {
     const target = await this.requireTarget(candidate);
     if (!(await activateFileContextTarget(target))) {

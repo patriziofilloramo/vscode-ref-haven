@@ -1,4 +1,5 @@
 import type { LineBlame } from "../../domain/blame";
+import type { FileBlameFormat } from "../../domain/fileAnnotations";
 import { shortSha, type CommitInfo } from "../../domain/comparisonResult";
 import { COMMAND_IDS } from "../commands/commandIds";
 import { formatExactTime, formatRelativeTime } from "../format";
@@ -40,6 +41,22 @@ export function inlineBlameText(
   const summary = blame.summary.length > 0 ? ` · ${blame.summary}` : "";
   const when = `${formatRelativeTime(blame.authorDate, nowMs)} (${formatExactTime(blame.authorDate, nowMs)})`;
   return `${author}, ${when}${summary}`;
+}
+
+/** Bounded authorship text used by whole-file blame decorations. */
+export function fileBlameAnnotationText(
+  blame: LineBlame,
+  currentUserName: string | null,
+  nowMs: number,
+  format: FileBlameFormat,
+): string {
+  const author = truncateSingleLine(blameAuthorLabel(blame, currentUserName), 40);
+  if (!blame.isCommitted) return `${author} \u00b7 Uncommitted changes`;
+
+  const attribution = `${author}, ${formatRelativeTime(blame.authorDate, nowMs)}`;
+  if (format === "compact") return attribution;
+  const summary = truncateSingleLine(blame.summary, 80);
+  return summary.length > 0 ? `${attribution} \u00b7 ${summary}` : attribution;
 }
 
 export function statusBarBlameText(
@@ -88,4 +105,10 @@ export function blameHoverMarkdown(
       `[Open in Browser](command:${COMMAND_IDS.openBrowserFile}?${gitLabArguments})`,
     ].join(" · "),
   ].join("\n\n");
+}
+
+function truncateSingleLine(value: string, maximumLength: number): string {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  if (normalized.length <= maximumLength) return normalized;
+  return `${normalized.slice(0, maximumLength - 1).trimEnd()}\u2026`;
 }

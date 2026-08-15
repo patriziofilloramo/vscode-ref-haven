@@ -467,8 +467,11 @@ revision, so successive hovers walk a line's history backwards.
 
 ### FileAnnotationsController
 
-Runs opt-in whole-file `git blame --line-porcelain` for gutter blame and the
-file heatmap; unsaved text is supplied over stdin. The heatmap maps every line
+Runs opt-in whole-file `git blame --line-porcelain` for inline blame annotations
+and the file heatmap; unsaved text is supplied over stdin. Blame renders bounded
+author, relative-age, and summary text at the end of each commit block, with an
+option to repeat details on every line. Every line retains escaped hover data,
+and a public theme token controls annotation contrast. The heatmap maps every line
 to one working-tree state or one of five absolute commit-age bands. Absolute
 bands keep the same meaning across files, while a separate uncommitted bucket
 prevents working-tree edits from being mistaken for recent commits.
@@ -477,13 +480,22 @@ Rendering uses contributed `ThemeColor` tokens rather than hard-coded runtime
 colors. `edge` and `overview` are the default locations; `line` is an optional
 translucent whole-line treatment. Changing locations disposes and recreates the
 decoration types before scheduling a fresh render. The controller retains only
-the active document's aggregate bucket counts for the textual legend; blame
-results and line-level heatmap data are not persisted.
+the active document's aggregate bucket counts and first matching line for the
+textual, navigable legend; blame results and line-level heatmap data are not
+persisted.
+
+The direct heatmap command defaults to a URI-keyed override for the active file.
+Window scope updates the persisted annotation setting instead. The same override
+mechanism lets the Escape command dismiss an active annotation without changing
+the user's global preference; overrides are discarded when a document closes or
+the configured mode changes. A context key activates the Escape binding only
+while RefHaven annotations are visible.
 
 Changes mode parses zero-context diff hunks against a locally resolved
 immutable base SHA and deliberately waits for a dirty editor to be saved.
-Updates are debounced, generation-checked, cancellable, capped at 5,000 lines,
-escaped before Markdown rendering, and never persisted.
+Updates are debounced, generation-checked, cancelled as soon as a newer editor
+event arrives, capped at 5,000 lines, escaped before Markdown rendering, and
+never persisted. The disabled fast path performs no repository discovery.
 
 ### RepositoryWatcher
 

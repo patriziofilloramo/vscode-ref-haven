@@ -92,6 +92,7 @@ npm run compile
 npm run quality
 npm run test:unit
 npm run test:extension
+npm run benchmark:annotations
 npm audit --audit-level=low
 npm audit --omit=dev --audit-level=low
 npm audit signatures
@@ -103,6 +104,9 @@ npx vsce ls --no-dependencies
 
 Inspect the final VSIX contents, install it into a clean VS Code profile, and
 repeat the privacy-critical smoke tests in [TEST-MATRIX.md](TEST-MATRIX.md).
+Record every applicable promotion gate in
+[FEATURE-MATURITY.md](FEATURE-MATURITY.md), leaving visual capabilities marked
+Beta when manual, Remote SSH, benchmark, or screenshot evidence is missing.
 Publish only the reviewed artifact produced from the tagged commit.
 
 ## Manual GitHub release

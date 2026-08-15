@@ -46,9 +46,11 @@ no-egress property is enforced by a guard test rather than by convention.
 
 ## Next
 
-The planned low and medium complexity native-UI work is complete. New work
-should come from measured use rather than from adding another permanent Source
-Control section; prefer refining the four existing views.
+New work comes from the gaps and promotion gates in
+[`FEATURE-MATURITY.md`](FEATURE-MATURITY.md), not from adding another permanent
+Source Control section. The current priorities are annotation visual evidence,
+Remote SSH verification, and more explicit local commit-search query modes;
+prefer refining the four existing views.
 
 Any future mutation—including cherry-pick from Ahead/Behind commits—must meet
 the same gate as the single-file stash: real-repository integration tests, a

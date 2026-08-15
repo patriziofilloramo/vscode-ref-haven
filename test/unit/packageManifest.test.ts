@@ -58,6 +58,11 @@ interface PackageManifest {
         >
       >;
     };
+    readonly keybindings: readonly {
+      readonly command: string;
+      readonly key: string;
+      readonly when: string;
+    }[];
     readonly menus: Readonly<Record<string, readonly MenuContribution[]>>;
     readonly submenus: readonly { readonly id: string; readonly label: string }[];
     readonly views: {
@@ -207,6 +212,7 @@ suite("extension manifest", () => {
       "refhaven.copyStashMessage",
       "refhaven.copyStashSha",
       "refhaven.copyWorktreePath",
+      "refhaven.dismissFileAnnotations",
       "refhaven.findOtherStashesContainingFile",
       "refhaven.inspectCurrentLine",
       "refhaven.markAllComparisonFilesReviewed",
@@ -262,6 +268,36 @@ suite("extension manifest", () => {
       "refhaven.viewFilesAsTree",
     ]);
     assert.ok(commands.every((command) => command.startsWith("refhaven.")));
+  });
+
+  test("keeps the command palette focused on primary user jobs", () => {
+    const manifest = loadManifest();
+    const hidden = new Set(
+      (manifest.contributes.menus.commandPalette ?? [])
+        .filter(({ when }) => when === "false")
+        .map(({ command }) => command),
+    );
+    const visible = manifest.contributes.commands
+      .map(({ command }) => command)
+      .filter((command) => !hidden.has(command))
+      .sort();
+
+    assert.deepEqual(visible, [
+      "refhaven.changeFileAnnotations",
+      "refhaven.changeLineIntelligence",
+      "refhaven.compareCurrentBranch",
+      "refhaven.compareFileWithRevision",
+      "refhaven.configureBrowserOrigin",
+      "refhaven.inspectCurrentLine",
+      "refhaven.newComparison",
+      "refhaven.openFileAtRevision",
+      "refhaven.searchCommits",
+      "refhaven.showFileHistory",
+      "refhaven.showLineHistory",
+      "refhaven.showRefHavenMenu",
+      "refhaven.stashFile",
+      "refhaven.toggleFileHeatmap",
+    ]);
   });
 
   test("exposes one consistent native file-actions menu", () => {
@@ -445,8 +481,20 @@ suite("extension manifest", () => {
       ],
       [EXTENSION_SETTINGS.fileAnnotationsMode, EXTENSION_SETTING_DEFAULTS.fileAnnotationsMode],
       [
+        EXTENSION_SETTINGS.fileAnnotationsBlameFormat,
+        EXTENSION_SETTING_DEFAULTS.fileAnnotationsBlameFormat,
+      ],
+      [
+        EXTENSION_SETTINGS.fileAnnotationsBlameShowRepeated,
+        EXTENSION_SETTING_DEFAULTS.fileAnnotationsBlameShowRepeated,
+      ],
+      [
         EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations,
         EXTENSION_SETTING_DEFAULTS.fileAnnotationsHeatmapLocations,
+      ],
+      [
+        EXTENSION_SETTINGS.fileAnnotationsHeatmapToggleMode,
+        EXTENSION_SETTING_DEFAULTS.fileAnnotationsHeatmapToggleMode,
       ],
       [EXTENSION_SETTINGS.gitTimeoutSeconds, EXTENSION_SETTING_DEFAULTS.gitTimeoutSeconds],
       [EXTENSION_SETTINGS.inlineBlameEnabled, EXTENSION_SETTING_DEFAULTS.inlineBlameEnabled],
@@ -500,6 +548,38 @@ suite("extension manifest", () => {
         "light",
       ]);
     }
+
+    assert.deepEqual(manifest.contributes.keybindings, [
+      {
+        command: "refhaven.dismissFileAnnotations",
+        key: "escape",
+        when: "editorTextFocus && refhaven.fileAnnotations.active",
+      },
+    ]);
+    assert.ok(
+      manifest.contributes.menus.commandPalette?.some(
+        ({ command, when }) => command === "refhaven.dismissFileAnnotations" && when === "false",
+      ),
+    );
+  });
+
+  test("declares readable and theme-customizable whole-file blame", () => {
+    const manifest = loadManifest();
+    assert.ok(
+      manifest.contributes.colors.some(({ id }) => id === "refhaven.blame.annotationForeground"),
+    );
+    assert.equal(
+      manifestSetting(manifest, extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsBlameFormat))
+        .default,
+      "detailed",
+    );
+    assert.equal(
+      manifestSetting(
+        manifest,
+        extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsBlameShowRepeated),
+      ).default,
+      false,
+    );
   });
 
   test("enables rich local line hover by default", () => {

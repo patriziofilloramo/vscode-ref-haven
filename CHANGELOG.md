@@ -15,12 +15,23 @@ All notable changes to RefHaven are recorded here. The format follows
 - Add direct **Toggle File Heatmap** and **Show File Heatmap Legend** commands.
   The legend explains every band and reports live line counts and percentages
   for the active file.
+- Add grouped, theme-customizable whole-file blame annotations with bounded
+  author, age, and commit-summary text plus compact and repeated-detail options.
+- Add file/window heatmap toggle scope, temporary Escape dismissal, and legend
+  navigation to the first line in a selected age band.
+- Add a cross-platform GitHub Actions workflow, a bounded 5,000-line annotation
+  benchmark, and a feature-maturity matrix with explicit promotion gates.
 
 ### Changed
 
 - Heatmap hovers now name the active age band before showing the local blame
   details, and working-tree lines are no longer grouped with commits from
   today.
+- The Command Palette now presents fourteen primary RefHaven jobs. Context-only
+  commands remain available on the editor, Explorer, Source Control, and tree
+  surfaces where their targets are unambiguous.
+- The README now leads with three product promises and moves low-level stash
+  mechanics to the dedicated Git semantics and security documents.
 
 ## [0.13.9] — 2026-08-15
 

@@ -38,6 +38,7 @@ suite("command identifiers", () => {
       copyStashMessage: "refhaven.copyStashMessage",
       copyStashSha: "refhaven.copyStashSha",
       copyWorktreePath: "refhaven.copyWorktreePath",
+      dismissFileAnnotations: "refhaven.dismissFileAnnotations",
       findOtherStashesContainingFile: "refhaven.findOtherStashesContainingFile",
       inspectCurrentLine: "refhaven.inspectCurrentLine",
       markAllComparisonFilesReviewed: "refhaven.markAllComparisonFilesReviewed",

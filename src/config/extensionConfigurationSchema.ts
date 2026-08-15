@@ -5,7 +5,10 @@ export const EXTENSION_CONFIGURATION_SECTION = "refhaven";
 export const EXTENSION_SETTINGS = {
   approvedBrowserOrigins: "browserLinks.approvedOrigins",
   browserHostGrammar: "browserLinks.hostGrammar",
+  fileAnnotationsBlameFormat: "fileAnnotations.blame.format",
+  fileAnnotationsBlameShowRepeated: "fileAnnotations.blame.showRepeated",
   fileAnnotationsHeatmapLocations: "fileAnnotations.heatmap.locations",
+  fileAnnotationsHeatmapToggleMode: "fileAnnotations.heatmap.toggleMode",
   fileAnnotationsMode: "fileAnnotations.mode",
   gitTimeoutSeconds: "git.timeoutSeconds",
   inlineBlameEnabled: "inlineBlame.enabled",
@@ -19,7 +22,10 @@ export type ExtensionSetting = (typeof EXTENSION_SETTINGS)[keyof typeof EXTENSIO
 export const EXTENSION_SETTING_DEFAULTS = {
   approvedBrowserOrigins: [] as readonly string[],
   browserHostGrammar: "auto",
+  fileAnnotationsBlameFormat: "detailed",
+  fileAnnotationsBlameShowRepeated: false,
   fileAnnotationsHeatmapLocations: ["edge", "overview"] as const,
+  fileAnnotationsHeatmapToggleMode: "file",
   fileAnnotationsMode: "off",
   gitTimeoutSeconds: 30,
   inlineBlameEnabled: true,

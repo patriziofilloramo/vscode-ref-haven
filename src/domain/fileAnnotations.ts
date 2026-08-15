@@ -1,6 +1,8 @@
 export type FileAnnotationMode = "blame" | "changes" | "heatmap" | "off";
+export type FileBlameFormat = "compact" | "detailed";
 export type HeatmapBucket = "day" | "month" | "old" | "uncommitted" | "week" | "year";
 export type HeatmapLocation = "edge" | "line" | "overview";
+export type HeatmapToggleMode = "file" | "window";
 
 export const HEATMAP_BUCKETS = [
   "uncommitted",
@@ -58,6 +60,15 @@ export function toggledHeatmapMode(
   return displayedMode === "heatmap" ? "off" : "heatmap";
 }
 
+/** Returns the smallest per-file override needed to reach the requested heatmap state. */
+export function heatmapFileModeOverride(
+  baseMode: FileAnnotationMode,
+  enabled: boolean,
+): "heatmap" | "off" | null {
+  if (enabled) return baseMode === "heatmap" ? null : "heatmap";
+  return baseMode === "heatmap" ? "off" : null;
+}
+
 /** Returns a stable, duplicate-free rendering configuration or the safe default. */
 export function normalizeHeatmapLocations(value: unknown): readonly HeatmapLocation[] {
   if (!Array.isArray(value)) return DEFAULT_HEATMAP_LOCATIONS;
@@ -66,6 +77,14 @@ export function normalizeHeatmapLocations(value: unknown): readonly HeatmapLocat
   );
   const locations = HEATMAP_LOCATIONS.filter((location) => selected.has(location));
   return locations.length > 0 ? locations : DEFAULT_HEATMAP_LOCATIONS;
+}
+
+export function normalizeFileBlameFormat(value: unknown): FileBlameFormat {
+  return value === "compact" ? value : "detailed";
+}
+
+export function normalizeHeatmapToggleMode(value: unknown): HeatmapToggleMode {
+  return value === "window" ? value : "file";
 }
 
 function isHeatmapLocation(value: unknown): value is HeatmapLocation {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { LineBlame } from "../../src/domain/blame";
 import {
   blameHoverMarkdown,
+  fileBlameAnnotationText,
   inlineBlameText,
   statusBarBlameText,
 } from "../../src/ui/blame/blamePresentation";
@@ -36,6 +37,33 @@ suite("blame presentation", () => {
     assert.equal(
       inlineBlameText(COMMITTED, null, NOW),
       `Patrizio Filloramo, 2 hours ago (${EXACT}) · feat: add blame support`,
+    );
+  });
+
+  test("formats bounded whole-file annotations in detailed and compact modes", () => {
+    assert.equal(
+      fileBlameAnnotationText(COMMITTED, "Patrizio Filloramo", NOW, "detailed"),
+      "You, 2 hours ago \u00b7 feat: add blame support",
+    );
+    assert.equal(
+      fileBlameAnnotationText(COMMITTED, null, NOW, "compact"),
+      "Patrizio Filloramo, 2 hours ago",
+    );
+
+    const longBlame: LineBlame = {
+      ...COMMITTED,
+      authorName: `  ${"A".repeat(50)}\nignored  `,
+      summary: `${"B".repeat(100)}\nignored`,
+    };
+    const text = fileBlameAnnotationText(longBlame, null, NOW, "detailed");
+    assert.doesNotMatch(text, /\n/u);
+    assert.match(text, /^A{39}\u2026, 2 hours ago \u00b7 B{79}\u2026$/u);
+  });
+
+  test("formats uncommitted whole-file annotations without commit metadata", () => {
+    assert.equal(
+      fileBlameAnnotationText(UNCOMMITTED, null, NOW, "detailed"),
+      "You \u00b7 Uncommitted changes",
     );
   });
 

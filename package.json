@@ -191,6 +191,11 @@
         "icon": "$(list-tree)"
       },
       {
+        "command": "refhaven.dismissFileAnnotations",
+        "title": "Dismiss File Annotations",
+        "category": "RefHaven"
+      },
+      {
         "command": "refhaven.changeFileHistoryFilter",
         "title": "Filter File History...",
         "category": "RefHaven",
@@ -619,11 +624,29 @@
           ],
           "enumDescriptions": [
             "Do not annotate the whole file.",
-            "Show blame markers and hovers for every line.",
+            "Show author, commit age, summary, and hover details for every line.",
             "Color lines by the age of their last commit."
           ],
           "default": "off",
           "description": "Whole-file annotation mode. Changes-relative-to-ref annotations are selected per session from the command palette."
+        },
+        "refhaven.fileAnnotations.blame.format": {
+          "type": "string",
+          "enum": [
+            "compact",
+            "detailed"
+          ],
+          "enumDescriptions": [
+            "Show the author and relative commit age.",
+            "Show the author, relative commit age, and bounded commit summary."
+          ],
+          "default": "detailed",
+          "description": "Information shown by whole-file blame annotations. Full commit details remain available on hover."
+        },
+        "refhaven.fileAnnotations.blame.showRepeated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Repeat blame details on every line in a contiguous commit block. When disabled, RefHaven groups the block visually and shows details on its first line."
         },
         "refhaven.fileAnnotations.heatmap.locations": {
           "type": "array",
@@ -635,7 +658,7 @@
               "line"
             ],
             "enumDescriptions": [
-              "Show a compact color strip at the start of each editor line.",
+              "Show a compact color strip at the right edge of each editor line.",
               "Show the file-wide age distribution in the overview ruler.",
               "Tint the complete editor line with a translucent background."
             ]
@@ -649,6 +672,19 @@
           "uniqueItems": true,
           "description": "Where the file heatmap is rendered. Edge and overview keep code readable; add line for a stronger full-line visualization."
         },
+        "refhaven.fileAnnotations.heatmap.toggleMode": {
+          "type": "string",
+          "enum": [
+            "file",
+            "window"
+          ],
+          "enumDescriptions": [
+            "Toggle the heatmap only for the active file.",
+            "Toggle the persisted annotation mode for the VS Code window."
+          ],
+          "default": "file",
+          "description": "Scope used by Toggle File Heatmap. File scope avoids changing unrelated editors; window scope persists the mode globally."
+        },
         "refhaven.git.timeoutSeconds": {
           "type": "number",
           "default": 30,
@@ -659,6 +695,16 @@
       }
     },
     "colors": [
+      {
+        "id": "refhaven.blame.annotationForeground",
+        "description": "RefHaven whole-file blame annotation text and commit-block markers.",
+        "defaults": {
+          "dark": "#9DA7B3",
+          "light": "#57606A",
+          "highContrast": "#FFFFFF",
+          "highContrastLight": "#24292F"
+        }
+      },
       {
         "id": "refhaven.heatmap.uncommittedForeground",
         "description": "RefHaven heatmap indicator for uncommitted working-tree lines.",
@@ -778,6 +824,13 @@
           "highContrast": "#FFFFFF26",
           "highContrastLight": "#24292F18"
         }
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "refhaven.dismissFileAnnotations",
+        "key": "escape",
+        "when": "editorTextFocus && refhaven.fileAnnotations.active"
       }
     ],
     "submenus": [
@@ -1016,6 +1069,106 @@
         },
         {
           "command": "refhaven.resetComparisonReview",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.compareSelectedBranches",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.refreshAll",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.changeComparisonFileFilter",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.changeComparisonFileSort",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.quickOpenComparisonFile",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.nextUnreviewedFile",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.previousUnreviewedFile",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.showFileHeatmapLegend",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.dismissFileAnnotations",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.changeFileHistoryFilter",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.changeStashFilter",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.viewFilesAsList",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.viewFilesAsTree",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.revealFileInComparison",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.refreshStashes",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.toggleInlineBlame",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.showLineBlameActions",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.refreshFileHistory",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openBrowserProject",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.copyBrowserProjectUrl",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openBrowserFile",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.copyBrowserFileUrl",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openBrowserLocalReference",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.openBrowserReference",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.refreshRepositoryNavigation",
           "when": "false"
         }
       ],
@@ -1551,6 +1704,7 @@
     }
   },
   "scripts": {
+    "benchmark:annotations": "npm run compile && node scripts/benchmark-file-annotations.mjs",
     "clean": "node scripts/clean.mjs",
     "compile": "tsc -p tsconfig.json",
     "compile:tests": "node scripts/clean-test-output.mjs && tsc -p test/tsconfig.json",

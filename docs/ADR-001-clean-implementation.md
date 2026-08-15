@@ -18,6 +18,20 @@ Implement RefHaven cleanly against public VS Code extension APIs and the Git CLI
 
 GitLens/GitLess may be used as behavioural research and prior art during development, subject to its applicable historical licence. Any future reuse of MIT-licensed implementation code must be isolated, justified, reviewed, and accompanied by the required copyright and licence notice.
 
+### Behavioural baseline reviewed on 2026-08-15
+
+The feature-maturity audit used only GitLens's official public documentation:
+
+- <https://help.gitkraken.com/gitlens/gitlens-features/>
+- <https://help.gitkraken.com/gitlens/gitlens-settings/>
+- <https://help.gitkraken.com/gitlens/gl-visual-file-history/>
+- <https://help.gitkraken.com/gitlens/gitlens-release-notes-current/>
+
+These sources establish a dated behavioural baseline for blame, heatmap,
+search, and visual history. No source code, assets, strings, or internal design
+were copied. Re-check the official documentation during the next audit because
+competitor behaviour changes independently of RefHaven.
+
 ## Rationale
 
 - The feature depends on concepts that are small and directly expressible with `TreeView`, `TreeDataProvider`, commands, `TextDocumentContentProvider`, `vscode.diff`, and argument-safe Git subprocesses.

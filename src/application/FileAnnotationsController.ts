@@ -15,12 +15,17 @@ import {
   HEATMAP_BUCKET_DETAILS,
   HEATMAP_BUCKETS,
   heatmapBucket,
+  heatmapFileModeOverride,
+  normalizeFileBlameFormat,
   normalizeHeatmapLocations,
+  normalizeHeatmapToggleMode,
   toggledHeatmapMode,
   type ChangedLineRange,
   type FileAnnotationMode,
+  type FileBlameFormat,
   type HeatmapBucket,
   type HeatmapLocation,
+  type HeatmapToggleMode,
 } from "../domain/fileAnnotations";
 import {
   blameFile,
@@ -32,16 +37,14 @@ import {
   resolveRef,
   type WorkspaceRepositoryFile,
 } from "../infrastructure/git/GitCli";
-import { blameAuthorLabel } from "../ui/blame/blamePresentation";
+import { blameAuthorLabel, fileBlameAnnotationText } from "../ui/blame/blamePresentation";
 import { formatRelativeTime } from "../ui/format";
 import { escapeMarkdown } from "../ui/markdown";
 import { pickBranch } from "../ui/pickers/comparisonPickers";
 
 const MAX_ANNOTATED_LINES = 5_000;
 const UPDATE_DEBOUNCE_MS = 300;
-const GUTTER_ICON = vscode.Uri.parse(
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Ccircle cx='4' cy='4' r='2.5' fill='%23888888'/%3E%3C/svg%3E",
-);
+const FILE_ANNOTATIONS_ACTIVE_CONTEXT = "refhaven.fileAnnotations.active";
 
 interface ActiveFileTarget {
   readonly editor: vscode.TextEditor;
@@ -62,7 +65,13 @@ interface AnnotationModeItem extends vscode.QuickPickItem {
 interface HeatmapSummary {
   readonly counts: Readonly<Record<HeatmapBucket, number>>;
   readonly documentUri: string;
+  readonly documentVersion: number;
+  readonly firstLines: Readonly<Record<HeatmapBucket, number | null>>;
   readonly total: number;
+}
+
+interface HeatmapLegendItem extends vscode.QuickPickItem {
+  readonly bucket: HeatmapBucket;
 }
 
 const HEATMAP_BUCKET_ICONS: Readonly<Record<HeatmapBucket, string>> = {
@@ -77,8 +86,13 @@ const HEATMAP_BUCKET_ICONS: Readonly<Record<HeatmapBucket, string>> = {
 export class FileAnnotationsController implements vscode.Disposable {
   private activeUpdate: AbortController | undefined;
   private readonly blameDecoration = vscode.window.createTextEditorDecorationType({
-    gutterIconPath: GUTTER_ICON,
-    gutterIconSize: "contain",
+    after: {
+      color: new vscode.ThemeColor("refhaven.blame.annotationForeground"),
+      fontStyle: "normal",
+      margin: "0 0 0 3em",
+    },
+    isWholeLine: true,
+    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
   });
   private readonly changesDecoration = vscode.window.createTextEditorDecorationType({
     borderColor: new vscode.ThemeColor("gitDecoration.modifiedResourceForeground"),
@@ -101,7 +115,9 @@ export class FileAnnotationsController implements vscode.Disposable {
   private changesBase: ChangesBase | undefined;
   private decoratedEditor: vscode.TextEditor | undefined;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly fileModeOverrides = new Map<string, "heatmap" | "off">();
   private generation = 0;
+  private annotationsActive = false;
   private mode: FileAnnotationMode;
   private readonly repositoryFiles = new Map<string, WorkspaceRepositoryFile>();
   private updateTimer: NodeJS.Timeout | undefined;
@@ -117,6 +133,9 @@ export class FileAnnotationsController implements vscode.Disposable {
       vscode.workspace.onDidSaveTextDocument((document) => {
         if (document === vscode.window.activeTextEditor?.document) this.scheduleUpdate();
       }),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        this.fileModeOverrides.delete(document.uri.toString());
+      }),
       vscode.workspace.onDidChangeConfiguration((event) => {
         const modeChanged = event.affectsConfiguration(
           extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsMode),
@@ -124,8 +143,15 @@ export class FileAnnotationsController implements vscode.Disposable {
         const locationsChanged = event.affectsConfiguration(
           extensionSettingPath(EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations),
         );
-        if (!modeChanged && !locationsChanged) return;
-        if (modeChanged && this.mode !== "changes") this.mode = readConfiguredMode();
+        const blameChanged = [
+          EXTENSION_SETTINGS.fileAnnotationsBlameFormat,
+          EXTENSION_SETTINGS.fileAnnotationsBlameShowRepeated,
+        ].some((setting) => event.affectsConfiguration(extensionSettingPath(setting)));
+        if (!modeChanged && !locationsChanged && !blameChanged) return;
+        if (modeChanged && this.mode !== "changes") {
+          this.mode = readConfiguredMode();
+          this.fileModeOverrides.clear();
+        }
         if (locationsChanged) this.replaceHeatmapDecorations();
         this.scheduleUpdate();
       }),
@@ -137,6 +163,7 @@ export class FileAnnotationsController implements vscode.Disposable {
     this.activeUpdate?.abort();
     if (this.updateTimer) clearTimeout(this.updateTimer);
     this.clearDecorations();
+    this.setAnnotationsActive(false);
     for (const disposable of this.disposables) disposable.dispose();
     this.blameDecoration.dispose();
     this.changesDecoration.dispose();
@@ -151,29 +178,31 @@ export class FileAnnotationsController implements vscode.Disposable {
   }
 
   public async changeAnnotations(): Promise<void> {
+    const activeUri = vscode.window.activeTextEditor?.document.uri.toString();
+    const currentMode = activeUri ? this.effectiveMode(activeUri) : this.mode;
     const items: AnnotationModeItem[] = [
       {
         annotationMode: "off",
         label: "$(circle-slash) Off",
-        ...(this.mode === "off" ? { description: "current" } : {}),
+        ...(currentMode === "off" ? { description: "current" } : {}),
       },
       {
         annotationMode: "blame",
-        detail: "A blame marker and hover for every line",
+        detail: "Readable author, age, and commit context for every line",
         label: "$(git-commit) Whole-file blame",
-        ...(this.mode === "blame" ? { description: "current" } : {}),
+        ...(currentMode === "blame" ? { description: "current" } : {}),
       },
       {
         annotationMode: "heatmap",
         detail: "Working-tree changes plus five fixed commit-age bands",
         label: "$(color-mode) File heatmap",
-        ...(this.mode === "heatmap" ? { description: "current" } : {}),
+        ...(currentMode === "heatmap" ? { description: "current" } : {}),
       },
       {
         annotationMode: "changes",
         detail: "Mark working-tree lines changed relative to a local reference",
         label: "$(diff) Changes relative to…",
-        ...(this.mode === "changes" ? { description: "current" } : {}),
+        ...(currentMode === "changes" ? { description: "current" } : {}),
       },
     ];
     const selected = await vscode.window.showQuickPick<AnnotationModeItem>(items, {
@@ -206,8 +235,10 @@ export class FileAnnotationsController implements vscode.Disposable {
         repositoryRoot: target.repositoryRoot,
         sha: await resolveRef(target.repositoryRoot, ref.fullName),
       };
+      this.fileModeOverrides.clear();
       this.mode = "changes";
     } else {
+      this.fileModeOverrides.clear();
       this.mode = selected.annotationMode;
       this.changesBase = undefined;
       await getExtensionConfiguration().update(
@@ -221,25 +252,48 @@ export class FileAnnotationsController implements vscode.Disposable {
   }
 
   public async toggleHeatmap(): Promise<void> {
-    this.mode = toggledHeatmapMode(this.mode, readConfiguredMode());
-    const enabled = this.mode === "heatmap";
-    this.changesBase = undefined;
-    await getExtensionConfiguration().update(
-      EXTENSION_SETTINGS.fileAnnotationsMode,
-      this.mode,
-      vscode.ConfigurationTarget.Global,
-    );
+    const target = await this.getActiveTarget();
+    if (!target) {
+      void vscode.window.showWarningMessage("Open a tracked file before toggling the heatmap.");
+      return;
+    }
+    const toggleMode = readHeatmapToggleMode();
+    let enabled: boolean;
+    if (toggleMode === "file") {
+      const uri = target.editor.document.uri.toString();
+      enabled = this.effectiveMode(uri) !== "heatmap";
+      const override = heatmapFileModeOverride(this.mode, enabled);
+      if (override) this.fileModeOverrides.set(uri, override);
+      else this.fileModeOverrides.delete(uri);
+    } else {
+      this.fileModeOverrides.clear();
+      this.mode = toggledHeatmapMode(this.mode, readConfiguredMode());
+      enabled = this.mode === "heatmap";
+      this.changesBase = undefined;
+      await getExtensionConfiguration().update(
+        EXTENSION_SETTINGS.fileAnnotationsMode,
+        this.mode,
+        vscode.ConfigurationTarget.Global,
+      );
+    }
     await this.update(true);
     void vscode.window.showInformationMessage(
-      `RefHaven file heatmap ${enabled ? "enabled" : "off"}.`,
+      `RefHaven file heatmap ${enabled ? "enabled" : "off"} for this ${toggleMode}.`,
     );
+  }
+
+  public async dismiss(): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.uri.scheme !== "file") return;
+    this.fileModeOverrides.set(editor.document.uri.toString(), "off");
+    await this.update(false);
   }
 
   public async showHeatmapLegend(): Promise<void> {
     const activeUri = vscode.window.activeTextEditor?.document.uri.toString();
     const summary =
       this.heatmapSummary?.documentUri === activeUri ? this.heatmapSummary : undefined;
-    await vscode.window.showQuickPick(
+    const selected = await vscode.window.showQuickPick<HeatmapLegendItem>(
       HEATMAP_BUCKETS.map((bucket) => {
         const details = HEATMAP_BUCKET_DETAILS[bucket];
         const count = summary?.counts[bucket];
@@ -247,9 +301,15 @@ export class FileAnnotationsController implements vscode.Disposable {
           count === undefined || !summary || summary.total === 0
             ? undefined
             : `${count.toLocaleString()} ${count === 1 ? "line" : "lines"} (${Math.round((count / summary.total) * 100).toString()}%)`;
+        const firstLine = summary?.firstLines[bucket];
         return {
+          bucket,
           description: details.age,
-          ...(countDetail ? { detail: countDetail } : {}),
+          ...(countDetail
+            ? {
+                detail: `${countDetail}${firstLine === null || firstLine === undefined ? "" : " - select to jump"}`,
+              }
+            : {}),
           label: `$(${HEATMAP_BUCKET_ICONS[bucket]}) ${details.label}`,
         };
       }),
@@ -258,9 +318,23 @@ export class FileAnnotationsController implements vscode.Disposable {
         title: "RefHaven: File Heatmap Legend",
       },
     );
+    const line = selected && summary ? summary.firstLines[selected.bucket] : null;
+    const editor = vscode.window.activeTextEditor;
+    if (!summary || line === null || !editor) return;
+    if (
+      editor.document.uri.toString() !== summary.documentUri ||
+      editor.document.version !== summary.documentVersion
+    ) {
+      return;
+    }
+    const position = new vscode.Position(line, 0);
+    editor.selection = new vscode.Selection(position, position);
+    editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
   }
 
   private scheduleUpdate(): void {
+    this.activeUpdate?.abort();
+    this.generation += 1;
     if (this.updateTimer) clearTimeout(this.updateTimer);
     this.updateTimer = setTimeout(() => {
       runInBackground(
@@ -277,11 +351,16 @@ export class FileAnnotationsController implements vscode.Disposable {
     const abortController = new AbortController();
     this.activeUpdate = abortController;
     const generation = ++this.generation;
-    if (this.mode === "off") {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.uri.scheme !== "file") {
       this.clearDecorations();
       return;
     }
-
+    const mode = this.effectiveMode(editor.document.uri.toString());
+    if (mode === "off") {
+      this.clearDecorations();
+      return;
+    }
     const target = await this.getActiveTarget();
     if (generation !== this.generation) return;
     if (!target) {
@@ -298,7 +377,7 @@ export class FileAnnotationsController implements vscode.Disposable {
       return;
     }
 
-    if (this.mode === "changes") {
+    if (mode === "changes") {
       const base = this.changesBase;
       if (base?.repositoryRoot !== target.repositoryRoot) {
         this.clearDecorations();
@@ -332,7 +411,7 @@ export class FileAnnotationsController implements vscode.Disposable {
     );
     const userName = await this.getUserName(target.repositoryRoot);
     if (generation !== this.generation) return;
-    if (this.mode === "blame") this.renderBlame(target.editor, blame, userName);
+    if (mode === "blame") this.renderBlame(target.editor, blame, userName);
     else this.renderHeatmap(target.editor, blame, userName);
   }
 
@@ -342,13 +421,34 @@ export class FileAnnotationsController implements vscode.Disposable {
     userName: string | null,
   ): void {
     this.prepareEditor(editor);
+    const format = readFileBlameFormat();
+    const showRepeated = readFileBlameShowRepeated();
+    const now = Date.now();
     editor.setDecorations(
       this.blameDecoration,
-      lines.flatMap((line) => {
+      lines.flatMap((line, index) => {
         const range = lineRange(editor.document, line.lineNumber);
-        return range ? [{ hoverMessage: blameHover(line, userName), range }] : [];
+        if (!range) return [];
+        const previous = lines[index - 1];
+        const next = lines[index + 1];
+        const sameAsPrevious = previous?.blame.sha === line.blame.sha;
+        const sameAsNext = next?.blame.sha === line.blame.sha;
+        const marker = blameBlockMarker(sameAsPrevious, sameAsNext);
+        const details = fileBlameAnnotationText(line.blame, userName, now, format);
+        return [
+          {
+            hoverMessage: blameHover(line, userName),
+            range,
+            renderOptions: {
+              after: {
+                contentText: showRepeated || !sameAsPrevious ? `${marker} ${details}` : marker,
+              },
+            },
+          },
+        ];
       }),
     );
+    this.setAnnotationsActive(true);
   }
 
   private renderHeatmap(
@@ -360,11 +460,13 @@ export class FileAnnotationsController implements vscode.Disposable {
     const now = Date.now();
     const options = heatmapBucketRecord<vscode.DecorationOptions[]>(() => []);
     const counts = heatmapBucketRecord(() => 0);
+    const firstLines = heatmapBucketRecord<number | null>(() => null);
     for (const line of lines) {
       const range = lineRange(editor.document, line.lineNumber);
       if (!range) continue;
       const bucket = heatmapBucket(line.blame.isCommitted ? line.blame.authorDate : null, now);
       counts[bucket] += 1;
+      firstLines[bucket] ??= range.start.line;
       options[bucket].push({ hoverMessage: heatmapHover(line, userName, bucket), range });
     }
     for (const bucket of HEATMAP_BUCKETS) {
@@ -373,8 +475,11 @@ export class FileAnnotationsController implements vscode.Disposable {
     this.heatmapSummary = {
       counts,
       documentUri: editor.document.uri.toString(),
+      documentVersion: editor.document.version,
+      firstLines,
       total: Object.values(counts).reduce((total, count) => total + count, 0),
     };
+    this.setAnnotationsActive(true);
   }
 
   private renderChanges(
@@ -404,6 +509,7 @@ export class FileAnnotationsController implements vscode.Disposable {
     }
     editor.setDecorations(this.changesDecoration, changed);
     editor.setDecorations(this.deletionDecoration, deleted);
+    this.setAnnotationsActive(true);
   }
 
   private prepareEditor(editor: vscode.TextEditor): void {
@@ -419,6 +525,7 @@ export class FileAnnotationsController implements vscode.Disposable {
     if (this.decoratedEditor) this.clearEditor(this.decoratedEditor);
     this.decoratedEditor = undefined;
     this.heatmapSummary = undefined;
+    this.setAnnotationsActive(false);
   }
 
   private clearEditor(editor: vscode.TextEditor): void {
@@ -450,6 +557,23 @@ export class FileAnnotationsController implements vscode.Disposable {
       this.userNames.set(repositoryRoot, pending);
     }
     return pending;
+  }
+
+  private effectiveMode(documentUri: string): FileAnnotationMode {
+    return this.fileModeOverrides.get(documentUri) ?? this.mode;
+  }
+
+  private setAnnotationsActive(active: boolean): void {
+    if (this.annotationsActive === active) return;
+    this.annotationsActive = active;
+    runInBackground(
+      Promise.resolve(
+        vscode.commands.executeCommand("setContext", FILE_ANNOTATIONS_ACTIVE_CONTEXT, active),
+      ),
+      this.logger,
+      "File annotations context update failed",
+      "fileAnnotationsContext",
+    );
   }
 
   private replaceHeatmapDecorations(): void {
@@ -484,7 +608,7 @@ function heatmapDecoration(
       ? {
           borderColor: new vscode.ThemeColor(colors.foreground),
           borderStyle: "solid",
-          borderWidth: "0 0 0 3px",
+          borderWidth: "0 3px 0 0",
         }
       : {}),
     isWholeLine: true,
@@ -495,6 +619,13 @@ function heatmapDecoration(
         }
       : {}),
   });
+}
+
+function blameBlockMarker(sameAsPrevious: boolean, sameAsNext: boolean): string {
+  if (!sameAsPrevious && !sameAsNext) return "\u2022";
+  if (!sameAsPrevious) return "\u250c";
+  if (!sameAsNext) return "\u2514";
+  return "\u2502";
 }
 
 function lineRange(document: vscode.TextDocument, oneBasedLine: number): vscode.Range | null {
@@ -551,6 +682,33 @@ function readHeatmapLocations(): readonly HeatmapLocation[] {
     readExtensionSetting<unknown>(
       EXTENSION_SETTINGS.fileAnnotationsHeatmapLocations,
       EXTENSION_SETTING_DEFAULTS.fileAnnotationsHeatmapLocations,
+    ),
+  );
+}
+
+function readFileBlameFormat(): FileBlameFormat {
+  return normalizeFileBlameFormat(
+    readExtensionSetting<unknown>(
+      EXTENSION_SETTINGS.fileAnnotationsBlameFormat,
+      EXTENSION_SETTING_DEFAULTS.fileAnnotationsBlameFormat,
+    ),
+  );
+}
+
+function readFileBlameShowRepeated(): boolean {
+  return (
+    readExtensionSetting<unknown>(
+      EXTENSION_SETTINGS.fileAnnotationsBlameShowRepeated,
+      EXTENSION_SETTING_DEFAULTS.fileAnnotationsBlameShowRepeated,
+    ) === true
+  );
+}
+
+function readHeatmapToggleMode(): HeatmapToggleMode {
+  return normalizeHeatmapToggleMode(
+    readExtensionSetting<unknown>(
+      EXTENSION_SETTINGS.fileAnnotationsHeatmapToggleMode,
+      EXTENSION_SETTING_DEFAULTS.fileAnnotationsHeatmapToggleMode,
     ),
   );
 }

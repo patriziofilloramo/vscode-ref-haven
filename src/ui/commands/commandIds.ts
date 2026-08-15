@@ -32,6 +32,7 @@ export const COMMAND_IDS = {
   copyStashMessage: "refhaven.copyStashMessage",
   copyStashSha: "refhaven.copyStashSha",
   copyWorktreePath: "refhaven.copyWorktreePath",
+  dismissFileAnnotations: "refhaven.dismissFileAnnotations",
   findOtherStashesContainingFile: "refhaven.findOtherStashesContainingFile",
   markAllComparisonFilesReviewed: "refhaven.markAllComparisonFilesReviewed",
   markFileReviewed: "refhaven.markFileReviewed",

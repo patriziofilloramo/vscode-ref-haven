@@ -103,6 +103,7 @@ export function registerCommands(
     [COMMAND_IDS.copyStashSha]: (node) => stashController.copyStashSha(requireStash(node).stash),
     [COMMAND_IDS.copyWorktreePath]: (node) =>
       repositoryNavigationController.copyWorktreePath(requireWorktree(node)),
+    [COMMAND_IDS.dismissFileAnnotations]: () => fileActionsController.dismissFileAnnotations(),
     [COMMAND_IDS.findOtherStashesContainingFile]: (node) =>
       fileActionsController.findOtherStashesContainingFile(node),
     [COMMAND_IDS.markAllComparisonFilesReviewed]: (node) =>

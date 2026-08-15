@@ -73,6 +73,7 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.copyFilePatch"));
     assert.ok(commands.includes("refhaven.refreshAll"));
     assert.ok(commands.includes("refhaven.toggleFileHeatmap"));
+    assert.ok(commands.includes("refhaven.dismissFileAnnotations"));
     assert.ok(commands.includes("refhaven.comparisons.focus"));
     assert.ok(commands.includes("refhaven.inspector.focus"));
     assert.ok(commands.includes("refhaven.repository.focus"));

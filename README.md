@@ -14,15 +14,11 @@ dependencies** · **No background network activity**
 
 ## See what changed. Understand why. Keep moving.
 
-|                        | What you need                       | What RefHaven gives you                                             |
-| ---------------------- | ----------------------------------- | ------------------------------------------------------------------- |
-| 🔀 **Compare**         | Understand a feature branch         | Commits, changed files, statistics, native diffs, review progress   |
-| 🧭 **Investigate**     | Understand a suspicious line        | Author, commit, dates, previous diff, file history, line history    |
-| 📚 **Time travel**     | Inspect a file at an older revision | Readonly historical documents and native revision comparisons       |
-| 📦 **Stash one file**  | Set aside one tracked file safely   | Staged/unstaged state, fail-closed cleanup, and recovery copies     |
-| 🔎 **Inspect stashes** | Review work already saved by Git    | Expandable files, statistics, revisions, history, and native diffs  |
-| 🌿 **Navigate**        | Inspect branches and worktrees      | Local metadata, divergence, recent commits, state, quick actions    |
-| 🔗 **Open safely**     | Continue on your repository host    | Explicit links to validated repository origins—never a RefHaven API |
+|                        | What you need                       | What RefHaven gives you                                                        |
+| ---------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
+| 🔀 **Review locally**  | Understand and review a change      | Comparisons, merge forecast, native diffs, review progress, bounded patches    |
+| 🧭 **Understand code** | Explain a line or scan a whole file | Rich hover, blame, heatmap, history, readonly revisions, local commit search   |
+| 🛡️ **Act safely**      | Change or leave the local workspace | Fail-safe single-file stash and explicit links to validated repository origins |
 
 All of this uses VS Code's native trees, editors, hovers, menus, quick picks,
 and Source Control sidebar.
@@ -147,7 +143,9 @@ walk a line backwards through time.
 
 Use **RefHaven: Change File Annotations...** when you need a wider view:
 
-- **Blame** — author and age markers for every line.
+- **Blame** — readable author, relative age, and commit summary annotations.
+  Contiguous lines from one commit are grouped visually; full details remain on
+  every hover. The format and repetition are configurable.
 - **Heatmap** — scan the file through fixed, predictable age bands. It uses a
   compact editor-edge strip plus the overview ruler by default, distinguishes
   uncommitted lines from recent commits, and keeps blame details on hover.
@@ -155,9 +153,10 @@ Use **RefHaven: Change File Annotations...** when you need a wider view:
   local revision.
 - **Off** — the default; no whole-file annotation cost.
 
-The heatmap legend is available through **RefHaven: Show File Heatmap Legend**.
-It reports live line counts and percentages for the active file, so the
-visualization never depends on color alone:
+The heatmap legend is available from the unified file-actions menu. It reports
+live line counts and percentages for the active file, so the visualization
+never depends on color alone. Select a populated band to jump to its first
+line:
 
 | Band          | Meaning                                 |
 | ------------- | --------------------------------------- |
@@ -168,11 +167,15 @@ visualization never depends on color alone:
 | Last year     | More than 30 and up to 365 days ago     |
 | Older         | Committed more than one year ago        |
 
-Use **RefHaven: Toggle File Heatmap** for a direct on/off action. Add `"line"`
-to `refhaven.fileAnnotations.heatmap.locations` if you prefer a stronger
-full-line tint. Every band exposes `Foreground` and `Background` theme tokens
-under `refhaven.heatmap.*`, customizable with VS Code's
-`workbench.colorCustomizations`.
+Use **RefHaven: Toggle File Heatmap** for a direct on/off action. By default it
+affects only the active file; set `refhaven.fileAnnotations.heatmap.toggleMode`
+to `"window"` when you want the choice persisted for the whole window. Press
+`Escape` to dismiss active whole-file annotations without rewriting that
+preference. Add `"line"` to `refhaven.fileAnnotations.heatmap.locations` for a
+stronger full-line tint. Every band exposes `Foreground` and `Background`
+theme tokens under `refhaven.heatmap.*`, customizable with VS Code's
+`workbench.colorCustomizations`. Whole-file blame uses
+`refhaven.blame.annotationForeground`.
 
 Annotations are native, cancellable, bounded to 5,000 editor lines, and their
 calculated results are never persisted. Whole-file annotations remain off by
@@ -198,45 +201,16 @@ default so there is no repository-wide blame work unless you opt in.
 <summary><strong>📦 Single-file stash and inspection</strong></summary>
 
 **Stash This File...** stores the staged and unstaged state of one tracked
-regular file—or both sides of its detected rename—in a standard two-parent Git
-stash, then returns only that selection to `HEAD`. Untracked files are excluded,
-and every unrelated staged or working-tree change stays exactly where it was.
-The command is available from the unified RefHaven file submenu in Source
-Control, Explorer, and editors, plus the Command Palette. If the selected
-editor has unsaved changes, confirming the stash message saves that document
-before the Git transaction begins.
+regular file—or both sides of its detected rename—in a standard Git stash,
+then returns only that selection to `HEAD`. Unrelated changes stay in place. An
+accepted command saves an unsaved selected editor before beginning.
 
-The cleanup is deliberately fail-safe. RefHaven first publishes the stash and
-a private recovery ref in one atomic ref transaction,
-atomically moves the selected file into a repository-local safety directory inside the
-repository's Git metadata, verifies the moved bytes, and installs the clean
-`HEAD` file with a no-clobber hard link. The full index is captured byte for
-byte; RefHaven installs the prepared clean index only after acquiring
-`index.lock` and confirming that the real index still matches that capture. If another editor or
-process writes the path, moves `HEAD`, or changes the selected index entry,
-RefHaven stops instead of overwriting the newer state. `refs/stash` itself is
-published with an expected-old-value check, so a competing stash update wins
-safely before cleanup starts. A stash may therefore be created while cleanup
-is reported as incomplete; the warning identifies that outcome and offers the
-safety directory for inspection.
-
-When an existing file is moved during a successful stash, its safety copy and
-completion journal are retained under the repository's
-`refhaven-recovery/stash-*` Git metadata directory. This is intentional: an
-editor that already had the original file open can still write through its old
-file handle. Close editors and other writers, verify both the stash and current
-file, and only then remove an obsolete safety directory manually. RefHaven
-does not delete these directories automatically. If an incomplete journal has
-a non-null `recoveryRef`, first delete that ref with its expected stash SHA
-(`git update-ref -d <recoveryRef> <stashSha>`), then remove the directory.
-
-Save the selected VS Code document before running the command. RefHaven fails
-closed for untracked or conflicted paths, active Git content filters, sparse
-checkout or skip-worktree entries, symlinks, submodules and other special
-index entries, files over 64 MiB, or a worktree whose path cannot use atomic
-rename and hard links with the Git safety directory. Stash apply/pop/drop,
-multi-file stash,
-include-untracked, and keep-index workflows remain outside RefHaven.
+The transaction is deliberately fail-closed: it uses compare-and-swap checks,
+atomic file operations, and a retained recovery journal so a concurrent editor
+or Git process wins instead of being overwritten. Unsupported path, index,
+filter, sparse-checkout, and filesystem cases stop without broadening the
+mutation. The exact safety protocol, recovery procedure, and limits are in
+[`docs/GIT-SEMANTICS.md`](docs/GIT-SEMANTICS.md) and [`SECURITY.md`](SECURITY.md).
 
 The **Stashes** view lets you inspect existing stash files, statistics,
 revisions, history, and native comparisons without applying or dropping them.
@@ -345,29 +319,22 @@ concise data-handling notice.
 
 Open `Ctrl+Shift+P` and type `RefHaven`.
 
-| Command                                     | Use it when you want to...                          |
-| ------------------------------------------- | --------------------------------------------------- |
-| `New Comparison`                            | Review any two locally available refs               |
-| `Compare Current Branch With...`            | Start from the checked-out branch                   |
-| `Compare Selected Branches`                 | Compare two branches selected under Repository      |
-| `Open All Changes`                          | Review every text change in one native editor       |
-| `Quick Open Comparison File...`             | Find a changed file without navigating the tree     |
-| `Open Next Unreviewed File`                 | Continue a comparison review                        |
-| `Search Commits`                            | Find local history by metadata or changed content   |
-| `Show File History`                         | Follow the active file across revisions and renames |
-| `Show Line History`                         | Trace the current selection                         |
-| `Inspect Current Line`                      | Open rich blame actions for the cursor line         |
-| `Open File at Revision...`                  | Read a historical version                           |
-| `Compare File with Revision...`             | Diff the current file against a local ref           |
-| `Reveal File in Branch Comparison`          | Find the active file in a saved comparison          |
-| `Change File Annotations...`                | Enable blame, heatmap, or changes markers           |
-| `Toggle File Heatmap`                       | Enable or disable the heatmap directly              |
-| `Show File Heatmap Legend`                  | Read age bands and live line counts                 |
-| `Show File Actions`                         | Open the context-sensitive native action menu       |
-| `Stash This File...`                        | Safely set aside one tracked file                   |
-| `Open Local Reference in Browser...`        | Open a validated immutable revision in the browser  |
-| `Open Issue or Merge Request in Browser...` | Open a validated `#issue` or `!merge-request`       |
-| `Configure Restricted Remote Origin...`     | Enable or clear the strict remote-origin policy     |
+| Command                                 | Use it when you want to...                          |
+| --------------------------------------- | --------------------------------------------------- |
+| `New Comparison`                        | Review any two locally available refs               |
+| `Compare Current Branch With...`        | Start from the checked-out branch                   |
+| `Search Commits`                        | Find local history by metadata or changed content   |
+| `Show File History`                     | Follow the active file across revisions and renames |
+| `Show Line History`                     | Trace the current selection                         |
+| `Inspect Current Line`                  | Open rich blame actions for the cursor line         |
+| `Open File at Revision...`              | Read a historical version                           |
+| `Compare File with Revision...`         | Diff the current file against a local ref           |
+| `Change File Annotations...`            | Enable blame, heatmap, or changes markers           |
+| `Toggle File Heatmap`                   | Enable or disable the heatmap directly              |
+| `Show File Actions`                     | Open the context-sensitive native action menu       |
+| `Stash This File...`                    | Safely set aside one tracked file                   |
+| `Configure Restricted Remote Origin...` | Enable or clear the strict remote-origin policy     |
+| `Line Intelligence`                     | Choose Full, Hover only, or Off                     |
 
 The editor, Explorer, Source Control resources, tree nodes, and blame status
 entry also expose context-sensitive RefHaven actions.
@@ -376,15 +343,18 @@ entry also expose context-sensitive RefHaven actions.
 
 RefHaven works immediately with its defaults.
 
-| Setting                                      | Default                | Purpose                                  |
-| -------------------------------------------- | ---------------------- | ---------------------------------------- |
-| `refhaven.inlineBlame.enabled`               | `true`                 | Current-line inline blame                |
-| `refhaven.statusBarBlame.enabled`            | `true`                 | Current-line blame in the status bar     |
-| `refhaven.lineHover.enabled`                 | `true`                 | Rich local hover on tracked lines        |
-| `refhaven.fileAnnotations.mode`              | `off`                  | Default whole-file annotation mode       |
-| `refhaven.fileAnnotations.heatmap.locations` | `["edge", "overview"]` | Placement; optional `"line"` tint        |
-| `refhaven.git.timeoutSeconds`                | `30`                   | Per-command Git timeout, from 1 to 300 s |
-| `refhaven.browserLinks.approvedOrigins`      | `[]`                   | Optional strict browser-origin allowlist |
+| Setting                                       | Default                | Purpose                                  |
+| --------------------------------------------- | ---------------------- | ---------------------------------------- |
+| `refhaven.inlineBlame.enabled`                | `true`                 | Current-line inline blame                |
+| `refhaven.statusBarBlame.enabled`             | `true`                 | Current-line blame in the status bar     |
+| `refhaven.lineHover.enabled`                  | `true`                 | Rich local hover on tracked lines        |
+| `refhaven.fileAnnotations.mode`               | `off`                  | Default whole-file annotation mode       |
+| `refhaven.fileAnnotations.blame.format`       | `detailed`             | Whole-file blame detail level            |
+| `refhaven.fileAnnotations.blame.showRepeated` | `false`                | Repeat details inside commit blocks      |
+| `refhaven.fileAnnotations.heatmap.locations`  | `["edge", "overview"]` | Placement; optional `"line"` tint        |
+| `refhaven.fileAnnotations.heatmap.toggleMode` | `file`                 | Direct-toggle scope: file or window      |
+| `refhaven.git.timeoutSeconds`                 | `30`                   | Per-command Git timeout, from 1 to 300 s |
+| `refhaven.browserLinks.approvedOrigins`       | `[]`                   | Optional strict browser-origin allowlist |
 
 ## Installation
 
@@ -408,6 +378,7 @@ npm run quality
 npm run format:check
 npm run test:unit
 npm run test:extension
+npm run benchmark:annotations
 npm audit --audit-level=low
 npm audit signatures
 npm run package
@@ -428,6 +399,7 @@ publishing it.
 
 - Release history — `CHANGELOG.md`
 - Product definition — `docs/PRODUCT.md`
+- Feature maturity and competitive gaps — `docs/FEATURE-MATURITY.md`
 - Architecture — `docs/ARCHITECTURE.md`
 - Security model — `SECURITY.md`
 - Privacy notice — `PRIVACY.md`

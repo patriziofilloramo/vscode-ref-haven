@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_HEATMAP_LOCATIONS,
   heatmapBucket,
+  heatmapFileModeOverride,
+  normalizeFileBlameFormat,
   normalizeHeatmapLocations,
+  normalizeHeatmapToggleMode,
   toggledHeatmapMode,
 } from "../../src/domain/fileAnnotations";
 import { parseChangedLineRanges } from "../../src/infrastructure/git/diffHunks";
@@ -36,12 +39,30 @@ suite("file annotations", () => {
     assert.deepEqual(normalizeHeatmapLocations("line"), DEFAULT_HEATMAP_LOCATIONS);
   });
 
+  test("normalizes annotation display settings to safe defaults", () => {
+    assert.equal(normalizeFileBlameFormat("compact"), "compact");
+    assert.equal(normalizeFileBlameFormat("unknown"), "detailed");
+    assert.equal(normalizeHeatmapToggleMode("window"), "window");
+    assert.equal(normalizeHeatmapToggleMode("unknown"), "file");
+  });
+
   test("toggles against persisted state while treating session-only changes as heatmap off", () => {
     assert.equal(toggledHeatmapMode("off", "off"), "heatmap");
     assert.equal(toggledHeatmapMode("blame", "blame"), "heatmap");
     assert.equal(toggledHeatmapMode("heatmap", "heatmap"), "off");
     assert.equal(toggledHeatmapMode("changes", "heatmap"), "heatmap");
     assert.equal(toggledHeatmapMode("heatmap", "off"), "heatmap");
+  });
+
+  test("uses the smallest file override and restores the underlying annotation mode", () => {
+    assert.equal(heatmapFileModeOverride("off", true), "heatmap");
+    assert.equal(heatmapFileModeOverride("blame", true), "heatmap");
+    assert.equal(heatmapFileModeOverride("changes", true), "heatmap");
+    assert.equal(heatmapFileModeOverride("heatmap", true), null);
+    assert.equal(heatmapFileModeOverride("heatmap", false), "off");
+    assert.equal(heatmapFileModeOverride("blame", false), null);
+    assert.equal(heatmapFileModeOverride("changes", false), null);
+    assert.equal(heatmapFileModeOverride("off", false), null);
   });
 
   test("parses additions, changes, and deletion-only zero-context hunks", () => {
