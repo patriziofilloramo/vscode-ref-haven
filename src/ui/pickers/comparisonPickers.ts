@@ -11,6 +11,7 @@ interface BranchQuickPickItem extends vscode.QuickPickItem {
 
 export async function pickRepository(
   repositories: readonly RepositoryIdentity[],
+  title = "RefHaven: New Comparison",
 ): Promise<RepositoryIdentity | null> {
   if (repositories.length === 1) return repositories[0] ?? null;
 
@@ -24,7 +25,7 @@ export async function pickRepository(
     {
       matchOnDescription: true,
       placeHolder: "Select a repository",
-      title: "RefHaven: New Comparison",
+      title,
     },
   );
   return selected?.repository ?? null;
@@ -83,7 +84,7 @@ export async function pickBranch(
       action: "enterRevision",
       description: "SHA or local revision expression",
       iconPath: new vscode.ThemeIcon("edit"),
-      label: "Enter a revision…",
+      label: "Enter a revision...",
     });
   }
 

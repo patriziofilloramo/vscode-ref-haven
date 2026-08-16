@@ -869,12 +869,8 @@
         "contents": "No stashes in this workspace."
       },
       {
-        "view": "refhaven.inspector",
-        "contents": "Inspect the active file history and selected commit details."
-      },
-      {
         "view": "refhaven.repository",
-        "contents": "No repositories are available in this workspace."
+        "contents": "No Git repositories are available.\n[Open Folder](command:vscode.openFolder)\nOpen a folder or workspace containing a local Git repository."
       }
     ],
     "menus": {

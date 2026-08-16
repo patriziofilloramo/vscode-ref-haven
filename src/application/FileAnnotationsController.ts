@@ -216,7 +216,7 @@ export class FileAnnotationsController implements vscode.Disposable {
       {
         annotationMode: "changes",
         detail: "Mark saved or unsaved editor lines changed relative to a local reference",
-        label: "$(diff) Changes relative to…",
+        label: "$(diff) Changes relative to...",
         ...(currentMode === "changes" ? { description: "current" } : {}),
       },
     ];
@@ -331,7 +331,7 @@ export class FileAnnotationsController implements vscode.Disposable {
           description: details.age,
           ...(countDetail
             ? {
-                detail: `${countDetail}${firstLine === null || firstLine === undefined ? "" : " - select to jump"}`,
+                detail: `${countDetail}${firstLine === null || firstLine === undefined ? "" : " · Select to jump"}`,
               }
             : {}),
           label: `$(${HEATMAP_BUCKET_ICONS[bucket]}) ${details.label}`,
@@ -682,12 +682,12 @@ function heatmapHover(
   const author = escapeMarkdown(blameAuthorLabel(blame, userName));
   if (!blame.isCommitted) {
     return new vscode.MarkdownString(
-      [`**Heatmap - ${details.label}**`, `**${author}** - Uncommitted changes`].join("\n\n"),
+      [`**${details.label}**`, `**${author}** · Uncommitted changes`].join("\n\n"),
     );
   }
   return new vscode.MarkdownString(
     [
-      `**Heatmap - ${details.label}** - ${details.age}`,
+      `**${details.label}** · ${details.age}`,
       `**${author}**, ${formatRelativeTime(blame.authorDate)}`,
       escapeMarkdown(blame.summary),
       `\`${blame.sha.slice(0, 8)}\``,

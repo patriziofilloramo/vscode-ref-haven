@@ -15,6 +15,7 @@ interface InspectorMessageNode {
   readonly icon: "error" | "info";
   readonly kind: "inspectorMessage";
   readonly label: string;
+  readonly tooltip?: string;
 }
 
 export type InspectorTreeNode =
@@ -77,6 +78,7 @@ export class InspectorTreeProvider
     if (node.kind === "inspectorMessage") {
       const item = new vscode.TreeItem(node.label);
       item.iconPath = new vscode.ThemeIcon(node.icon);
+      item.tooltip = node.tooltip;
       return item;
     }
     return node.kind === "fileHistoryCommit"
@@ -114,13 +116,11 @@ export class InspectorTreeProvider
         {
           icon: "info",
           kind: "inspectorMessage",
-          label: this.fileHistoryProvider.hasTarget()
-            ? "No matching file revisions."
-            : "Open a tracked file to view its history.",
+          label: fileHistoryEmptyMessage(this.fileHistoryProvider),
         },
       ];
     } catch (error) {
-      return [errorMessage(error, "Could not load file history.")];
+      return [errorMessage(error, "Could not load file history. Use Refresh to try again.")];
     }
   }
 
@@ -136,7 +136,9 @@ export class InspectorTreeProvider
         },
       ];
     } catch (error) {
-      return [errorMessage(error, "Could not load commit details.")];
+      return [
+        errorMessage(error, "Could not load commit details. Select the commit again to retry."),
+      ];
     }
   }
 }
@@ -145,6 +147,13 @@ function errorMessage(error: unknown, fallback: string): InspectorMessageNode {
   return {
     icon: "error",
     kind: "inspectorMessage",
-    label: error instanceof Error ? error.message : fallback,
+    label: fallback,
+    ...(error instanceof Error ? { tooltip: error.message } : {}),
   };
+}
+
+function fileHistoryEmptyMessage(provider: FileHistoryTreeProvider): string {
+  if (!provider.hasTarget()) return "Open a tracked file to view its history.";
+  const filter = provider.getFilter();
+  return filter ? `No revisions match “${filter}”.` : "No file revisions found.";
 }

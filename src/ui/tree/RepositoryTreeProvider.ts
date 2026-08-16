@@ -67,7 +67,9 @@ export class RepositoryTreeProvider
   }
 
   public async getChildren(node?: RepositoryTreeNode): Promise<RepositoryTreeNode[]> {
-    if (!node) return [BRANCHES_SECTION, WORKTREES_SECTION];
+    if (!node) {
+      return this.branchesProvider.hasRepositories() ? [BRANCHES_SECTION, WORKTREES_SECTION] : [];
+    }
     if (node.kind === "repositorySection") {
       return node.section === "branches"
         ? this.branchesProvider.getChildren()

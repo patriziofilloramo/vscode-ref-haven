@@ -429,7 +429,7 @@ suite("comparison tree lifecycle", () => {
 });
 
 suite("composite native views", () => {
-  test("consolidates inspector and repository providers into four top-level sections", async () => {
+  test("consolidates child providers and exposes the repository welcome state", async () => {
     const fileHistory = new FileHistoryTreeProvider();
     const commitDetails = new CommitDetailsTreeProvider();
     const branches = new BranchesTreeProvider();
@@ -443,9 +443,27 @@ suite("composite native views", () => {
         inspectorSections.map((node) => inspector.getTreeItem(node).label),
         ["File History", "Commit Details"],
       );
-      const repositorySections = await repository.getChildren();
+      fileHistory.setTarget({ filePath: "src/example.ts", repositoryRoot: resolve("repository") });
+      fileHistory.setFilter("alice");
+      const historySection = inspectorSections.find(
+        (node) => node.kind === "inspectorSection" && node.section === "fileHistory",
+      );
+      assert.ok(historySection);
+      assert.equal(inspector.getTreeItem(historySection).description, "example.ts · Filter: alice");
+      const filteredHistory = await inspector.getChildren(historySection);
       assert.deepEqual(
-        repositorySections.map((node) => repository.getTreeItem(node).label),
+        filteredHistory.map((node) => inspector.getTreeItem(node).label),
+        ["No revisions match “alice”."],
+      );
+      const repositorySections = await repository.getChildren();
+      assert.deepEqual(repositorySections, []);
+
+      const repositoryIdentity = createComparison().repository;
+      branches.setRepositories([repositoryIdentity]);
+      worktrees.setRepositories([repositoryIdentity]);
+      const populatedRepositorySections = await repository.getChildren();
+      assert.deepEqual(
+        populatedRepositorySections.map((node) => repository.getTreeItem(node).label),
         ["Branches", "Worktrees"],
       );
     } finally {

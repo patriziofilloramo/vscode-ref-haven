@@ -23,8 +23,10 @@ export interface WorktreeNode {
 }
 
 export interface WorktreeMessageNode {
+  readonly icon?: "error" | "info";
   readonly kind: "worktreeMessage";
   readonly label: string;
+  readonly tooltip?: string;
 }
 
 export type WorktreesTreeNode = WorktreeMessageNode | WorktreeNode | WorktreeRepositoryNode;
@@ -77,7 +79,8 @@ export class WorktreesTreeProvider
   public getTreeItem(element: WorktreesTreeNode): vscode.TreeItem {
     if (element.kind === "worktreeMessage") {
       const item = new vscode.TreeItem(element.label);
-      item.iconPath = new vscode.ThemeIcon("info");
+      item.iconPath = new vscode.ThemeIcon(element.icon ?? "info");
+      item.tooltip = element.tooltip;
       return item;
     }
     if (element.kind === "worktreeRepository") {
@@ -152,8 +155,10 @@ export class WorktreesTreeProvider
       if (this.cache.get(key) === pending) this.cache.delete(key);
       return [
         {
+          icon: "error",
           kind: "worktreeMessage",
-          label: error instanceof Error ? error.message : "Could not list worktrees.",
+          label: "Could not list worktrees. Use Refresh to try again.",
+          ...(error instanceof Error ? { tooltip: error.message } : {}),
         },
       ];
     } finally {

@@ -88,6 +88,10 @@ Maintenance-hardening coverage includes trusted Markdown command arguments
 containing unbalanced parentheses, unchanged blame-origin suppression,
 fallback inline hover behavior, separate selected-index/worktree stash
 snapshots, and rejection of review writes carrying a stale revision key.
+Presentation contracts also bound inline/status blame, restrict the comparison
+toolbar to four primary actions, keep display controls in overflow, validate
+hover-to-picker line targets, and expose actionable welcome content only when a
+view can actually become empty.
 Concurrent review-write tests force asynchronous workspace-state updates and
 verify that both file marks survive.
 Comparison-store tests apply the same delayed-write fixture to concurrent
@@ -337,6 +341,12 @@ Before delivering `refhaven-x.y.z.vsix`:
     `.code-workspace`, a folder nested below the repository root, and Remote SSH
     with the extension installed on the remote side. Confirm no repository-root
     workspace assumption and no background network access.
+23. At narrow and ordinary Source Control widths (approximately 280 and 400
+    pixels), verify that the comparison toolbar shows only create, quick-open,
+    next-unreviewed, and refresh; filter, sort, and layout remain in overflow.
+    Navigate the grouped File Actions and Line Blame pickers by keyboard, open
+    **More Actions...** from a hover on a line other than the cursor, and confirm
+    every command targets the hovered repository, file, revision, and line.
 
 The release report follows [RELEASE-REPORT-TEMPLATE.md](RELEASE-REPORT-TEMPLATE.md)
 and records extension/version, commit SHA, VS Code and Git versions, operating

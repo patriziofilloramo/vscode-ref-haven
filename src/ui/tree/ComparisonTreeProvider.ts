@@ -331,11 +331,13 @@ export class ComparisonTreeProvider
   ): Promise<ComparisonTreeNode[]> {
     const result = await this.getComparisonResult(comparison);
     if (!result) {
+      const error = this.errors.get(comparison.id);
       return [
         {
           icon: "error",
           kind: "message",
-          label: this.errors.get(comparison.id) ?? "Comparison failed.",
+          label: "Comparison failed. Use Refresh to try again.",
+          ...(error ? { tooltip: error } : {}),
         },
       ];
     }
@@ -388,7 +390,8 @@ export class ComparisonTreeProvider
         {
           icon: "error",
           kind: "message",
-          label: error instanceof Error ? error.message : "Could not load the commit files.",
+          label: "Could not load commit files. Collapse and expand to try again.",
+          ...(error instanceof Error ? { tooltip: error.message } : {}),
         },
       ];
     } finally {

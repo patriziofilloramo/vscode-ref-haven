@@ -90,7 +90,10 @@ export class CommitDetailsController {
   }
 
   public async search(): Promise<void> {
-    const repository = await pickRepository(await discoverRepositories());
+    const repository = await pickRepository(
+      await discoverRepositories(),
+      "RefHaven: Search Commits · Repository",
+    );
     if (!repository) return;
     const scope = await vscode.window.showQuickPick<SearchScopeItem>(
       [
@@ -99,7 +102,10 @@ export class CommitDetailsController {
         { searchKind: "sha", label: "$(git-commit) SHA" },
         { searchKind: "content", label: "$(search) Changed content" },
       ],
-      { placeHolder: "Choose how to search local commits", title: "RefHaven: Search Commits" },
+      {
+        placeHolder: "Choose how to search local commits",
+        title: "RefHaven: Search Commits · 1/3",
+      },
     );
     if (!scope) return;
     const pattern =
@@ -110,7 +116,7 @@ export class CommitDetailsController {
       placeHolder: searchPlaceholder(scope.searchKind, pattern),
       prompt:
         "Only objects already present in the local repository are searched; the query is never logged",
-      title: `RefHaven: Search by ${scope.searchKind}`,
+      title: "RefHaven: Search Commits · 3/3",
       validateInput: (value) => validateSearchInput(scope.searchKind, value),
     });
     if (!query) return;
@@ -178,7 +184,7 @@ async function pickSearchPattern(
       ],
       {
         placeHolder: "Choose how added and removed lines are matched",
-        title: "RefHaven: Content Search Mode",
+        title: "RefHaven: Search Commits · 2/3",
       },
     );
   }
@@ -210,7 +216,10 @@ async function pickSearchPattern(
         patternMode: "regex",
       },
     ],
-    { placeHolder: "Choose literal or regex matching", title: "RefHaven: Search Match Mode" },
+    {
+      placeHolder: "Choose literal or regex matching",
+      title: "RefHaven: Search Commits · 2/3",
+    },
   );
 }
 

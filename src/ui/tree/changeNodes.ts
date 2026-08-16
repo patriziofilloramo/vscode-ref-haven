@@ -45,6 +45,7 @@ export interface MessageNode {
   readonly icon: string;
   readonly kind: "message";
   readonly label: string;
+  readonly tooltip?: string;
 }
 
 export type ChangeNode = FileNode | FolderNode;
@@ -111,6 +112,7 @@ export function createFileItem(node: FileNode): vscode.TreeItem {
 export function createMessageItem(node: MessageNode): vscode.TreeItem {
   const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
   item.iconPath = new vscode.ThemeIcon(node.icon);
+  item.tooltip = node.tooltip;
   return item;
 }
 

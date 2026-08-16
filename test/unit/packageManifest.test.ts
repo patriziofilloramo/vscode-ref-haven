@@ -68,6 +68,7 @@ interface PackageManifest {
     readonly views: {
       readonly scm: readonly { readonly id: string; readonly name: string }[];
     };
+    readonly viewsWelcome: readonly { readonly contents: string; readonly view: string }[];
   };
   readonly dependencies?: Readonly<Record<string, string>>;
   readonly description: string;
@@ -427,8 +428,8 @@ suite("extension manifest", () => {
   });
 
   test("keeps the comparison toolbar focused and moves display controls to overflow", () => {
-    const titleMenus = (loadManifest().contributes.menus["view/title"] ?? []).filter(
-      ({ when }) => when?.includes("view == refhaven.comparisons"),
+    const titleMenus = (loadManifest().contributes.menus["view/title"] ?? []).filter(({ when }) =>
+      when?.includes("view == refhaven.comparisons"),
     );
     const primary = titleMenus.filter(({ group }) => group?.startsWith("navigation"));
     const overflow = titleMenus.filter(({ group }) => !group?.startsWith("navigation"));
@@ -450,6 +451,23 @@ suite("extension manifest", () => {
         "refhaven.viewFilesAsTree",
         "refhaven.viewFilesAsList",
       ],
+    );
+  });
+
+  test("uses actionable welcome content only for views that can become empty", () => {
+    const welcome = loadManifest().contributes.viewsWelcome;
+
+    assert.equal(
+      welcome.some(({ view }) => view === "refhaven.inspector"),
+      false,
+    );
+    assert.match(
+      welcome.find(({ view }) => view === "refhaven.comparisons")?.contents ?? "",
+      /command:refhaven\.newComparison/u,
+    );
+    assert.match(
+      welcome.find(({ view }) => view === "refhaven.repository")?.contents ?? "",
+      /command:vscode\.openFolder/u,
     );
   });
 

@@ -40,6 +40,13 @@ All notable changes to RefHaven are recorded here. The format follows
   move filter, sort, and layout controls to the overflow menu. File and
   line-blame action pickers are grouped by task, while routine mode and review
   confirmations use transient status-bar feedback.
+- Current-line inline and status blame are now bounded and more compact. Rich
+  line hover keeps at most four primary links and moves history, copy, browser,
+  annotation, and working-tree actions into one contextual **More Actions**
+  picker whose repository, path, revision, and line are validated before use.
+- Empty, filtered, and recoverable error states now explain the active context
+  and the next action. Repository welcome content can open a folder directly,
+  and commit search labels its three steps consistently.
 
 ### Fixed
 

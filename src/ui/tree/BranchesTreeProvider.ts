@@ -28,8 +28,10 @@ export interface BranchCommitNode {
 }
 
 export interface BranchMessageNode {
+  readonly icon?: "error" | "info";
   readonly kind: "branchMessage";
   readonly label: string;
+  readonly tooltip?: string;
 }
 
 export type BranchesTreeNode =
@@ -75,6 +77,10 @@ export class BranchesTreeProvider
     this.refresh();
   }
 
+  public hasRepositories(): boolean {
+    return this.repositories.length > 0;
+  }
+
   public refresh(): void {
     for (const controller of this.abortControllers.values()) controller.abort();
     this.abortControllers.clear();
@@ -96,7 +102,8 @@ export class BranchesTreeProvider
   public getTreeItem(element: BranchesTreeNode): vscode.TreeItem {
     if (element.kind === "branchMessage") {
       const item = new vscode.TreeItem(element.label);
-      item.iconPath = new vscode.ThemeIcon("info");
+      item.iconPath = new vscode.ThemeIcon(element.icon ?? "info");
+      item.tooltip = element.tooltip;
       return item;
     }
     if (element.kind === "branchCommit") {
@@ -174,8 +181,10 @@ export class BranchesTreeProvider
       if (this.cache.get(key) === pending) this.cache.delete(key);
       return [
         {
+          icon: "error",
           kind: "branchMessage",
-          label: error instanceof Error ? error.message : "Could not list branches.",
+          label: "Could not list branches. Use Refresh to try again.",
+          ...(error instanceof Error ? { tooltip: error.message } : {}),
         },
       ];
     } finally {
@@ -208,8 +217,10 @@ export class BranchesTreeProvider
       if (this.historyCache.get(key) === pending) this.historyCache.delete(key);
       return [
         {
+          icon: "error",
           kind: "branchMessage",
-          label: error instanceof Error ? error.message : "Could not load branch history.",
+          label: "Could not load branch history. Collapse and expand to try again.",
+          ...(error instanceof Error ? { tooltip: error.message } : {}),
         },
       ];
     } finally {

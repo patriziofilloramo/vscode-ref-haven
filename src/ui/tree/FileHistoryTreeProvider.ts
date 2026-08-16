@@ -44,7 +44,11 @@ export class FileHistoryTreeProvider
   }
 
   public getTargetLabel(): string | undefined {
-    return this.target?.filePath.split("/").at(-1);
+    const fileName = this.target?.filePath.split("/").at(-1);
+    if (!fileName || !this.filter) return fileName;
+    const visibleFilter =
+      this.filter.length <= 32 ? this.filter : `${this.filter.slice(0, 31).trimEnd()}…`;
+    return `${fileName} · Filter: ${visibleFilter}`;
   }
 
   public hasTarget(): boolean {

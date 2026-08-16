@@ -145,7 +145,13 @@ export class StashTreeProvider
       }
       const matches = stashes.filter((stash) => stashMatchesFilter(stash, this.filter));
       if (matches.length === 0 && this.filter.length > 0) {
-        return [{ icon: "search", kind: "message", label: "No stashes match the current filter." }];
+        return [
+          {
+            icon: "search",
+            kind: "message",
+            label: `No stashes match “${this.filter}”.`,
+          },
+        ];
       }
       return matches.map((stash) => ({ kind: "stash", repository, stash }));
     } catch (error) {
@@ -157,7 +163,8 @@ export class StashTreeProvider
         {
           icon: "error",
           kind: "message",
-          label: error instanceof Error ? error.message : "Could not list the stashes.",
+          label: "Could not list stashes. Use Refresh to try again.",
+          ...(error instanceof Error ? { tooltip: error.message } : {}),
         },
       ];
     } finally {
@@ -207,7 +214,8 @@ export class StashTreeProvider
         {
           icon: "error",
           kind: "message",
-          label: error instanceof Error ? error.message : "Could not load the stash files.",
+          label: "Could not load stash files. Collapse and expand to try again.",
+          ...(error instanceof Error ? { tooltip: error.message } : {}),
         },
       ];
     } finally {
