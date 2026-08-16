@@ -42,6 +42,7 @@ import {
 import { blameAuthorLabel, fileBlameAnnotationText } from "../ui/blame/blamePresentation";
 import { formatRelativeTime } from "../ui/format";
 import { escapeMarkdown } from "../ui/markdown";
+import { showTransientSuccess } from "../ui/feedback";
 import { pickBranch } from "../ui/pickers/comparisonPickers";
 import type { FileAnnotationChangesStore } from "./FileAnnotationChangesStore";
 
@@ -302,9 +303,7 @@ export class FileAnnotationsController implements vscode.Disposable {
       this.changesBase = undefined;
     }
     await this.update(true);
-    void vscode.window.showInformationMessage(
-      `RefHaven file heatmap ${enabled ? "enabled" : "off"} for this ${toggleMode}.`,
-    );
+    showTransientSuccess(`File heatmap ${enabled ? "enabled" : "off"} for this ${toggleMode}`);
   }
 
   public async dismiss(): Promise<void> {

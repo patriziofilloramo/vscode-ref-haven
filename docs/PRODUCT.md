@@ -175,6 +175,12 @@ Repository (Branches and Worktrees). It uses native commands, context menus,
 theme icons, keyboard navigation, and accessibility support; it does not use a
 Webview.
 
+View toolbars reserve primary icons for frequent actions. The Branch
+Comparisons toolbar exposes create, quick-open, next-unreviewed, and refresh;
+filter, sort, and layout remain one click away in the native overflow menu.
+Quick picks separate actions by user task, and routine success feedback appears
+transiently in the status bar instead of interrupting the editor with a toast.
+
 Comparisons are grouped by repository only when more than one repository is present. A comparison node displays its directional label and a compact summary such as `↑8 ↓2 · 14 files`. Its tooltip includes repository, full refs, mode, resolved SHAs, merge base, and update time, without credentials or file contents.
 
 When files exist, the comparison summary also shows reviewed/total progress.

@@ -37,6 +37,12 @@ interface FileActionItem extends vscode.QuickPickItem {
   readonly run: () => Thenable<unknown>;
 }
 
+interface FileActionSeparator extends vscode.QuickPickItem {
+  readonly kind: vscode.QuickPickItemKind.Separator;
+}
+
+type FileActionEntry = FileActionItem | FileActionSeparator;
+
 type StashFileNode = FileNode & {
   readonly scope: FileDiffScope & {
     readonly fromSha: string;
@@ -60,8 +66,9 @@ export class FileActionsController {
       return;
     }
     const commandArgument = asFileNode(candidate) ?? target.uri;
-    const selected = await vscode.window.showQuickPick<FileActionItem>(
+    const selected = await vscode.window.showQuickPick<FileActionEntry>(
       [
+        fileActionSeparator("History"),
         {
           detail: target.filePath,
           label: "$(history) Show File History",
@@ -74,6 +81,7 @@ export class FileActionsController {
           run: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.showLineHistory, target.uri),
         },
+        fileActionSeparator("Compare and review"),
         {
           detail: "Open the file from a local Git reference",
           label: "$(go-to-file) Open File at Revision...",
@@ -92,12 +100,7 @@ export class FileActionsController {
           run: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.revealFileInComparison, target.uri),
         },
-        {
-          detail: "Tracked staged and unstaged changes for this file only",
-          label: "$(git-stash) Stash This File...",
-          run: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.stashFile, commandArgument),
-        },
+        fileActionSeparator("Annotations"),
         {
           detail: "Blame, heatmap, changes, or off",
           label: "$(symbol-color) Change File Annotations...",
@@ -116,14 +119,17 @@ export class FileActionsController {
           run: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.showFileHeatmapLegend, target.uri),
         },
+        fileActionSeparator("Local changes"),
         {
-          detail: "Search commit messages, authors, SHAs, or changed content",
-          label: "$(search) Search Commits...",
-          run: (): Thenable<unknown> => vscode.commands.executeCommand(COMMAND_IDS.searchCommits),
+          detail: "Tracked staged and unstaged changes for this file only",
+          label: "$(git-stash) Stash This File...",
+          run: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(COMMAND_IDS.stashFile, commandArgument),
         },
+        fileActionSeparator("Remote"),
         {
           detail: "Open this file at the local HEAD revision on an approved origin",
-          label: "$(git-pull-request) Open File in Browser",
+          label: "$(link-external) Open File in Browser",
           run: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.openBrowserFile, target.uri),
         },
@@ -147,7 +153,7 @@ export class FileActionsController {
         title: "RefHaven: File Actions",
       },
     );
-    await selected?.run();
+    if (selected && "run" in selected) await selected.run();
   }
 
   public async showFileHistory(candidate?: unknown): Promise<void> {
@@ -516,6 +522,10 @@ export class FileActionsController {
     if (!target) throw new Error("The selected repository file is not available.");
     return target;
   }
+}
+
+function fileActionSeparator(label: string): FileActionSeparator {
+  return { kind: vscode.QuickPickItemKind.Separator, label };
 }
 
 function defaultModifiedFile(filePath: string): FileChange {

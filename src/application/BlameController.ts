@@ -25,6 +25,7 @@ import {
   statusBarBlameText,
 } from "../ui/blame/blamePresentation";
 import { COMMAND_IDS } from "../ui/commands/commandIds";
+import { showTransientSuccess } from "../ui/feedback";
 
 const UPDATE_DEBOUNCE_MS = 250;
 
@@ -33,6 +34,16 @@ interface CurrentLineBlame {
   readonly relativePath: string;
   readonly repositoryRootPath: string;
 }
+
+interface LineBlameActionItem extends vscode.QuickPickItem {
+  readonly action: () => Thenable<unknown>;
+}
+
+interface LineBlameActionSeparator extends vscode.QuickPickItem {
+  readonly kind: vscode.QuickPickItemKind.Separator;
+}
+
+type LineBlameActionEntry = LineBlameActionItem | LineBlameActionSeparator;
 
 /** Shows blame for the cursor's line as inline text and a status bar entry. */
 export class BlameController implements vscode.Disposable {
@@ -117,9 +128,7 @@ export class BlameController implements vscode.Disposable {
       !enabled,
       vscode.ConfigurationTarget.Global,
     );
-    void vscode.window.showInformationMessage(
-      enabled ? "Inline blame disabled." : "Inline blame enabled.",
-    );
+    showTransientSuccess(enabled ? "Inline blame disabled" : "Inline blame enabled");
   }
 
   public async showLineBlameActions(): Promise<void> {
@@ -138,8 +147,9 @@ export class BlameController implements vscode.Disposable {
       kind: "commit",
       repositoryRoot: current.repositoryRootPath,
     };
-    const selected = await vscode.window.showQuickPick(
+    const selected = await vscode.window.showQuickPick<LineBlameActionEntry>(
       [
+        lineBlameActionSeparator("Inspect"),
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.showCommitDetails, commitNode),
@@ -163,6 +173,7 @@ export class BlameController implements vscode.Disposable {
           description: current.relativePath,
           label: "$(compare-changes) Compare File with Revision...",
         },
+        lineBlameActionSeparator("History and annotations"),
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.showFileHistory),
@@ -181,6 +192,7 @@ export class BlameController implements vscode.Disposable {
           description: current.relativePath,
           label: "$(symbol-color) Change File Annotations...",
         },
+        lineBlameActionSeparator("Copy"),
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.copyCommitSha, commitNode),
@@ -196,7 +208,7 @@ export class BlameController implements vscode.Disposable {
       ],
       { placeHolder: current.blame.summary, title: "RefHaven: Line Blame" },
     );
-    await selected?.action();
+    if (selected && "action" in selected) await selected.action();
   }
 
   private scheduleUpdate(): void {
@@ -324,4 +336,8 @@ export class BlameController implements vscode.Disposable {
     }
     return pending;
   }
+}
+
+function lineBlameActionSeparator(label: string): LineBlameActionSeparator {
+  return { kind: vscode.QuickPickItemKind.Separator, label };
 }

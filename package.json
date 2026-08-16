@@ -1191,27 +1191,27 @@
         {
           "command": "refhaven.changeComparisonFileFilter",
           "when": "view == refhaven.comparisons",
-          "group": "navigation@4"
+          "group": "1_view@1"
         },
         {
           "command": "refhaven.changeComparisonFileSort",
           "when": "view == refhaven.comparisons",
-          "group": "navigation@5"
+          "group": "1_view@2"
         },
         {
           "command": "refhaven.viewFilesAsTree",
           "when": "view == refhaven.comparisons && refhaven.filesLayout == list",
-          "group": "navigation@6"
+          "group": "1_view@3"
         },
         {
           "command": "refhaven.viewFilesAsList",
           "when": "view == refhaven.comparisons && refhaven.filesLayout == tree",
-          "group": "navigation@6"
+          "group": "1_view@3"
         },
         {
           "command": "refhaven.refreshAll",
           "when": "view == refhaven.comparisons",
-          "group": "navigation@7"
+          "group": "navigation@4"
         },
         {
           "command": "refhaven.changeStashFilter",

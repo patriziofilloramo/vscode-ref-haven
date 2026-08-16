@@ -426,6 +426,33 @@ suite("extension manifest", () => {
     }
   });
 
+  test("keeps the comparison toolbar focused and moves display controls to overflow", () => {
+    const titleMenus = (loadManifest().contributes.menus["view/title"] ?? []).filter(
+      ({ when }) => when?.includes("view == refhaven.comparisons"),
+    );
+    const primary = titleMenus.filter(({ group }) => group?.startsWith("navigation"));
+    const overflow = titleMenus.filter(({ group }) => !group?.startsWith("navigation"));
+
+    assert.deepEqual(
+      primary.map(({ command }) => command),
+      [
+        "refhaven.newComparison",
+        "refhaven.quickOpenComparisonFile",
+        "refhaven.nextUnreviewedFile",
+        "refhaven.refreshAll",
+      ],
+    );
+    assert.deepEqual(
+      overflow.map(({ command }) => command),
+      [
+        "refhaven.changeComparisonFileFilter",
+        "refhaven.changeComparisonFileSort",
+        "refhaven.viewFilesAsTree",
+        "refhaven.viewFilesAsList",
+      ],
+    );
+  });
+
   test("packages only compiled runtime files and trust-boundary documents", () => {
     const manifest = loadManifest();
 

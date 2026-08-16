@@ -36,6 +36,10 @@ All notable changes to RefHaven are recorded here. The format follows
   mechanics to the dedicated Git semantics and security documents.
 - Changes-relative-to-ref annotations now include unsaved editor text and retain
   their validated symbolic baseline in workspace state across window reloads.
+- Comparison view controls now keep four frequent actions in the toolbar and
+  move filter, sort, and layout controls to the overflow menu. File and
+  line-blame action pickers are grouped by task, while routine mode and review
+  confirmations use transient status-bar feedback.
 
 ### Fixed
 

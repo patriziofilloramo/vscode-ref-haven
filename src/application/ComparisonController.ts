@@ -762,9 +762,7 @@ export class ComparisonController {
     await this.reviewStore.setAllReviewed(result, reviewed);
     this.reviewNavigationAnchors.delete(comparison.id);
     this.treeProvider.refreshReviewState(comparison.id);
-    void vscode.window.showInformationMessage(
-      reviewed ? "All comparison files marked reviewed." : "Comparison review reset.",
-    );
+    showTransientSuccess(reviewed ? "All comparison files marked reviewed" : "Review reset");
   }
 
   public async openAdjacentUnreviewedFile(
