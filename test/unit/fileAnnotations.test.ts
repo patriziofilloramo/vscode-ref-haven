@@ -46,7 +46,7 @@ suite("file annotations", () => {
     assert.equal(normalizeHeatmapToggleMode("unknown"), "file");
   });
 
-  test("toggles against persisted state while treating session-only changes as heatmap off", () => {
+  test("toggles against the displayed mode while treating changes as heatmap off", () => {
     assert.equal(toggledHeatmapMode("off", "off"), "heatmap");
     assert.equal(toggledHeatmapMode("blame", "blame"), "heatmap");
     assert.equal(toggledHeatmapMode("heatmap", "heatmap"), "off");

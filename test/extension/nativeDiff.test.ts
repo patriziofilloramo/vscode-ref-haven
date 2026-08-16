@@ -621,6 +621,22 @@ suite("native branch diff", () => {
         "modified.txt",
       );
       assert.deepEqual(ranges, [{ lineCount: 1, startLine: 2 }]);
+
+      const unsavedRanges = await listChangedLineRanges(
+        repositoryRoot,
+        git("rev-parse", "HEAD"),
+        "modified.txt",
+        { contents: "after\nunsaved line\n" },
+      );
+      assert.deepEqual(unsavedRanges, [{ lineCount: 1, startLine: 2 }]);
+
+      const addedBufferRanges = await listChangedLineRanges(
+        repositoryRoot,
+        git("rev-parse", "refs/heads/main"),
+        "added.txt",
+        { contents: "unsaved added file\n" },
+      );
+      assert.deepEqual(addedBufferRanges, [{ lineCount: 1, startLine: 1 }]);
     } finally {
       writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
     }

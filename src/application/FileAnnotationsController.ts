@@ -11,6 +11,8 @@ import { HEATMAP_COLOR_IDS } from "../config/heatmapColors";
 import { runInBackground } from "./errorHandling";
 import type { Logger } from "./Logger";
 import type { FileBlameLine } from "../domain/blame";
+import type { BranchRef } from "../domain/comparison";
+import { pathIdentityKey } from "../domain/pathValidation";
 import {
   HEATMAP_BUCKET_DETAILS,
   HEATMAP_BUCKETS,
@@ -41,6 +43,7 @@ import { blameAuthorLabel, fileBlameAnnotationText } from "../ui/blame/blamePres
 import { formatRelativeTime } from "../ui/format";
 import { escapeMarkdown } from "../ui/markdown";
 import { pickBranch } from "../ui/pickers/comparisonPickers";
+import type { FileAnnotationChangesStore } from "./FileAnnotationChangesStore";
 
 const MAX_ANNOTATED_LINES = 5_000;
 const UPDATE_DEBOUNCE_MS = 300;
@@ -53,9 +56,9 @@ interface ActiveFileTarget {
 }
 
 interface ChangesBase {
-  readonly label: string;
+  readonly baseRef: BranchRef;
   readonly repositoryRoot: string;
-  readonly sha: string;
+  readonly sha?: string;
 }
 
 interface AnnotationModeItem extends vscode.QuickPickItem {
@@ -123,8 +126,13 @@ export class FileAnnotationsController implements vscode.Disposable {
   private updateTimer: NodeJS.Timeout | undefined;
   private readonly userNames = new Map<string, Promise<string | null>>();
 
-  public constructor(private readonly logger: Logger) {
-    this.mode = readConfiguredMode();
+  public constructor(
+    private readonly logger: Logger,
+    private readonly changesStore: FileAnnotationChangesStore,
+  ) {
+    const savedChanges = this.changesStore.get();
+    this.changesBase = savedChanges;
+    this.mode = savedChanges ? "changes" : readConfiguredMode();
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => this.scheduleUpdate()),
       vscode.workspace.onDidChangeTextDocument((event) => {
@@ -174,6 +182,12 @@ export class FileAnnotationsController implements vscode.Disposable {
   public refresh(): void {
     this.repositoryFiles.clear();
     this.userNames.clear();
+    if (this.changesBase) {
+      this.changesBase = {
+        baseRef: this.changesBase.baseRef,
+        repositoryRoot: this.changesBase.repositoryRoot,
+      };
+    }
     this.scheduleUpdate();
   }
 
@@ -230,24 +244,33 @@ export class FileAnnotationsController implements vscode.Disposable {
         "RefHaven: Changes Annotations",
       );
       if (!ref) return;
-      this.changesBase = {
-        label: ref.displayName,
+      const sha = await resolveRef(target.repositoryRoot, ref.fullName);
+      const selection = {
+        baseRef: ref,
         repositoryRoot: target.repositoryRoot,
-        sha: await resolveRef(target.repositoryRoot, ref.fullName),
+        schemaVersion: 1 as const,
       };
+      await this.changesStore.set(selection);
+      this.changesBase = { ...selection, sha };
       this.fileModeOverrides.clear();
       this.mode = "changes";
     } else {
+      await this.changesStore.set(undefined);
+      await getExtensionConfiguration().update(
+        EXTENSION_SETTINGS.fileAnnotationsMode,
+        selected.annotationMode,
+        vscode.ConfigurationTarget.Global,
+      );
       this.fileModeOverrides.clear();
       this.mode = selected.annotationMode;
       this.changesBase = undefined;
-      await getExtensionConfiguration().update(
-        EXTENSION_SETTINGS.fileAnnotationsMode,
-        this.mode,
-        vscode.ConfigurationTarget.Global,
-      );
     }
 
+    this.logger.info("Changed whole-file annotation mode", {
+      mode: this.mode,
+      operation: "changeFileAnnotations",
+      persisted: true,
+    });
     await this.update(true);
   }
 
@@ -266,15 +289,17 @@ export class FileAnnotationsController implements vscode.Disposable {
       if (override) this.fileModeOverrides.set(uri, override);
       else this.fileModeOverrides.delete(uri);
     } else {
-      this.fileModeOverrides.clear();
-      this.mode = toggledHeatmapMode(this.mode, readConfiguredMode());
-      enabled = this.mode === "heatmap";
-      this.changesBase = undefined;
+      const nextMode = toggledHeatmapMode(this.mode, readConfiguredMode());
+      await this.changesStore.set(undefined);
       await getExtensionConfiguration().update(
         EXTENSION_SETTINGS.fileAnnotationsMode,
-        this.mode,
+        nextMode,
         vscode.ConfigurationTarget.Global,
       );
+      this.fileModeOverrides.clear();
+      this.mode = nextMode;
+      enabled = nextMode === "heatmap";
+      this.changesBase = undefined;
     }
     await this.update(true);
     void vscode.window.showInformationMessage(
@@ -379,27 +404,29 @@ export class FileAnnotationsController implements vscode.Disposable {
 
     if (mode === "changes") {
       const base = this.changesBase;
-      if (base?.repositoryRoot !== target.repositoryRoot) {
+      if (
+        !base ||
+        pathIdentityKey(base.repositoryRoot) !== pathIdentityKey(target.repositoryRoot)
+      ) {
         this.clearDecorations();
         return;
       }
-      if (target.editor.document.isDirty) {
-        this.clearDecorations();
-        if (interactive) {
-          void vscode.window.showInformationMessage(
-            "Save the file to calculate changes annotations against the selected reference.",
-          );
-        }
-        return;
+      try {
+        const sha =
+          base.sha ??
+          (await resolveRef(target.repositoryRoot, base.baseRef.fullName, abortController.signal));
+        if (generation !== this.generation) return;
+        if (base.sha === undefined) this.changesBase = { ...base, sha };
+        const ranges = await listChangedLineRanges(target.repositoryRoot, sha, target.filePath, {
+          ...(target.editor.document.isDirty ? { contents: target.editor.document.getText() } : {}),
+          signal: abortController.signal,
+        });
+        if (generation !== this.generation) return;
+        this.renderChanges(target.editor, ranges, base.baseRef.displayName);
+      } catch (error) {
+        if (generation === this.generation) this.clearDecorations();
+        throw error;
       }
-      const ranges = await listChangedLineRanges(
-        target.repositoryRoot,
-        base.sha,
-        target.filePath,
-        abortController.signal,
-      );
-      if (generation !== this.generation) return;
-      this.renderChanges(target.editor, ranges, base.label);
       return;
     }
 

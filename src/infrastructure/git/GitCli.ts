@@ -32,6 +32,7 @@ import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
 import { createPathLimitedStash, type StashFileResult, type StashFileTestHooks } from "./stashFile";
 import { parseWorktreeList } from "./worktreeList";
 import { parseWorktreeStatus } from "./worktreeStatus";
+import { readTemporaryBufferDiff } from "./temporaryFileDiff";
 import {
   GitOperationError,
   normalizeGitError,
@@ -715,18 +716,29 @@ export async function listChangedLineRanges(
   repositoryRoot: string,
   baseSha: string,
   filePath: string,
-  signal?: AbortSignal,
+  options: { readonly contents?: string; readonly signal?: AbortSignal } = {},
 ): Promise<ChangedLineRange[]> {
   assertRepositoryWorktreeGitPath(filePath);
   if (!isGitObjectId(baseSha)) throw new Error("The base commit SHA is invalid.");
-  await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
-  const stdout = await runGit(
-    repositoryRoot,
-    ["diff", "--no-ext-diff", "--no-textconv", "--unified=0", baseSha, "--", filePath],
-    signal,
-  ).catch((error: unknown) =>
-    failGitOperation(error, "Git could not annotate changes for this file."),
-  );
+  const { contents, signal } = options;
+  let stdout: string;
+  if (contents === undefined) {
+    await assertNoActiveContentFilters(repositoryRoot, [filePath], signal);
+    stdout = await runGit(
+      repositoryRoot,
+      ["diff", "--no-ext-diff", "--no-textconv", "--unified=0", baseSha, "--", filePath],
+      signal,
+    ).catch((error: unknown) =>
+      failGitOperation(error, "Git could not annotate changes for this file."),
+    );
+  } else {
+    const baseContents = (await fileExistsAtRevision(repositoryRoot, baseSha, filePath, signal))
+      ? await readFileAtRevision(repositoryRoot, baseSha, filePath, signal)
+      : Buffer.alloc(0);
+    stdout = await readTemporaryBufferDiff(repositoryRoot, baseContents, contents, signal).catch(
+      (error: unknown) => failGitOperation(error, "Git could not annotate this editor buffer."),
+    );
+  }
   return parseChangedLineRanges(stdout);
 }
 

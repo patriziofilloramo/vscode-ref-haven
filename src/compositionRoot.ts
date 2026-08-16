@@ -9,6 +9,7 @@ import { ComparisonStore } from "./application/ComparisonStore";
 import { runInBackground } from "./application/errorHandling";
 import { FileHistoryController } from "./application/FileHistoryController";
 import { FileAnnotationsController } from "./application/FileAnnotationsController";
+import { FileAnnotationChangesStore } from "./application/FileAnnotationChangesStore";
 import { FileActionsController } from "./application/FileActionsController";
 import { BrowserLinkController } from "./application/BrowserLinkController";
 import { LineHoverController } from "./application/LineHoverController";
@@ -118,7 +119,11 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const lineIntelligenceController = new LineIntelligenceController(context, logger);
   const lineHoverController = new LineHoverController(revisionProvider, logger);
   const lineHoverProvider = new LineHoverProvider(lineHoverController, logger);
-  const fileAnnotationsController = new FileAnnotationsController(logger);
+  const fileAnnotationChangesStore = new FileAnnotationChangesStore(context.workspaceState);
+  const fileAnnotationsController = new FileAnnotationsController(
+    logger,
+    fileAnnotationChangesStore,
+  );
   const gitLabController = new BrowserLinkController(logger);
   const fileActionsController = new FileActionsController(
     controller,

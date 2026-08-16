@@ -1,8 +1,18 @@
+import type { BranchRef } from "./comparison";
+
 export type FileAnnotationMode = "blame" | "changes" | "heatmap" | "off";
 export type FileBlameFormat = "compact" | "detailed";
 export type HeatmapBucket = "day" | "month" | "old" | "uncommitted" | "week" | "year";
 export type HeatmapLocation = "edge" | "line" | "overview";
 export type HeatmapToggleMode = "file" | "window";
+
+export const CHANGES_ANNOTATION_STORAGE_KEY = "refhaven.fileAnnotations.changes.v1";
+
+export interface SavedChangesAnnotationV1 {
+  readonly baseRef: BranchRef;
+  readonly repositoryRoot: string;
+  readonly schemaVersion: 1;
+}
 
 export const HEATMAP_BUCKETS = [
   "uncommitted",
