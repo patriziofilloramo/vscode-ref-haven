@@ -9,6 +9,9 @@ import { fileURLToPath, URL } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const execFileAsync = promisify(execFile);
+const commandErrorTestEnvironment = {
+  REFHAVEN_EXTENSION_TEST_RETHROW_COMMAND: "refhaven.stashFile",
+};
 
 // An integrated Extension Host terminal can export these variables. Passing
 // them to Code.exe would start it as a Node process instead of VS Code.
@@ -23,6 +26,7 @@ try {
   await createFixtureRepository(fixtureRoot, userDataRoot);
   await runTests({
     extensionDevelopmentPath: projectRoot,
+    extensionTestsEnv: commandErrorTestEnvironment,
     extensionTestsPath: resolve(projectRoot, ".test-out", "test", "extension", "index.js"),
     launchArgs: [fixtureRoot, "--disable-extensions", `--user-data-dir=${userDataRoot}`],
     version: "stable",
@@ -31,7 +35,10 @@ try {
   await createFixtureRepository(nestedFixtureRoot, nestedUserDataRoot, "opened-folder");
   await runTests({
     extensionDevelopmentPath: projectRoot,
-    extensionTestsEnv: { REFHAVEN_EXTENSION_TEST_SUITE: "ancestor-workspace" },
+    extensionTestsEnv: {
+      ...commandErrorTestEnvironment,
+      REFHAVEN_EXTENSION_TEST_SUITE: "ancestor-workspace",
+    },
     extensionTestsPath: resolve(projectRoot, ".test-out", "test", "extension", "index.js"),
     launchArgs: [openedFolder, "--disable-extensions", `--user-data-dir=${nestedUserDataRoot}`],
     version: "stable",

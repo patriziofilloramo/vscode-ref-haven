@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, normalize } from "node:path";
+import { join } from "node:path";
 
-import { resolveGitMetadataPaths } from "../../src/infrastructure/git/GitCli";
+import {
+  canonicalPathIdentityKey,
+  resolveGitMetadataPaths,
+} from "../../src/infrastructure/git/GitCli";
 
 suite("worktree metadata discovery", () => {
   test("resolves both the worktree git-dir and shared common-dir", async () => {
@@ -28,10 +31,13 @@ suite("worktree metadata discovery", () => {
       git(repositoryRoot, "commit", "-m", "initial");
       git(repositoryRoot, "worktree", "add", "-b", "feature/worktree-test", worktreeRoot);
 
-      const metadataPaths = (await resolveGitMetadataPaths(worktreeRoot)).map(normalize);
-      const commonDir = normalize(realpathSync(join(repositoryRoot, ".git")));
+      const metadataPaths = await Promise.all(
+        (await resolveGitMetadataPaths(worktreeRoot)).map(canonicalPathIdentityKey),
+      );
+      const commonDir = await canonicalPathIdentityKey(join(repositoryRoot, ".git"));
+      assert.ok(commonDir);
       assert.ok(metadataPaths.includes(commonDir));
-      assert.ok(metadataPaths.some((path) => path !== commonDir && path.includes("worktrees")));
+      assert.ok(metadataPaths.some((path) => path !== commonDir && path?.includes("worktrees")));
     } finally {
       try {
         git(repositoryRoot, "worktree", "remove", "--force", worktreeRoot);

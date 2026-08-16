@@ -23,6 +23,7 @@ import type { WorktreeNode, WorktreesTreeNode } from "../tree/WorktreesTreeProvi
 import { COMMAND_IDS, type CommandId } from "./commandIds";
 
 type CommandHandler = (...args: readonly unknown[]) => Promise<void> | void;
+const EXTENSION_TEST_RETHROW_COMMAND = process.env.REFHAVEN_EXTENSION_TEST_RETHROW_COMMAND;
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -234,6 +235,7 @@ export function registerCommands(
       } catch (error) {
         logger.error("Command failed", errorLogMetadata(error, commandId));
         void vscode.window.showErrorMessage(userFacingErrorMessage(error));
+        if (EXTENSION_TEST_RETHROW_COMMAND === commandId) throw error;
       }
     });
 
