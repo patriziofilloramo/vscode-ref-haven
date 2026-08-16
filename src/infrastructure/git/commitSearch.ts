@@ -1,24 +1,22 @@
-import type { CommitSearchQuery } from "../../domain/commitDetails";
-
-export const MAX_COMMIT_SEARCH_TEXT_LENGTH = 512;
+import { MAX_COMMIT_SEARCH_TEXT_LENGTH, type CommitSearchQuery } from "../../domain/commitDetails";
 
 /**
  * Builds only the query-specific part of a bounded local `git log` search.
  * Message and author searches expose explicit literal/regex and case semantics;
- * content searches use Git's `-G` added/removed-line semantics and are
- * necessarily case-sensitive.
+ * content searches expose the same controls over Git's `-G` added/removed-line
+ * semantics.
  */
 export function buildCommitSearchCriteria(query: CommitSearchQuery): string[] {
   assertValidCommitSearchQuery(query);
   if (query.kind === "sha") return [];
 
+  const caseArguments = query.caseSensitive ? [] : ["--regexp-ignore-case"];
   if (query.kind === "content") {
     const pattern =
       query.patternMode === "literal" ? escapeExtendedRegularExpression(query.text) : query.text;
-    return [`-G${pattern}`, "--pickaxe-all"];
+    return [...caseArguments, `-G${pattern}`, "--pickaxe-all"];
   }
 
-  const caseArguments = query.caseSensitive ? [] : ["--regexp-ignore-case"];
   if (query.kind === "message") {
     return [
       query.patternMode === "literal" ? "--fixed-strings" : "--extended-regexp",

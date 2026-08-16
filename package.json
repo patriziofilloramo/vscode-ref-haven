@@ -628,7 +628,7 @@
             "Color lines by the age of their last commit."
           ],
           "default": "off",
-          "description": "Whole-file annotation mode. Changes-relative-to-ref annotations are selected per session from the command palette."
+          "description": "Whole-file annotation mode. Changes-relative-to-ref annotations are selected from the command palette and retained in this workspace."
         },
         "refhaven.fileAnnotations.blame.format": {
           "type": "string",

@@ -149,8 +149,9 @@ Use **RefHaven: Change File Annotations...** when you need a wider view:
 - **Heatmap** — scan the file through fixed, predictable age bands. It uses a
   compact editor-edge strip plus the overview ruler by default, distinguishes
   uncommitted lines from recent commits, and keeps blame details on hover.
-- **Changes relative to...** — mark working-tree lines changed from a selected
-  local revision.
+- **Changes relative to...** — mark saved and unsaved editor lines changed from
+  a selected local reference. The symbolic baseline survives window reloads in
+  this workspace and follows the reference after Git updates.
 - **Off** — the default; no whole-file annotation cost.
 
 The heatmap legend is available from the unified file-actions menu. It reports
@@ -178,8 +179,9 @@ theme tokens under `refhaven.heatmap.*`, customizable with VS Code's
 `refhaven.blame.annotationForeground`.
 
 Annotations are native, cancellable, bounded to 5,000 editor lines, and their
-calculated results are never persisted. Whole-file annotations remain off by
-default so there is no repository-wide blame work unless you opt in.
+calculated results are never persisted. Only the selected changes baseline is
+stored in VS Code workspace state. Whole-file annotations remain off by default
+so there is no repository-wide blame work unless you opt in.
 
 </details>
 
@@ -226,7 +228,9 @@ revisions, history, and native comparisons without applying or dropping them.
 - **Repository → Worktrees** shows branch/detached state, HEAD, lock state, and local working
   status.
 - **Search Commits** searches already available local history by message,
-  author, SHA, or changed content.
+  author, SHA, or added/removed content. Message and author searches offer
+  literal/regular-expression and case controls; content search offers the same
+  controls with POSIX extended-regex semantics.
 - **Inspector → Commit Details** shows complete metadata, parents, changed files, and
   parent comparisons.
 
@@ -284,7 +288,7 @@ user command.
 | Destination                                      | RefHaven behavior                                          |
 | ------------------------------------------------ | ---------------------------------------------------------- |
 | 💻 **Your workstation**                          | Git processing, comparisons, history, blame, caches        |
-| 🗂️ **VS Code workspace state**                   | Saved comparison definitions and bounded review markers    |
+| 🗂️ **VS Code workspace state**                   | Comparisons, review markers, selected annotation baseline  |
 | 📋 **Operating-system clipboard**                | Only values you explicitly choose to copy                  |
 | 🌐 **Your validated remote origin**              | Only a browser URL opened after your explicit command      |
 | 🚫 **RefHaven servers, analytics, AI providers** | Never—RefHaven has no such service, client, token, or path |
@@ -405,6 +409,7 @@ publishing it.
 - Privacy notice — `PRIVACY.md`
 - Implementation and asset provenance — `IP-PROVENANCE.md`
 - Public publishing checklist — `docs/PUBLISHING.md`
+- Release evidence template — `docs/RELEASE-REPORT-TEMPLATE.md`
 - Git comparison semantics — `docs/GIT-SEMANTICS.md`
 - Dependency policy — `docs/DEPENDENCIES.md`
 - Maintainability standards — `docs/MAINTAINABILITY.md`

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -6,11 +6,20 @@ import { runGitWithExitCode } from "./GitProcess";
 
 const MAX_BUFFER_DIFF_BYTES = 5 * 1_024 * 1_024;
 
+/** A safe, user-actionable boundary failure that the Git facade may preserve. */
+export class TemporaryBufferDiffLimitError extends Error {
+  public constructor() {
+    super("The editor buffer is too large to annotate safely.");
+    this.name = "TemporaryBufferDiffLimitError";
+  }
+}
+
 /**
  * Diffs immutable Git bytes against unsaved editor text without touching the
- * worktree. The private temporary directory is always removed before return;
- * `--no-index`, `--no-ext-diff`, and `--no-textconv` prevent repository
- * attributes from executing helpers against either file.
+ * worktree. Cleanup is attempted and awaited on every exit path, and a cleanup
+ * failure is surfaced to the caller. `--no-index`, `--no-ext-diff`, and
+ * `--no-textconv` prevent repository attributes from executing helpers against
+ * either file.
  */
 export async function readTemporaryBufferDiff(
   repositoryRoot: string,
@@ -22,7 +31,7 @@ export async function readTemporaryBufferDiff(
     baseContents.byteLength > MAX_BUFFER_DIFF_BYTES ||
     Buffer.byteLength(currentContents, "utf8") > MAX_BUFFER_DIFF_BYTES
   ) {
-    throw new Error("The editor buffer is too large to annotate safely.");
+    throw new TemporaryBufferDiffLimitError();
   }
 
   signal?.throwIfAborted();
@@ -30,6 +39,7 @@ export async function readTemporaryBufferDiff(
   const basePath = join(directory, "base");
   const currentPath = join(directory, "current");
   try {
+    await chmod(directory, 0o700);
     await writeFile(basePath, baseContents, { flag: "wx", mode: 0o600, signal });
     await writeFile(currentPath, currentContents, {
       encoding: "utf8",

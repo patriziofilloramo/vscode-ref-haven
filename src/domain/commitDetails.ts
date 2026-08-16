@@ -12,16 +12,12 @@ export interface CommitDetails {
 
 export type CommitSearchKind = "author" | "content" | "message" | "sha";
 export type CommitSearchPatternMode = "literal" | "regex";
+export const MAX_COMMIT_SEARCH_TEXT_LENGTH = 512;
 
 export type CommitSearchQuery =
   | {
-      readonly kind: "author" | "message";
+      readonly kind: "author" | "content" | "message";
       readonly caseSensitive: boolean;
-      readonly patternMode: CommitSearchPatternMode;
-      readonly text: string;
-    }
-  | {
-      readonly kind: "content";
       readonly patternMode: CommitSearchPatternMode;
       readonly text: string;
     }

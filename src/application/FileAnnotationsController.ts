@@ -214,7 +214,7 @@ export class FileAnnotationsController implements vscode.Disposable {
       },
       {
         annotationMode: "changes",
-        detail: "Mark working-tree lines changed relative to a local reference",
+        detail: "Mark saved or unsaved editor lines changed relative to a local reference",
         label: "$(diff) Changes relative to…",
         ...(currentMode === "changes" ? { description: "current" } : {}),
       },
@@ -266,7 +266,7 @@ export class FileAnnotationsController implements vscode.Disposable {
       this.changesBase = undefined;
     }
 
-    this.logger.info("Changed whole-file annotation mode", {
+    this.logger.info("Changed file annotation mode", {
       mode: this.mode,
       operation: "changeFileAnnotations",
       persisted: true,

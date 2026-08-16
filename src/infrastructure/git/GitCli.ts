@@ -32,7 +32,7 @@ import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
 import { createPathLimitedStash, type StashFileResult, type StashFileTestHooks } from "./stashFile";
 import { parseWorktreeList } from "./worktreeList";
 import { parseWorktreeStatus } from "./worktreeStatus";
-import { readTemporaryBufferDiff } from "./temporaryFileDiff";
+import { readTemporaryBufferDiff, TemporaryBufferDiffLimitError } from "./temporaryFileDiff";
 import {
   GitOperationError,
   normalizeGitError,
@@ -736,7 +736,10 @@ export async function listChangedLineRanges(
       ? await readFileAtRevision(repositoryRoot, baseSha, filePath, signal)
       : Buffer.alloc(0);
     stdout = await readTemporaryBufferDiff(repositoryRoot, baseContents, contents, signal).catch(
-      (error: unknown) => failGitOperation(error, "Git could not annotate this editor buffer."),
+      (error: unknown) => {
+        if (error instanceof TemporaryBufferDiffLimitError) throw error;
+        return failGitOperation(error, "Git could not annotate this editor buffer.");
+      },
     );
   }
   return parseChangedLineRanges(stdout);

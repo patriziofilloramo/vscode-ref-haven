@@ -185,14 +185,24 @@ ignored when the immutable endpoints or changed-file state no longer match.
 Working Tree review state is invalidated on every recalculation because that
 endpoint is mutable.
 
-Computed history, diffs, blame and annotation results, selected
-changes-annotation references, and file contents are not persisted except by
-the explicit single-file stash mutation described below. The
+Computed history, diffs, blame and annotation results are not persisted. The
 non-sensitive whole-file annotation mode (`off`, `blame`, or `heatmap`) may be
-saved as a VS Code user setting; comparison layout, filter, and sort choices
-may be saved as workspace-local view preferences. Revision content is loaded
-on demand into a bounded in-memory cache and revision URIs are authenticated
-with a session-only HMAC.
+saved as a VS Code user setting. A schema-versioned changes-annotation
+selection may store its validated local repository root and symbolic base ref
+in `workspaceState`; it contains no file content, SHA result, or changed-line
+range. Comparison layout, filter, and sort choices may also be saved as
+workspace-local view preferences. Revision content is loaded on demand into a
+bounded in-memory cache and revision URIs are authenticated with a session-only
+HMAC.
+
+For a dirty editor, changes annotations briefly write the immutable base and
+current text, each capped at 5 MiB, to unique files in a private
+operating-system temporary directory with owner-only POSIX modes. Git runs with
+`--no-index`,
+`--no-ext-diff`, `--no-textconv`, transport-disabled process policy, bounded
+output, timeout, and cancellation. Cleanup is awaited before success or
+failure returns; neither temporary path nor content is logged. This local,
+bounded temporary representation is not a repository mutation.
 
 Single-file stash is the exception to the general non-persistence of computed
 file content: its explicit mutation writes the selected state into the local

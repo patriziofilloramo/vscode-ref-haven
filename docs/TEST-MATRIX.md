@@ -37,16 +37,18 @@ enforces this matrix and validates VSIX packaging on Linux and Windows.
 History coverage includes delimiter-safe `--follow` parser tests, rename-aware
 File History integration, and real `git log -L` execution in the Extension Host.
 Reference/search coverage includes tag parsing, strict typed-ref validation,
-real Working Tree comparison, local commit search, and full commit-detail
-loading in the Extension Host.
+real Working Tree comparison, local commit search with literal/regex and case
+semantics, content-filter isolation, and full commit-detail loading in the
+Extension Host.
 Repository-navigation coverage includes strict NUL-delimited worktree parser
 fixtures and real worktree enumeration in the Extension Host.
 Annotation coverage includes repeated line-porcelain parsing, duplicate-line
 rejection, bounded detailed/compact blame presentation, all five heatmap age
 buckets plus the distinct uncommitted state, stable location and toggle-scope
 normalization with safe defaults, the complete public theme-color contract,
-zero-context diff hunks, unsaved-buffer blame, and real changed-line range
-calculation. The Extension Host verifies file-scoped toggles do not persist,
+zero-context diff hunks, unsaved-buffer blame, saved/unsaved changed-line range
+calculation, and a validated serialized changes baseline. The Extension Host
+verifies file-scoped toggles do not persist,
 window-scoped toggles do persist, dismissal stays temporary, and all annotation
 commands are registered. A 5,000-line presentation benchmark guards the bounded
 render-preparation path.
@@ -307,29 +309,40 @@ Before delivering `refhaven-x.y.z.vsix`:
     old review is ignored; refresh a Working Tree comparison and verify its
     review resets. Exercise Quick Open, filters, all three sorts, and
     Next/Previous Unreviewed using only the keyboard.
-15. Filter Stashes and File History, expand a stash and local branch, navigate
+15. Search commits by message, author, and added/removed content using literal
+    and regular-expression modes with both case options; resolve a SHA prefix.
+    Confirm no query text appears in the RefHaven output log.
+16. Filter Stashes and File History, expand a stash and local branch, navigate
     commit parents and adjacent file revisions, and confirm Worktrees reports
     clean/dirty state without changing repository state or contacting a remote.
-16. Enable whole-file blame on a file containing several contiguous commit
+17. Enable whole-file blame on a file containing several contiguous commit
     blocks. Verify author, relative age, and summary are readable, block markers
     are coherent, every line has hover details, compact/detailed and repeated
     modes update live, and Escape dismisses only the active file.
-17. Toggle the heatmap with `toggleMode=file` across two editor tabs and verify
+18. Select Changes relative to a local branch, edit without saving, and verify
+    the markers follow the editor text. Reload the window, confirm the symbolic
+    baseline is restored, advance the branch, and confirm refresh re-resolves
+    it without persisting editor content or calculated ranges.
+19. Toggle the heatmap with `toggleMode=file` across two editor tabs and verify
     only the active file changes. Repeat with `toggleMode=window`, reload, and
     verify the persisted mode. Press Escape and verify the setting is unchanged.
-18. Verify the heatmap on committed, dirty, empty, and non-ASCII files. Open the
+20. Verify the heatmap on committed, dirty, empty, and non-ASCII files. Open the
     legend, confirm counts and percentages, and select each populated band to
     jump to its first matching line. Confirm a file over 5,000 lines is rejected
     with a clear message when invoked interactively.
-19. Repeat whole-file blame and heatmap checks in light, dark, high-contrast,
+21. Repeat whole-file blame and heatmap checks in light, dark, high-contrast,
     and high-contrast-light themes, with edge/overview and optional line tint.
     Record screenshots only from the real installed VSIX.
-20. Repeat annotation, hover, file history, and comparison checks in a multi-root
+22. Repeat annotation, hover, file history, and comparison checks in a multi-root
     `.code-workspace`, a folder nested below the repository root, and Remote SSH
     with the extension installed on the remote side. Confirm no repository-root
     workspace assumption and no background network access.
 
-The release report records extension/version, commit SHA, VS Code and Git versions, operating systems, CI links, manual outcomes, known limitations, benchmark hardware/dataset, activation time, large-comparison responsiveness, and the final VSIX checksum.
+The release report follows [RELEASE-REPORT-TEMPLATE.md](RELEASE-REPORT-TEMPLATE.md)
+and records extension/version, commit SHA, VS Code and Git versions, operating
+systems, CI links, manual outcomes, known limitations, benchmark
+hardware/dataset, activation time, large-comparison responsiveness, and the
+final VSIX checksum.
 
 Feature promotion and sunset decisions are recorded in
 [`FEATURE-MATURITY.md`](FEATURE-MATURITY.md); a green automated suite alone does

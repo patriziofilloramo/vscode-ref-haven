@@ -1,9 +1,10 @@
 import * as vscode from "vscode";
 
-import type {
-  CommitSearchKind,
-  CommitSearchPatternMode,
-  CommitSearchQuery,
+import {
+  MAX_COMMIT_SEARCH_TEXT_LENGTH,
+  type CommitSearchKind,
+  type CommitSearchPatternMode,
+  type CommitSearchQuery,
 } from "../domain/commitDetails";
 import type { CommitInfo } from "../domain/comparisonResult";
 import {
@@ -116,12 +117,7 @@ export class CommitDetailsController {
     const searchQuery = createSearchQuery(scope.searchKind, query, pattern);
     const commits = await searchCommits(repository.rootPath, searchQuery);
     this.logger.info("Searched local commits", {
-      caseSensitive:
-        searchQuery.kind === "author" || searchQuery.kind === "message"
-          ? searchQuery.caseSensitive
-          : searchQuery.kind === "content"
-            ? true
-            : undefined,
+      caseSensitive: searchQuery.kind === "sha" ? undefined : searchQuery.caseSensitive,
       kind: searchQuery.kind,
       operation: "searchCommits",
       patternMode: searchQuery.kind === "sha" ? "sha" : searchQuery.patternMode,
@@ -156,18 +152,32 @@ async function pickSearchPattern(
     return vscode.window.showQuickPick<SearchPatternItem>(
       [
         {
-          detail: "Match exact text in added or removed lines",
-          label: "$(whole-word) Literal text",
+          caseSensitive: false,
+          detail: "Match exact text in added or removed lines, ignoring letter case",
+          label: "$(case-insensitive) Literal · Ignore case",
           patternMode: "literal",
         },
         {
-          detail: "Match a POSIX extended regular expression in added or removed lines",
-          label: "$(regex) Regular expression",
+          caseSensitive: true,
+          detail: "Match exact text in added or removed lines with exact letter case",
+          label: "$(case-sensitive) Literal · Match case",
+          patternMode: "literal",
+        },
+        {
+          caseSensitive: false,
+          detail: "Match a POSIX extended expression in added or removed lines, ignoring case",
+          label: "$(regex) Regex · Ignore case",
+          patternMode: "regex",
+        },
+        {
+          caseSensitive: true,
+          detail: "Match a POSIX extended expression in added or removed lines with exact case",
+          label: "$(regex) Regex · Match case",
           patternMode: "regex",
         },
       ],
       {
-        placeHolder: "Choose how changed lines are matched (case-sensitive)",
+        placeHolder: "Choose how added and removed lines are matched",
         title: "RefHaven: Content Search Mode",
       },
     );
@@ -211,7 +221,6 @@ function createSearchQuery(
 ): CommitSearchQuery {
   if (kind === "sha") return { kind, text };
   if (!pattern) throw new Error("The commit search match mode is missing.");
-  if (kind === "content") return { kind, patternMode: pattern.patternMode, text };
   return {
     caseSensitive: pattern.caseSensitive ?? false,
     kind,
@@ -230,7 +239,7 @@ function searchPlaceholder(kind: CommitSearchKind, pattern: SearchPatternItem | 
 
 function validateSearchInput(kind: CommitSearchKind, value: string): string | undefined {
   if (value.length === 0) return "Enter a search value.";
-  if (value.length > 512) return "Search is too long.";
+  if (value.length > MAX_COMMIT_SEARCH_TEXT_LENGTH) return "Search is too long.";
   if (kind === "sha" && !/^[0-9a-f]{4,64}$/iu.test(value)) {
     return "Enter 4 to 64 hexadecimal characters.";
   }

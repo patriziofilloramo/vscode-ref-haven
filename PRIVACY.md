@@ -22,10 +22,17 @@ the containing repository as its local processing scope. Repository-wide
 comparisons, history, and navigation can therefore include paths and metadata
 outside the opened subfolder, but still inside that same local repository.
 
-Saved comparison definitions and bounded reviewed-file markers are stored in
-VS Code workspace state. Outside an explicit **Stash This File...** operation,
-file contents, patches, commit messages, blame results, history results, and
-generated browser URLs are not persisted by RefHaven. A single-file stash
+Saved comparison definitions, bounded reviewed-file markers, and the selected
+symbolic baseline for changes annotations are stored in VS Code workspace
+state. The annotation baseline contains a local repository path and Git ref,
+not file content or calculated ranges. Outside an explicit **Stash This
+File...** operation, file contents, patches, commit messages, blame results,
+history results, and generated browser URLs are not retained by RefHaven.
+Changes annotations may place the unsaved editor text and its immutable base,
+each capped at 5 MiB, briefly in private operating-system temporary files.
+Cleanup is attempted and awaited on every exit path, and a cleanup failure is
+reported; the data is never written into the repository or workspace state. A
+single-file stash
 writes the selected staged and working-tree states to the local Git object
 database and `refs/stash`. Its fail-safe cleanup may also retain the original
 file bytes, a recovery journal, and, while cleanup is incomplete, a private

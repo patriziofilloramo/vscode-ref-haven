@@ -256,12 +256,17 @@ comparisons never request one because their endpoint is mutable.
 
 ### CommitDetailsController and provider
 
-Commit search dispatches typed, bounded local Git queries by message, author,
-SHA, or changed content. Selecting a result loads full NUL-delimited metadata
-and changed files into a native tree; neither search results nor commit details
-are persisted. Metadata rows carry only their explicit clipboard value and
-repository/SHA context. Parent rows can load the parent details or request a
-single parent-to-commit file diff through the shared native diff pipeline.
+Commit search dispatches a discriminated, bounded local Git query by message,
+author, SHA, or added/removed content. Message and author criteria distinguish
+literal substring from POSIX extended regular expression and exact from
+case-insensitive matching. Content criteria distinguish an escaped literal
+from a POSIX extended expression, expose the same case controls, and use Git
+`-G` semantics without textconv. Query text is never logged. Selecting a result
+loads full NUL-delimited metadata and changed files into a native tree; neither
+search results nor commit details are persisted.
+Metadata rows carry only their explicit clipboard value and repository/SHA
+context. Parent rows can load the parent details or request a single
+parent-to-commit file diff through the shared native diff pipeline.
 Each load captures the current selection generation, repository, and commit;
 selection changes and disposal abort the request, and a late completion is
 discarded before it can publish mixed-context nodes. Current, non-cancellation
@@ -491,11 +496,18 @@ the user's global preference; overrides are discarded when a document closes or
 the configured mode changes. A context key activates the Escape binding only
 while RefHaven annotations are visible.
 
-Changes mode parses zero-context diff hunks against a locally resolved
-immutable base SHA and deliberately waits for a dirty editor to be saved.
-Updates are debounced, generation-checked, cancelled as soon as a newer editor
-event arrives, capped at 5,000 lines, escaped before Markdown rendering, and
-never persisted. The disabled fast path performs no repository discovery.
+Changes mode persists one schema-versioned symbolic baseline in VS Code
+workspace state, validates it again on load, and re-resolves it to an immutable
+SHA after repository updates. Saved editors use the protected worktree diff.
+Dirty editors read the immutable base blob, write the bounded base and current
+text into a private operating-system temporary directory, and run local `git
+diff --no-index --no-ext-diff --no-textconv --text`; cleanup completes before
+the operation settles, with cleanup failures surfaced to the caller. Updates
+are debounced, generation-checked, cancelled as soon as a newer editor event
+arrives, capped at 5,000 lines and 5 MiB of dirty text, and escaped before
+Markdown rendering; the immutable base is independently bounded to the same
+byte limit. Calculated ranges and text are never placed in workspace state or
+logs. The disabled fast path performs no repository discovery.
 
 ### RepositoryWatcher
 

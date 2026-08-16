@@ -39,6 +39,7 @@ suite("commit search query", () => {
     );
     assert.deepEqual(
       buildCommitSearchCriteria({
+        caseSensitive: true,
         kind: "content",
         patternMode: "literal",
         text: "call(value);",
@@ -47,11 +48,12 @@ suite("commit search query", () => {
     );
     assert.deepEqual(
       buildCommitSearchCriteria({
+        caseSensitive: false,
         kind: "content",
         patternMode: "regex",
         text: "call\\((old|new)\\)",
       }),
-      ["-Gcall\\((old|new)\\)", "--pickaxe-all"],
+      ["--regexp-ignore-case", "-Gcall\\((old|new)\\)", "--pickaxe-all"],
     );
   });
 

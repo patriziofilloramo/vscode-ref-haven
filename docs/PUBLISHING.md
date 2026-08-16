@@ -107,6 +107,9 @@ repeat the privacy-critical smoke tests in [TEST-MATRIX.md](TEST-MATRIX.md).
 Record every applicable promotion gate in
 [FEATURE-MATURITY.md](FEATURE-MATURITY.md), leaving visual capabilities marked
 Beta when manual, Remote SSH, benchmark, or screenshot evidence is missing.
+Copy [RELEASE-REPORT-TEMPLATE.md](RELEASE-REPORT-TEMPLATE.md) for the version and
+complete it with links or artifact paths; an unchecked required row blocks
+promotion and publication.
 Publish only the reviewed artifact produced from the tagged commit.
 
 ## Manual GitHub release

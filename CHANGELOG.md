@@ -21,6 +21,8 @@ All notable changes to RefHaven are recorded here. The format follows
   navigation to the first line in a selected age band.
 - Add a cross-platform GitHub Actions workflow, a bounded 5,000-line annotation
   benchmark, and a feature-maturity matrix with explicit promotion gates.
+- Add explicit literal/regular-expression and case matching controls to local
+  commit search, with precise message, author, SHA, and changed-line semantics.
 
 ### Changed
 
@@ -32,6 +34,14 @@ All notable changes to RefHaven are recorded here. The format follows
   surfaces where their targets are unambiguous.
 - The README now leads with three product promises and moves low-level stash
   mechanics to the dedicated Git semantics and security documents.
+- Changes-relative-to-ref annotations now include unsaved editor text and retain
+  their validated symbolic baseline in workspace state across window reloads.
+
+### Fixed
+
+- Isolate the executable Git-driver security fixture from VS Code's background
+  repository polling so the release gate cannot report third-party filter
+  execution as a RefHaven failure.
 
 ## [0.13.9] — 2026-08-15
 

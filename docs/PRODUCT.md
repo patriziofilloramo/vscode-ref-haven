@@ -125,7 +125,10 @@ while keeping the native-UI, no-webview, no-telemetry principles:
 - **File annotations:** opt-in, end-of-line whole-file blame with grouped
   author/age/summary context; a file heatmap with a distinct working-tree state
   and five fixed commit-age bands; and
-  saved-working-tree change ranges relative to a locally resolved reference.
+  saved or unsaved editor change ranges relative to a locally resolved
+  reference. The validated symbolic changes baseline is retained in
+  workspace state and re-resolved after Git updates; calculated ranges and
+  editor contents are not retained.
   Heatmap placement is configurable across editor edge, overview ruler, and
   optional full-line tint; every band uses public theme colors. A textual
   legend with live counts, percentages, and jump navigation keeps the result
@@ -136,7 +139,10 @@ while keeping the native-UI, no-webview, no-telemetry principles:
 - **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
 - **Line history:** a selection-aware quickpick backed by `git log -L`, opening the selected historical revision locally.
 - **Flexible local references:** comparisons accept branches, tags, HEAD, typed locally resolvable revisions, and the live Working Tree; typed revisions are resolved and persisted as immutable SHAs.
-- **Commit search and details:** local history can be searched by message, author, SHA, or changed content, with full metadata and changed files shown in a native tree view.
+- **Commit search and details:** local history can be searched by message,
+  author, SHA, or added/removed content, with explicit literal/extended-regex
+  and case controls for every text search. Full metadata and changed files
+  appear in a native tree view.
 - **Open File at Revision:** open a readonly revision of the active file from a branch picker or directly from blame links.
 - **Automatic refresh:** a watcher on each repository's `.git` metadata (HEAD, refs, reflog) refreshes comparisons, stashes, and blame after commits, branch switches, fetches, and stash operations, complementing the manual refresh commands.
 - **Forge browser links:** validated local remotes enable zero-config explicit

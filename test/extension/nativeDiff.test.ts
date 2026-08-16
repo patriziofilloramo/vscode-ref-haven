@@ -522,17 +522,33 @@ suite("native branch diff", () => {
     });
     assert.ok(byAuthor.length >= 2);
     const byContent = await searchCommits(repositoryRoot, {
+      caseSensitive: true,
       kind: "content",
       patternMode: "literal",
       text: "added",
     });
     assert.equal(byContent[0]?.subject, "feature changes");
     const byContentRegex = await searchCommits(repositoryRoot, {
+      caseSensitive: true,
       kind: "content",
       patternMode: "regex",
       text: "add(ed|ition)",
     });
     assert.equal(byContentRegex[0]?.subject, "feature changes");
+    const caseInsensitiveContent = await searchCommits(repositoryRoot, {
+      caseSensitive: false,
+      kind: "content",
+      patternMode: "literal",
+      text: "ADDED",
+    });
+    assert.equal(caseInsensitiveContent[0]?.subject, "feature changes");
+    const caseSensitiveContent = await searchCommits(repositoryRoot, {
+      caseSensitive: true,
+      kind: "content",
+      patternMode: "literal",
+      text: "ADDED",
+    });
+    assert.equal(caseSensitiveContent.length, 0);
     const bySha = await searchCommits(repositoryRoot, {
       kind: "sha",
       text: git("rev-parse", "HEAD").slice(0, 10),
@@ -637,6 +653,13 @@ suite("native branch diff", () => {
         { contents: "unsaved added file\n" },
       );
       assert.deepEqual(addedBufferRanges, [{ lineCount: 1, startLine: 1 }]);
+
+      await assert.rejects(
+        listChangedLineRanges(repositoryRoot, git("rev-parse", "HEAD"), "modified.txt", {
+          contents: "x".repeat(5 * 1_024 * 1_024 + 1),
+        }),
+        /editor buffer is too large/u,
+      );
     } finally {
       writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
     }

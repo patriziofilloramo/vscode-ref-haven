@@ -30,6 +30,17 @@ suite("FileAnnotationChangesStore", () => {
       false,
     );
     assert.equal(
+      isSavedChangesAnnotation({ ...selection, repositoryRoot: `/${"r".repeat(32_768)}` }),
+      false,
+    );
+    assert.equal(
+      isSavedChangesAnnotation({
+        ...selection,
+        baseRef: { ...selection.baseRef, displayName: "r".repeat(513) },
+      }),
+      false,
+    );
+    assert.equal(
       isSavedChangesAnnotation({
         ...selection,
         baseRef: { displayName: "Working Tree", fullName: "WORKTREE", kind: "workingTree" },
