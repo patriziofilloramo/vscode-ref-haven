@@ -209,6 +209,8 @@ and worktree around each operation. It covers:
   entry-for-entry unchanged;
 - Unicode, bracket, nested, and long literal paths plus linked worktrees;
 - hooks that would fail or modify state remaining disabled;
+- configured Git identity remaining intact, plus successful stash creation with
+  a command-local technical identity when no author or committer is configured;
 - fail-closed rejection of clean/untracked files, conflicts, active filters,
   sparse/skip-worktree or special index entries, symlinks/gitlinks, content
   over 64 MiB, and unsupported filesystem boundaries;

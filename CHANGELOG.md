@@ -52,6 +52,10 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ### Fixed
 
+- Allow single-file stash on fresh machines without a configured Git identity.
+  RefHaven preserves the effective user identity when available and otherwise
+  applies an explicit technical identity to the two internal stash commits only,
+  without modifying repository or global Git configuration.
 - Treat equivalent canonical and aliased Windows repository paths as one
   workspace identity across file actions, comparisons, browser links, hover,
   and single-file stash, while continuing to reject symlinks and junctions

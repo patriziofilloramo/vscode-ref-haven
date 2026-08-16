@@ -59,6 +59,12 @@ export type {
 
 const MAX_STASH_FILE_BYTES = 64 * 1024 * 1024;
 const RECOVERY_SCHEMA_VERSION = 1;
+const FALLBACK_STASH_IDENTITY_ARGUMENTS = [
+  "-c",
+  "user.name=RefHaven",
+  "-c",
+  "user.email=refhaven@localhost.invalid",
+] as const;
 
 type CleanupPhase = "finalization" | "index" | "preparation" | "worktree";
 
@@ -106,6 +112,7 @@ async function createPathLimitedStashUnlocked(
     splitIndex,
     sharedIndexPath,
     gitDirectoryOutput,
+    stashIdentityArguments,
   ] = await Promise.all([
     runGit(repositoryRoot, [
       "status",
@@ -122,6 +129,7 @@ async function createPathLimitedStashUnlocked(
     readOptionalBooleanConfig(repositoryRoot, "core.splitIndex"),
     runGit(repositoryRoot, ["rev-parse", "--shared-index-path"]),
     runGit(repositoryRoot, ["rev-parse", "--absolute-git-dir"]),
+    resolveStashIdentityArguments(repositoryRoot),
   ]).catch((error: unknown) =>
     failGitOperation(error, "Git could not inspect the selected file before stashing it."),
   );
@@ -208,7 +216,13 @@ async function createPathLimitedStashUnlocked(
     const indexCommit = parseObjectId(
       await runGitWithInput(
         repositoryRoot,
-        withoutGitHooks(disabledHooksPath, ["commit-tree", indexTree, "-p", headSha]),
+        withoutGitHooks(disabledHooksPath, [
+          ...stashIdentityArguments,
+          "commit-tree",
+          indexTree,
+          "-p",
+          headSha,
+        ]),
         `index on ${branchName}: ${headSha.slice(0, 8)} ${message}\n`,
       ),
       "Git returned an invalid stash index commit.",
@@ -217,6 +231,7 @@ async function createPathLimitedStashUnlocked(
       await runGitWithInput(
         repositoryRoot,
         withoutGitHooks(disabledHooksPath, [
+          ...stashIdentityArguments,
           "commit-tree",
           worktreeTree,
           "-p",
@@ -1015,6 +1030,21 @@ async function readOptionalBooleanConfig(
   if (value === "true") return true;
   if (value === "false") return false;
   throw new Error("Git returned an invalid boolean configuration value.");
+}
+
+/** Keeps the user's effective Git identity and supplies a command-local fallback only when absent. */
+async function resolveStashIdentityArguments(repositoryRoot: string): Promise<readonly string[]> {
+  try {
+    await Promise.all([
+      runGit(repositoryRoot, ["var", "GIT_AUTHOR_IDENT"]),
+      runGit(repositoryRoot, ["var", "GIT_COMMITTER_IDENT"]),
+    ]);
+    return [];
+  } catch (error) {
+    const normalized = normalizeGitError(error);
+    if (normalized instanceof GitOperationError) throw normalized;
+    return FALLBACK_STASH_IDENTITY_ARGUMENTS;
+  }
 }
 
 async function writeJournal(

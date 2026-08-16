@@ -269,6 +269,10 @@ The guarantee above covers RefHaven and the Git processes it creates. The follow
 
 Local Git configuration remains trusted for identity, non-executable
 attributes, object format, line-ending, and working-tree encoding semantics.
+When no effective Git author or committer identity exists, single-file stash
+uses `RefHaven <refhaven@localhost.invalid>` for its two internal commits through
+command-local configuration; it does not write repository or global Git
+configuration.
 RefHaven neutralizes configured content-filter commands for every Git process
 it creates and explicitly disables external diff/textconv where Git can render
 content. Working-tree operations reject affected paths with active filter

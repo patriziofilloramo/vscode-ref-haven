@@ -383,6 +383,9 @@ and implements the recovery contract independently of VS Code:
   the captured `HEAD`, second parent records the selected index state, and main
   tree records the selected worktree state; all non-selected paths match
   `HEAD`;
+- the effective Git author and committer identity is retained when available;
+  otherwise the two internal stash commits receive a command-local RefHaven
+  identity without changing repository or global configuration;
 - `refs/stash` and a private recovery ref are published in one ref transaction,
   with an expected-old-value compare-and-swap and Git hooks disabled. Failure
   before publication leaves visible repository state untouched;

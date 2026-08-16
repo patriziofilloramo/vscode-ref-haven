@@ -86,6 +86,26 @@ suite("fail-safe single-file stash", () => {
     assert.equal(stashedFile.status, "modified");
   });
 
+  test("uses a command-local technical identity when Git has no user identity", async () => {
+    const repository = createRepository({ "selected.txt": "base\n" });
+    repository.git("config", "user.name", "");
+    repository.git("config", "user.email", "");
+    write(repository, "selected.txt", "selected change\n");
+
+    const { stashSha } = await stashTrackedFile(
+      repository.root,
+      "selected.txt",
+      "identity fallback",
+    );
+
+    assert.equal(
+      repository.git("show", "-s", "--format=%an <%ae>%n%cn <%ce>", stashSha),
+      "RefHaven <refhaven@localhost.invalid>\nRefHaven <refhaven@localhost.invalid>",
+    );
+    assert.equal(repository.git("config", "--local", "--get", "user.name"), "");
+    assert.equal(repository.git("config", "--local", "--get", "user.email"), "");
+  });
+
   test("preserves staged and unstaged versions of a partially staged file", async () => {
     const repository = createRepository({ "partial.txt": "base\n" });
     write(repository, "partial.txt", "staged\n");
