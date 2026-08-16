@@ -28,6 +28,18 @@ export interface FileBlameLine {
   readonly blame: LineBlame;
 }
 
+/** Minimal, validated context carried by a trusted rich-hover command link. */
+export interface LineBlameActionTarget {
+  /** Current working-tree path and one-based line. */
+  readonly filePath: string;
+  readonly lineNumber: number;
+  readonly repositoryRoot: string;
+  /** Path and one-based line at the blamed revision, which may predate a rename. */
+  readonly revisionLineNumber: number;
+  readonly revisionPath: string;
+  readonly sha: string;
+}
+
 export interface RichLineHover {
   readonly blame: LineBlame;
   readonly changedFileCount?: number;

@@ -115,13 +115,13 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   metadata copy and parent drill-down/diff; Branches show upstream divergence,
   tip metadata, and bounded expandable history; Worktrees show a local
   staged/unstaged/untracked/conflicted summary.
-- **Native file-action surfaces:** the Explorer and editor share a RefHaven submenu for file/line history, annotations, open-at-revision, and compare-with-revision. The editor title and status-bar blame provide compact quick picks, while changed-file nodes expose revision, history, open, and copy actions consistently.
+- **Native file-action surfaces:** the Explorer and editor share a RefHaven submenu for file/line history, annotations, open-at-revision, and compare-with-revision. The editor title and status-bar blame provide compact, task-grouped quick picks, while changed-file nodes expose revision, history, open, and copy actions consistently.
 - **Contextual workflows:** Source Control exposes single-file stash through
   the unified RefHaven submenu, plus editor line inspection, active-file reveal
   in saved comparisons, and two-branch selection. These flows reuse the same
   validated controllers as the Command Palette instead of introducing parallel
   implementations.
-- **Line blame and hover:** dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, full commit identity, local commit statistics, a bounded previous-revision patch, and native actions for details, diffs, history, revision opening, and copy.
+- **Line blame and hover:** bounded dimmed inline blame for the current line (including unsaved buffers via `git blame --contents -`) plus a lazy hover over any file line. The hover shows author/email, original location, local commit statistics, and a bounded previous-revision patch. It keeps at most four primary actions visible and routes the complete action set through a validated contextual picker.
 - **File annotations:** opt-in, end-of-line whole-file blame with grouped
   author/age/summary context; a file heatmap with a distinct working-tree state
   and five fixed commit-age bands; and

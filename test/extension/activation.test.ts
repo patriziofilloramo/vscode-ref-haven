@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import * as vscode from "vscode";
 
+import { pathIdentityKey } from "../../src/domain/pathValidation";
 import { listStashes, readFileAtRevision } from "../../src/infrastructure/git/GitCli";
 import {
   resolveFileContextTarget,
@@ -261,8 +262,28 @@ suite("RefHaven extension", () => {
       .join("\n");
 
     assert.match(markdown, /Commit Details/u);
-    assert.match(markdown, /Diff Working Tree/u);
-    assert.match(markdown, /File History/u);
+    assert.match(markdown, /More Actions\.\.\./u);
+    const actionLink = /command:refhaven\.showLineBlameActions\?([^)\s]+)/u.exec(markdown)?.[1];
+    assert.ok(actionLink);
+    const [target] = JSON.parse(decodeURIComponent(actionLink)) as [
+      {
+        readonly filePath: string;
+        readonly lineNumber: number;
+        readonly repositoryRoot: string;
+        readonly revisionLineNumber: number;
+        readonly revisionPath: string;
+        readonly sha: string;
+      },
+    ];
+    assert.equal(target.filePath, FIXTURE_FILE);
+    assert.equal(target.lineNumber, 1);
+    assert.equal(target.revisionPath, FIXTURE_FILE);
+    assert.equal(target.revisionLineNumber, 1);
+    assert.equal(
+      pathIdentityKey(target.repositoryRoot),
+      pathIdentityKey(workspaceFolder.uri.fsPath),
+    );
+    assert.match(target.sha, /^[0-9a-f]{40}$/u);
   });
 });
 

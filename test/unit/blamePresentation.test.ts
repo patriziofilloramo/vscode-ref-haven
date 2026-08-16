@@ -7,12 +7,8 @@ import {
   inlineBlameText,
   statusBarBlameText,
 } from "../../src/ui/blame/blamePresentation";
-import { formatExactTime } from "../../src/ui/format";
 
 const NOW = 1_700_000_000_000 + 2 * 60 * 60 * 1000;
-// Rendered in the running machine's locale and zone, so it is derived
-// rather than hard-coded.
-const EXACT = formatExactTime(1_700_000_000_000, NOW);
 
 const COMMITTED: LineBlame = {
   authorDate: 1_700_000_000_000,
@@ -36,7 +32,7 @@ suite("blame presentation", () => {
   test("formats inline blame with author, relative time, and summary", () => {
     assert.equal(
       inlineBlameText(COMMITTED, null, NOW),
-      `Patrizio Filloramo, 2 hours ago (${EXACT}) · feat: add blame support`,
+      "Patrizio Filloramo, 2 hours ago · feat: add blame support",
     );
   });
 
@@ -70,20 +66,36 @@ suite("blame presentation", () => {
   test("replaces the configured Git user with You", () => {
     assert.equal(
       inlineBlameText(COMMITTED, "Patrizio Filloramo", NOW),
-      `You, 2 hours ago (${EXACT}) · feat: add blame support`,
+      "You, 2 hours ago · feat: add blame support",
     );
   });
 
   test("labels uncommitted lines without commit details", () => {
     assert.equal(inlineBlameText(UNCOMMITTED, null, NOW), "You · Uncommitted changes");
-    assert.equal(statusBarBlameText(UNCOMMITTED, null, NOW), "$(git-commit) You, uncommitted");
+    assert.equal(statusBarBlameText(UNCOMMITTED, null, NOW), "$(git-commit) You · uncommitted");
   });
 
   test("formats the status bar entry", () => {
     assert.equal(
       statusBarBlameText(COMMITTED, "someone else", NOW),
-      `$(git-commit) Patrizio Filloramo, 2 hours ago (${EXACT})`,
+      "$(git-commit) Patrizio Filloramo · 2 hours ago",
     );
+  });
+
+  test("keeps inline and status blame compact and single-line", () => {
+    const longBlame: LineBlame = {
+      ...COMMITTED,
+      authorName: `${"A".repeat(50)}\nignored`,
+      summary: `${"B".repeat(100)}\nignored`,
+    };
+    const inline = inlineBlameText(longBlame, null, NOW);
+    const status = statusBarBlameText(longBlame, null, NOW);
+
+    assert.match(inline, /^A{39}…/u);
+    assert.match(inline, /B{79}…$/u);
+    assert.doesNotMatch(inline, /\n/u);
+    assert.equal(status, `$(git-commit) ${"A".repeat(39)}… · 2 hours ago`);
+    assert.doesNotMatch(status, /\n/u);
   });
 
   test("builds hover markdown with command links for committed lines", () => {

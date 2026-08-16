@@ -82,10 +82,9 @@ suite("rich blame hover", () => {
     assert.doesNotMatch(markdown, /diff --git|index 1111111|@@/u);
     assert.match(markdown, /command:refhaven\.showCommitDetails\?/u);
     assert.match(markdown, /command:refhaven\.openLineDiff\?/u);
-    assert.match(markdown, /command:refhaven\.compareFileWithRevision\?/u);
-    assert.match(markdown, /command:refhaven\.showFileHistory\?/u);
-    assert.match(markdown, /command:refhaven\.showLineHistory\?/u);
-    assert.match(markdown, /command:refhaven\.openBrowserFile\?/u);
+    assert.match(markdown, /command:refhaven\.showLineBlameActions\?/u);
+    assert.doesNotMatch(markdown, /command:refhaven\.compareFileWithRevision\?/u);
+    assert.doesNotMatch(markdown, /command:refhaven\.openBrowserFile\?/u);
   });
 
   test("answers why before it shows metadata, and never spends a line on the full SHA", () => {
@@ -103,9 +102,26 @@ suite("rich blame hover", () => {
     assert.ok(at(/^\$\(files\)/u) < at(/^\$\(zap\)/u), "the metadata precedes the actions");
     assert.ok(at(/^\$\(zap\)/u) < at(/^\$\(ellipsis\)/u), "primary actions precede secondary ones");
 
-    // The full SHA is reachable through "Copy SHA"; it does not earn a line.
+    // The full SHA is reachable through More Actions; it does not earn a line.
     assert.doesNotMatch(markdown, new RegExp(`\`${SHA}\``, "u"));
     assert.doesNotMatch(markdown, /timezone/iu);
+  });
+
+  test("carries the exact hovered-line context into the consolidated action menu", () => {
+    const markdown = richBlameHoverMarkdown(data(), NOW);
+    const actionLink =
+      /\[More Actions\.\.\.\]\(command:refhaven\.showLineBlameActions\?([^)\s]+)\)/u.exec(markdown);
+    assert.ok(actionLink?.[1]);
+    assert.deepEqual(JSON.parse(decodeURIComponent(actionLink[1])), [
+      {
+        filePath: "src/example.ts",
+        lineNumber: 12,
+        repositoryRoot: "C:\\repo",
+        revisionLineNumber: 8,
+        revisionPath: "src/old-example.ts",
+        sha: SHA,
+      },
+    ]);
   });
 
   test("offers time-travel to the revision before the blamed commit", () => {

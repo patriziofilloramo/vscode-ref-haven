@@ -58,6 +58,10 @@ Run **RefHaven: Line Intelligence** from `Ctrl+Shift+P` and choose:
 | **Hover only** | Just the hover — removes the duplicate on the line |
 | **Off**        | No per-line surfaces                               |
 
+Inline and status-bar blame stay deliberately compact. The rich hover keeps
+the most relevant diff and revision actions visible and collects the complete
+context-sensitive set under **More Actions...**.
+
 One limit worth knowing: VS Code merges every extension's hover into a single
 widget, and an extension can only withhold its own. With two blame extensions
 the hover still shows both cards. To see one, use **Off**, set

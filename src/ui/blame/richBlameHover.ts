@@ -1,4 +1,4 @@
-import type { RichLineHover } from "../../domain/blame";
+import type { LineBlameActionTarget, RichLineHover } from "../../domain/blame";
 import { shortSha } from "../../domain/comparisonResult";
 import type { FileDiffScope } from "../../domain/fileDiffScope";
 import { COMMAND_IDS } from "../commands/commandIds";
@@ -12,15 +12,10 @@ const MAX_PREVIEW_CHARACTERS = 4_000;
 const MAX_PREVIEW_LINES = 24;
 
 export const RICH_BLAME_HOVER_COMMANDS: readonly string[] = [
-  COMMAND_IDS.compareFileWithRevision,
-  COMMAND_IDS.copyCommitMessage,
-  COMMAND_IDS.copyCommitSha,
   COMMAND_IDS.openFileAtRevision,
-  COMMAND_IDS.openBrowserFile,
   COMMAND_IDS.openLineDiff,
   COMMAND_IDS.showCommitDetails,
-  COMMAND_IDS.showFileHistory,
-  COMMAND_IDS.showLineHistory,
+  COMMAND_IDS.showLineBlameActions,
   ...BROWSER_AUTOLINK_COMMANDS,
 ];
 
@@ -47,7 +42,7 @@ export function richBlameHoverMarkdown(data: RichLineHover, nowMs = Date.now()):
     ...diffPreviewMarkdown(data),
     ...metadataLines(data, nowMs),
     primaryActions(data, commitNode),
-    secondaryActions(data, commitNode),
+    secondaryActions(data),
   ];
   return lines.join("\n\n");
 }
@@ -89,14 +84,7 @@ function metadataLines(data: RichLineHover, nowMs: number): readonly string[] {
 }
 
 function primaryActions(data: RichLineHover, commitNode: object): string {
-  const actions = [
-    link("Commit Details", COMMAND_IDS.showCommitDetails, [commitNode]),
-    link("Open Revision", COMMAND_IDS.openFileAtRevision, [
-      data.repositoryRoot,
-      data.blame.sha,
-      data.blame.path,
-    ]),
-  ];
+  const actions = [link("Commit Details", COMMAND_IDS.showCommitDetails, [commitNode])];
   if (data.fileChange && data.parentSha !== undefined) {
     const scope: FileDiffScope = {
       fromSha: data.parentSha,
@@ -104,8 +92,15 @@ function primaryActions(data: RichLineHover, commitNode: object): string {
       repositoryRootPath: data.repositoryRoot,
       toSha: data.blame.sha,
     };
-    actions.splice(1, 0, link("Diff Previous", COMMAND_IDS.openLineDiff, [scope, data.fileChange]));
+    actions.unshift(link("Diff Previous", COMMAND_IDS.openLineDiff, [scope, data.fileChange]));
   }
+  actions.push(
+    link("Open Revision", COMMAND_IDS.openFileAtRevision, [
+      data.repositoryRoot,
+      data.blame.sha,
+      data.blame.path,
+    ]),
+  );
   if (data.blame.previousSha && data.blame.previousPath) {
     // Opens the file just before the blamed commit; hovering there continues
     // the blame chain further back (time-travel blame).
@@ -117,36 +112,20 @@ function primaryActions(data: RichLineHover, commitNode: object): string {
       ]),
     );
   }
-  actions.push(
-    link("Diff Working Tree", COMMAND_IDS.compareFileWithRevision, [
-      data.repositoryRoot,
-      data.blame.sha,
-      data.filePath,
-      shortSha(data.blame.sha),
-    ]),
-  );
   return `$(zap) ${actions.join(" · ")}`;
 }
 
-/** Subordinate row: useful, but never the reason someone opened the hover. */
-function secondaryActions(data: RichLineHover, commitNode: object): string {
-  const actions = [
-    link("File History", COMMAND_IDS.showFileHistory, [data.repositoryRoot, data.filePath]),
-    link("Line History", COMMAND_IDS.showLineHistory, [
-      data.repositoryRoot,
-      data.filePath,
-      data.lineNumber,
-    ]),
-    link("Copy SHA", COMMAND_IDS.copyCommitSha, [commitNode]),
-    link("Copy Message", COMMAND_IDS.copyCommitMessage, [commitNode]),
-    link("Open in Browser", COMMAND_IDS.openBrowserFile, [
-      data.repositoryRoot,
-      data.blame.sha,
-      data.blame.path,
-      data.blame.originalLineNumber ?? data.lineNumber,
-    ]),
-  ];
-  return `$(ellipsis) ${actions.join(" · ")}`;
+/** Keeps the hover calm while preserving the complete, contextual action set. */
+function secondaryActions(data: RichLineHover): string {
+  const target: LineBlameActionTarget = {
+    filePath: data.filePath,
+    lineNumber: data.lineNumber,
+    repositoryRoot: data.repositoryRoot,
+    revisionLineNumber: data.blame.originalLineNumber ?? data.lineNumber,
+    revisionPath: data.blame.path,
+    sha: data.blame.sha,
+  };
+  return `$(ellipsis) ${link("More Actions...", COMMAND_IDS.showLineBlameActions, [target])}`;
 }
 
 function originalLocation(data: RichLineHover): string | null {

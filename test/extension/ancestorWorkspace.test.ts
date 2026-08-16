@@ -43,8 +43,21 @@ suite("ancestor repository workspace", () => {
       .join("\n");
 
     assert.match(markdown, /Commit Details/u);
-    assert.match(markdown, /Diff Working Tree/u);
-    assert.match(markdown, /File History/u);
+    assert.match(markdown, /More Actions\.\.\./u);
+    const actionLink = /command:refhaven\.showLineBlameActions\?([^)\s]+)/u.exec(markdown)?.[1];
+    assert.ok(actionLink);
+    const [actionTarget] = JSON.parse(decodeURIComponent(actionLink)) as [
+      {
+        readonly filePath: string;
+        readonly lineNumber: number;
+        readonly repositoryRoot: string;
+        readonly revisionPath: string;
+      },
+    ];
+    assert.equal(pathIdentityKey(actionTarget.repositoryRoot), pathIdentityKey(repositoryRoot));
+    assert.equal(actionTarget.filePath, "opened-folder/fixture.txt");
+    assert.equal(actionTarget.revisionPath, "opened-folder/fixture.txt");
+    assert.equal(actionTarget.lineNumber, 1);
   });
 });
 

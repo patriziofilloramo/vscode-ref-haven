@@ -447,7 +447,7 @@ origin-policy flow, so rendering can never contact a host by itself.
 
 ### BlameController
 
-Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders a dimmed end-of-line decoration and a status-bar item with a compact trusted-markdown tooltip whose fixed command links reuse existing copy/open commands. All Git-controlled Markdown is escaped before trust is enabled.
+Listens to active-editor, selection, document, and configuration changes with a debounce, resolves the repository root per directory, and blames the cursor's line with `git blame --porcelain -L n,n`, feeding unsaved buffers up to 5 MiB through `--contents -`. Starting a newer update aborts the older Git process. It renders bounded dimmed end-of-line text and a compact status-bar item. Its task-grouped action picker receives either the current cursor state or a minimal hover target; hover targets are structurally validated, resolved against a known workspace repository, and refreshed from the local commit object before any action is offered.
 
 ### LineHoverController and provider
 
@@ -462,6 +462,10 @@ The UI provider bridges VS Code cancellation to `AbortSignal`, renders escaped
 trusted Markdown with an explicit command allowlist, limits patch presentation
 to 24 lines/4,000 characters, and returns no hover after cancellation or a
 safe local Git failure.
+
+The hover renders no more than four primary links. Its secondary row carries a
+minimal repository/path/revision/line target to the shared blame action picker;
+it never embeds commit text or an unrestricted URI in that command argument.
 
 The hover also serves RefHaven's readonly revision documents (time-travel
 blame). The controller accepts a revision document only after the content

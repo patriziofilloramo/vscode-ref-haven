@@ -2,7 +2,7 @@ import type { LineBlame } from "../../domain/blame";
 import type { FileBlameFormat } from "../../domain/fileAnnotations";
 import { shortSha, type CommitInfo } from "../../domain/comparisonResult";
 import { COMMAND_IDS } from "../commands/commandIds";
-import { formatExactTime, formatRelativeTime } from "../format";
+import { formatRelativeTime } from "../format";
 import { encodeCommandArguments, escapeMarkdown } from "../markdown";
 
 /** Commands that blame hover links may execute; used for MarkdownString trust. */
@@ -12,6 +12,9 @@ export const BLAME_HOVER_COMMANDS: readonly string[] = [
   COMMAND_IDS.openFileAtRevision,
   COMMAND_IDS.openBrowserFile,
 ];
+
+const MAX_BLAME_AUTHOR_LENGTH = 40;
+const MAX_BLAME_SUMMARY_LENGTH = 80;
 
 export function blameCommitInfo(blame: LineBlame): CommitInfo {
   return {
@@ -36,11 +39,13 @@ export function inlineBlameText(
   currentUserName: string | null,
   nowMs: number,
 ): string {
-  const author = blameAuthorLabel(blame, currentUserName);
+  const author = truncateSingleLine(
+    blameAuthorLabel(blame, currentUserName),
+    MAX_BLAME_AUTHOR_LENGTH,
+  );
   if (!blame.isCommitted) return `${author} · Uncommitted changes`;
-  const summary = blame.summary.length > 0 ? ` · ${blame.summary}` : "";
-  const when = `${formatRelativeTime(blame.authorDate, nowMs)} (${formatExactTime(blame.authorDate, nowMs)})`;
-  return `${author}, ${when}${summary}`;
+  const summary = truncateSingleLine(blame.summary, MAX_BLAME_SUMMARY_LENGTH);
+  return `${author}, ${formatRelativeTime(blame.authorDate, nowMs)}${summary ? ` · ${summary}` : ""}`;
 }
 
 /** Bounded authorship text used by whole-file blame decorations. */
@@ -50,12 +55,15 @@ export function fileBlameAnnotationText(
   nowMs: number,
   format: FileBlameFormat,
 ): string {
-  const author = truncateSingleLine(blameAuthorLabel(blame, currentUserName), 40);
+  const author = truncateSingleLine(
+    blameAuthorLabel(blame, currentUserName),
+    MAX_BLAME_AUTHOR_LENGTH,
+  );
   if (!blame.isCommitted) return `${author} \u00b7 Uncommitted changes`;
 
   const attribution = `${author}, ${formatRelativeTime(blame.authorDate, nowMs)}`;
   if (format === "compact") return attribution;
-  const summary = truncateSingleLine(blame.summary, 80);
+  const summary = truncateSingleLine(blame.summary, MAX_BLAME_SUMMARY_LENGTH);
   return summary.length > 0 ? `${attribution} \u00b7 ${summary}` : attribution;
 }
 
@@ -64,9 +72,12 @@ export function statusBarBlameText(
   currentUserName: string | null,
   nowMs: number,
 ): string {
-  const author = blameAuthorLabel(blame, currentUserName);
-  if (!blame.isCommitted) return `$(git-commit) ${author}, uncommitted`;
-  return `$(git-commit) ${author}, ${formatRelativeTime(blame.authorDate, nowMs)} (${formatExactTime(blame.authorDate, nowMs)})`;
+  const author = truncateSingleLine(
+    blameAuthorLabel(blame, currentUserName),
+    MAX_BLAME_AUTHOR_LENGTH,
+  );
+  if (!blame.isCommitted) return `$(git-commit) ${author} · uncommitted`;
+  return `$(git-commit) ${author} · ${formatRelativeTime(blame.authorDate, nowMs)}`;
 }
 
 /**

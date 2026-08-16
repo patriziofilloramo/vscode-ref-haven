@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path";
 
+import type { LineBlameActionTarget } from "./blame";
 import { isValidCustomLabel, type BranchRef, type SavedComparisonV1 } from "./comparison";
 import type { FileChange } from "./comparisonResult";
 import type { FileDiffScope } from "./fileDiffScope";
@@ -83,6 +84,20 @@ export function isFileDiffScope(value: unknown): value is FileDiffScope {
   );
 }
 
+export function isLineBlameActionTarget(value: unknown): value is LineBlameActionTarget {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<LineBlameActionTarget>;
+  return (
+    isNonEmptyString(candidate.repositoryRoot) &&
+    isAbsolute(candidate.repositoryRoot) &&
+    isRepositoryRelativeGitPath(candidate.filePath) &&
+    isRepositoryRelativeGitPath(candidate.revisionPath) &&
+    isPositiveSafeInteger(candidate.lineNumber) &&
+    isPositiveSafeInteger(candidate.revisionLineNumber) &&
+    isObjectId(candidate.sha)
+  );
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && !value.includes("\0");
 }
@@ -93,6 +108,10 @@ function isFiniteNonNegativeNumber(value: unknown): value is number {
 
 function isOptionalNonNegativeInteger(value: unknown): boolean {
   return value === undefined || (Number.isSafeInteger(value) && (value as number) >= 0);
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
 }
 
 function isOptionalPercentage(value: unknown): boolean {

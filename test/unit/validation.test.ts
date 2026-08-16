@@ -3,7 +3,12 @@ import { resolve } from "node:path";
 
 import type { SavedComparisonV1 } from "../../src/domain/comparison";
 import { isGitObjectId } from "../../src/domain/gitObjectId";
-import { isFileChange, isFileDiffScope, isSavedComparisonV1 } from "../../src/domain/validation";
+import {
+  isFileChange,
+  isFileDiffScope,
+  isLineBlameActionTarget,
+  isSavedComparisonV1,
+} from "../../src/domain/validation";
 
 const SHA = "a".repeat(40);
 
@@ -76,6 +81,28 @@ suite("domain boundary validation", () => {
       }),
       false,
     );
+  });
+
+  test("accepts only complete repository-local line blame action targets", () => {
+    const valid = {
+      filePath: "src/example.ts",
+      lineNumber: 12,
+      repositoryRoot: resolve("repository"),
+      revisionLineNumber: 8,
+      revisionPath: "src/old-example.ts",
+      sha: SHA,
+    };
+    assert.equal(isLineBlameActionTarget(valid), true);
+    for (const candidate of [
+      { ...valid, repositoryRoot: "relative" },
+      { ...valid, filePath: "../outside.ts" },
+      { ...valid, revisionPath: "/absolute.ts" },
+      { ...valid, lineNumber: 0 },
+      { ...valid, revisionLineNumber: 1.5 },
+      { ...valid, sha: "a".repeat(39) },
+    ]) {
+      assert.equal(isLineBlameActionTarget(candidate), false);
+    }
   });
 });
 

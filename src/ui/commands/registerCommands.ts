@@ -210,7 +210,7 @@ export function registerCommands(
         : fileActionsController.showFileHistory(resource),
     [COMMAND_IDS.showFileHeatmapLegend]: (resource) =>
       fileActionsController.showFileHeatmapLegend(resource),
-    [COMMAND_IDS.showLineBlameActions]: () => blameController.showLineBlameActions(),
+    [COMMAND_IDS.showLineBlameActions]: (target) => blameController.showLineBlameActions(target),
     [COMMAND_IDS.inspectCurrentLine]: () => blameController.showLineBlameActions(),
     [COMMAND_IDS.showLineHistory]: (resource, filePath, lineNumber) =>
       typeof resource === "string" && typeof filePath === "string"

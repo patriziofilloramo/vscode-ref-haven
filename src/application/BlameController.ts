@@ -9,10 +9,12 @@ import {
 } from "../config/extensionConfiguration";
 import type { Logger } from "./Logger";
 import { runInBackground } from "./errorHandling";
-import type { LineBlame } from "../domain/blame";
-import { shortSha } from "../domain/comparisonResult";
+import type { LineBlame, LineBlameActionTarget } from "../domain/blame";
+import { shortSha, type CommitInfo } from "../domain/comparisonResult";
+import { isLineBlameActionTarget } from "../domain/validation";
 import {
   blameLine,
+  readCommitDetails,
   readGitUserName,
   resolveWorkspaceRepositoryFile,
   type WorkspaceRepositoryFile,
@@ -26,13 +28,20 @@ import {
 } from "../ui/blame/blamePresentation";
 import { COMMAND_IDS } from "../ui/commands/commandIds";
 import { showTransientSuccess } from "../ui/feedback";
+import { resolveKnownFileTarget } from "../ui/commands/fileContext";
 
 const UPDATE_DEBOUNCE_MS = 250;
 
 interface CurrentLineBlame {
   readonly blame: LineBlame;
+  readonly lineNumber: number;
   readonly relativePath: string;
   readonly repositoryRootPath: string;
+}
+
+interface ResolvedLineBlameActionTarget extends LineBlameActionTarget {
+  readonly commit: CommitInfo;
+  readonly uri: vscode.Uri;
 }
 
 interface LineBlameActionItem extends vscode.QuickPickItem {
@@ -131,21 +140,13 @@ export class BlameController implements vscode.Disposable {
     showTransientSuccess(enabled ? "Inline blame disabled" : "Inline blame enabled");
   }
 
-  public async showLineBlameActions(): Promise<void> {
-    const current = this.current;
-    if (!current) {
-      void vscode.window.showInformationMessage("No blame information for the current line.");
-      return;
-    }
-    if (!current.blame.isCommitted) {
-      void vscode.window.showInformationMessage("The current line is not committed yet.");
-      return;
-    }
-
+  public async showLineBlameActions(candidate?: unknown): Promise<void> {
+    const target = await this.resolveLineBlameActionTarget(candidate);
+    if (!target) return;
     const commitNode = {
-      commit: blameCommitInfo(current.blame),
+      commit: target.commit,
       kind: "commit",
-      repositoryRoot: current.repositoryRootPath,
+      repositoryRoot: target.repositoryRoot,
     };
     const selected = await vscode.window.showQuickPick<LineBlameActionEntry>(
       [
@@ -153,62 +154,138 @@ export class BlameController implements vscode.Disposable {
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.showCommitDetails, commitNode),
-          description: shortSha(current.blame.sha),
+          description: shortSha(target.sha),
           label: "$(inspect) Show Commit Details",
         },
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(
               COMMAND_IDS.openFileAtRevision,
-              current.repositoryRootPath,
-              current.blame.sha,
-              current.blame.path,
+              target.repositoryRoot,
+              target.sha,
+              target.revisionPath,
             ),
-          description: shortSha(current.blame.sha),
+          description: shortSha(target.sha),
           label: "$(go-to-file) Open File at This Revision",
         },
         {
           action: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.compareFileWithRevision),
-          description: current.relativePath,
+            vscode.commands.executeCommand(
+              COMMAND_IDS.compareFileWithRevision,
+              target.repositoryRoot,
+              target.sha,
+              target.filePath,
+              shortSha(target.sha),
+            ),
+          description: target.filePath,
           label: "$(compare-changes) Compare File with Revision...",
         },
         lineBlameActionSeparator("History and annotations"),
         {
           action: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.showFileHistory),
-          description: current.relativePath,
+            vscode.commands.executeCommand(
+              COMMAND_IDS.showFileHistory,
+              target.repositoryRoot,
+              target.filePath,
+            ),
+          description: target.filePath,
           label: "$(history) Show File History",
         },
         {
           action: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.showLineHistory),
-          description: current.relativePath,
+            vscode.commands.executeCommand(
+              COMMAND_IDS.showLineHistory,
+              target.repositoryRoot,
+              target.filePath,
+              target.lineNumber,
+            ),
+          description: `${target.filePath}:${target.lineNumber.toString()}`,
           label: "$(list-selection) Show Line History",
         },
         {
           action: (): Thenable<unknown> =>
-            vscode.commands.executeCommand(COMMAND_IDS.changeFileAnnotations),
-          description: current.relativePath,
+            vscode.commands.executeCommand(COMMAND_IDS.changeFileAnnotations, target.uri),
+          description: target.filePath,
           label: "$(symbol-color) Change File Annotations...",
         },
         lineBlameActionSeparator("Copy"),
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.copyCommitSha, commitNode),
-          description: shortSha(current.blame.sha),
+          description: shortSha(target.sha),
           label: "$(copy) Copy SHA",
         },
         {
           action: (): Thenable<unknown> =>
             vscode.commands.executeCommand(COMMAND_IDS.copyCommitMessage, commitNode),
-          description: current.blame.summary,
+          description: target.commit.subject,
           label: "$(copy) Copy Commit Message",
         },
+        lineBlameActionSeparator("Remote"),
+        {
+          action: (): Thenable<unknown> =>
+            vscode.commands.executeCommand(
+              COMMAND_IDS.openBrowserFile,
+              target.repositoryRoot,
+              target.sha,
+              target.revisionPath,
+              target.revisionLineNumber,
+            ),
+          description: target.revisionPath,
+          label: "$(link-external) Open File in Browser",
+        },
       ],
-      { placeHolder: current.blame.summary, title: "RefHaven: Line Blame" },
+      {
+        placeHolder: target.commit.subject || shortSha(target.sha),
+        title: "RefHaven: Line Blame",
+      },
     );
     if (selected && "action" in selected) await selected.action();
+  }
+
+  private async resolveLineBlameActionTarget(
+    candidate: unknown,
+  ): Promise<ResolvedLineBlameActionTarget | null> {
+    if (candidate === undefined) {
+      const current = this.current;
+      if (!current) {
+        void vscode.window.showInformationMessage("No blame information for the current line.");
+        return null;
+      }
+      if (!current.blame.isCommitted) {
+        void vscode.window.showInformationMessage("The current line is not committed yet.");
+        return null;
+      }
+      const fileTarget = await resolveKnownFileTarget(
+        current.repositoryRootPath,
+        current.relativePath,
+      );
+      if (!fileTarget) throw new Error("The blamed file is no longer available in this workspace.");
+      return {
+        commit: blameCommitInfo(current.blame),
+        filePath: fileTarget.filePath,
+        lineNumber: current.lineNumber,
+        repositoryRoot: fileTarget.repositoryRoot,
+        revisionLineNumber: current.blame.originalLineNumber ?? current.lineNumber,
+        revisionPath: current.blame.path,
+        sha: current.blame.sha,
+        uri: fileTarget.uri,
+      };
+    }
+
+    if (!isLineBlameActionTarget(candidate)) {
+      throw new Error("The line blame action target is invalid.");
+    }
+    const fileTarget = await resolveKnownFileTarget(candidate.repositoryRoot, candidate.filePath);
+    if (!fileTarget) throw new Error("The blamed file is no longer available in this workspace.");
+    const details = await readCommitDetails(fileTarget.repositoryRoot, candidate.sha);
+    return {
+      ...candidate,
+      commit: details.commit,
+      filePath: fileTarget.filePath,
+      repositoryRoot: fileTarget.repositoryRoot,
+      uri: fileTarget.uri,
+    };
   }
 
   private scheduleUpdate(): void {
@@ -268,7 +345,7 @@ export class BlameController implements vscode.Disposable {
     const userName = await this.getUserName(repositoryRootPath);
     if (generation !== this.generation) return;
 
-    this.current = { blame, relativePath, repositoryRootPath };
+    this.current = { blame, lineNumber: line + 1, relativePath, repositoryRootPath };
     const now = Date.now();
     const hover = new vscode.MarkdownString(
       blameHoverMarkdown(blame, userName, repositoryRootPath, now),
