@@ -493,13 +493,50 @@ suite("native branch diff", () => {
   });
 
   test("searches local commits and loads full commit details", async () => {
-    const byMessage = await searchCommits(repositoryRoot, "message", "feature changes");
+    const byMessage = await searchCommits(repositoryRoot, {
+      caseSensitive: false,
+      kind: "message",
+      patternMode: "literal",
+      text: "FEATURE CHANGES",
+    });
     assert.equal(byMessage[0]?.subject, "feature changes");
-    const byAuthor = await searchCommits(repositoryRoot, "author", "RefHaven Tests");
+    const caseSensitiveMessage = await searchCommits(repositoryRoot, {
+      caseSensitive: true,
+      kind: "message",
+      patternMode: "literal",
+      text: "FEATURE CHANGES",
+    });
+    assert.equal(caseSensitiveMessage.length, 0);
+    const regexMessage = await searchCommits(repositoryRoot, {
+      caseSensitive: true,
+      kind: "message",
+      patternMode: "regex",
+      text: "feature (changes|work)",
+    });
+    assert.equal(regexMessage[0]?.subject, "feature changes");
+    const byAuthor = await searchCommits(repositoryRoot, {
+      caseSensitive: false,
+      kind: "author",
+      patternMode: "literal",
+      text: "refhaven tests",
+    });
     assert.ok(byAuthor.length >= 2);
-    const byContent = await searchCommits(repositoryRoot, "content", "added");
+    const byContent = await searchCommits(repositoryRoot, {
+      kind: "content",
+      patternMode: "literal",
+      text: "added",
+    });
     assert.equal(byContent[0]?.subject, "feature changes");
-    const bySha = await searchCommits(repositoryRoot, "sha", git("rev-parse", "HEAD").slice(0, 10));
+    const byContentRegex = await searchCommits(repositoryRoot, {
+      kind: "content",
+      patternMode: "regex",
+      text: "add(ed|ition)",
+    });
+    assert.equal(byContentRegex[0]?.subject, "feature changes");
+    const bySha = await searchCommits(repositoryRoot, {
+      kind: "sha",
+      text: git("rev-parse", "HEAD").slice(0, 10),
+    });
     assert.equal(bySha.length, 1);
 
     const details = await readCommitDetails(repositoryRoot, git("rev-parse", "HEAD"));

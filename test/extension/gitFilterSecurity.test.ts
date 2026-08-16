@@ -77,7 +77,11 @@ suite("Git executable-driver isolation", () => {
       assert.ok(plainChanges.length > 0, "configured drivers must not block unfiltered paths");
       assert.equal(existsSync(markerPath), false, "an unrelated path executed a content filter");
 
-      const commits = await searchCommits(repositoryRoot, "content", "tracked fixture line");
+      const commits = await searchCommits(repositoryRoot, {
+        kind: "content",
+        patternMode: "literal",
+        text: "tracked fixture line",
+      });
       assert.ok(commits.length > 0);
       assert.equal(existsSync(markerPath), false, "content search executed a textconv command");
     } finally {

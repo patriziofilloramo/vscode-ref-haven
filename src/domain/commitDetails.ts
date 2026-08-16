@@ -11,3 +11,21 @@ export interface CommitDetails {
 }
 
 export type CommitSearchKind = "author" | "content" | "message" | "sha";
+export type CommitSearchPatternMode = "literal" | "regex";
+
+export type CommitSearchQuery =
+  | {
+      readonly kind: "author" | "message";
+      readonly caseSensitive: boolean;
+      readonly patternMode: CommitSearchPatternMode;
+      readonly text: string;
+    }
+  | {
+      readonly kind: "content";
+      readonly patternMode: CommitSearchPatternMode;
+      readonly text: string;
+    }
+  | {
+      readonly kind: "sha";
+      readonly text: string;
+    };

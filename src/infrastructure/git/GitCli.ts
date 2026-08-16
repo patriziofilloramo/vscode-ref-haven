@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import type { FileBlameLine, LineBlame } from "../../domain/blame";
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
-import type { CommitDetails, CommitSearchKind } from "../../domain/commitDetails";
+import type { CommitDetails, CommitSearchQuery } from "../../domain/commitDetails";
 import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
 import type { FileHistoryEntry } from "../../domain/history";
 import { MAX_INTERACTIVE_INPUT_LENGTH, MAX_STASH_MESSAGE_LENGTH } from "../../domain/inputLimits";
@@ -22,6 +22,7 @@ import { parseBranchRefs, parseComparisonRefs } from "./branchRefs";
 import { BRANCH_DETAILS_FORMAT, parseBranchDetails } from "./branchDetails";
 import { COMMIT_LOG_FORMAT, parseCommitLog } from "./commitLog";
 import { COMMIT_DETAILS_FORMAT, parseCommitDetails } from "./commitDetails";
+import { assertValidCommitSearchQuery, buildCommitSearchCriteria } from "./commitSearch";
 import { assertNoActiveContentFilters } from "./contentFilterGuard";
 import { parseChangedLineRanges } from "./diffHunks";
 import { FILE_HISTORY_LOG_FORMAT, parseFileHistory } from "./fileHistory";
@@ -506,27 +507,18 @@ export async function readCommitDetails(
 
 export async function searchCommits(
   repositoryRoot: string,
-  kind: CommitSearchKind,
-  query: string,
+  query: CommitSearchQuery,
   limit = COMMIT_PAGE_SIZE,
   signal?: AbortSignal,
 ): Promise<CommitInfo[]> {
-  if (query.length === 0 || query.length > 512 || query.includes("\0")) {
-    throw new Error("The commit search query is invalid.");
-  }
-  if (kind === "sha") {
-    if (!/^[0-9a-f]{4,64}$/iu.test(query)) return [];
-    const sha = await resolveRef(repositoryRoot, query, signal).catch(() => null);
+  assertValidCommitSearchQuery(query);
+  if (query.kind === "sha") {
+    const sha = await resolveRef(repositoryRoot, query.text, signal).catch(() => null);
     if (!sha) return [];
     const details = await readCommitDetails(repositoryRoot, sha, signal);
     return [details.commit];
   }
-  const criterion =
-    kind === "message"
-      ? ["--regexp-ignore-case", `--grep=${query}`]
-      : kind === "author"
-        ? [`--author=${query}`]
-        : [`-S${query}`, "--pickaxe-all"];
+  const criterion = buildCommitSearchCriteria(query);
   const stdout = await runGit(
     repositoryRoot,
     [
