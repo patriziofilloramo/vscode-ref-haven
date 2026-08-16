@@ -1,5 +1,5 @@
-import { chmod, lstat, open, readdir, realpath, rename, unlink } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { chmod, lstat, open, readdir, rename, unlink } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
 
 import { pathIdentityKey } from "../../domain/pathValidation";
 import {
@@ -77,7 +77,7 @@ export async function listPendingStashFileRecoveries(
   if (!isAbsolute(gitDirectory) || gitDirectory.includes("\0")) {
     throw new Error("Git returned an invalid metadata directory.");
   }
-  await assertCanonicalDirectory(gitDirectory, "Git metadata");
+  await assertOrdinaryDirectory(gitDirectory, "Git metadata");
   return listPendingRecoveriesInGitDirectory(gitDirectory);
 }
 
@@ -110,14 +110,10 @@ export async function listPendingRecoveriesInGitDirectory(
   return pending;
 }
 
-export async function assertCanonicalDirectory(directory: string, label: string): Promise<void> {
+export async function assertOrdinaryDirectory(directory: string, label: string): Promise<void> {
   const directoryStats = await lstat(directory);
   if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) {
     throw new Error(`${label} must be a local directory without symbolic links.`);
-  }
-  const canonical = await realpath(directory);
-  if (pathIdentityKey(canonical) !== pathIdentityKey(resolve(directory))) {
-    throw new Error(`${label} must not traverse symbolic links or junctions.`);
   }
 }
 

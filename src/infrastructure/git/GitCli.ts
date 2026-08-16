@@ -45,6 +45,7 @@ import { buildCanonicalRepositoryIdentities } from "./repositoryDiscovery";
 const MAX_HOVER_DIFF_BYTES = 64 * 1024;
 const MAX_PATCH_BYTES = 64 * 1024 * 1024;
 export { GitOperationError } from "./GitProcess";
+export { canonicalPathIdentityKey } from "./repositoryDiscovery";
 export { resolveWorkspaceRepositoryFile } from "./repositoryRoot";
 export type { WorkspaceRepositoryFile } from "./repositoryRoot";
 export { listPendingStashFileRecoveries, StashCleanupIncompleteError } from "./stashFile";

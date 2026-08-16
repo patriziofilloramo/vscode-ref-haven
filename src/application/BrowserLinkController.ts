@@ -21,6 +21,7 @@ import {
 } from "../domain/browserLinks";
 import { pathIdentityKey } from "../domain/pathValidation";
 import {
+  canonicalPathIdentityKey,
   discoverRepositories,
   fileExistsAtRevision,
   listComparisonRefs,
@@ -418,10 +419,12 @@ export class BrowserLinkController {
 
   private async requireKnownRepository(candidate: unknown): Promise<string> {
     if (typeof candidate !== "string") throw new Error("The selected repository is invalid.");
-    const expected = pathIdentityKey(candidate);
-    const repository = (await discoverRepositories()).find(
-      ({ rootPath }) => pathIdentityKey(rootPath) === expected,
-    );
+    const [expected, repositories] = await Promise.all([
+      canonicalPathIdentityKey(candidate),
+      discoverRepositories(),
+    ]);
+    if (!expected) throw new Error("The selected repository is not available in this workspace.");
+    const repository = repositories.find(({ rootPath }) => pathIdentityKey(rootPath) === expected);
     if (!repository) throw new Error("The selected repository is not available in this workspace.");
     return repository.rootPath;
   }

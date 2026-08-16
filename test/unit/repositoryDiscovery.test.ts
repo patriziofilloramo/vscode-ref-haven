@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import {
   buildCanonicalRepositoryIdentities,
   buildRepositoryIdentities,
+  canonicalPathIdentityKey,
 } from "../../src/infrastructure/git/repositoryDiscovery";
 
 suite("repository identity discovery", () => {
@@ -99,6 +100,24 @@ suite("repository identity discovery", () => {
           [{ name: "workspace", rootPath: workspace, uri: "file:///workspace" }],
         ),
         [],
+      );
+    } finally {
+      await rm(fixture, { force: true, recursive: true });
+    }
+  });
+
+  test("uses one identity for equivalent paths reached through a filesystem alias", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "refhaven-repository-alias-"));
+    const target = join(fixture, "target");
+    const repository = join(target, "repository");
+    const alias = join(fixture, "alias");
+    try {
+      await mkdir(repository, { recursive: true });
+      await symlink(target, alias, process.platform === "win32" ? "junction" : "dir");
+
+      assert.equal(
+        await canonicalPathIdentityKey(join(alias, "repository")),
+        await canonicalPathIdentityKey(repository),
       );
     } finally {
       await rm(fixture, { force: true, recursive: true });

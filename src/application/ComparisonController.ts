@@ -41,6 +41,7 @@ import { formatDiffStats, pluralize } from "../ui/format";
 import { showTransientSuccess } from "../ui/feedback";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
+  canonicalPathIdentityKey,
   listComparisonRefs,
   discoverRepositories,
   readComparisonPatch,
@@ -228,9 +229,9 @@ export class ComparisonController {
     });
   }
 
-  public refreshComparison(comparison: SavedComparisonV1): void {
+  public async refreshComparison(comparison: SavedComparisonV1): Promise<void> {
     const current = this.requireStoredComparison(comparison);
-    this.assertCachedRepositoryRoot(current.repository.rootPath);
+    await this.assertCachedRepositoryRoot(current.repository.rootPath);
     this.treeProvider.invalidateResult(current.id);
     this.logger.info("Refreshed comparison", { operation: "refreshComparison" });
   }
@@ -992,8 +993,9 @@ export class ComparisonController {
     this.treeProvider.setComparisons(this.visibleComparisons(comparisons));
   }
 
-  private assertCachedRepositoryRoot(repositoryRootPath: string): void {
-    if (!this.availableRepositoryRoots.has(pathIdentityKey(repositoryRootPath))) {
+  private async assertCachedRepositoryRoot(repositoryRootPath: string): Promise<void> {
+    const expected = await canonicalPathIdentityKey(repositoryRootPath);
+    if (!expected || !this.availableRepositoryRoots.has(expected)) {
       throw new Error("The selected repository is not part of the current workspace.");
     }
   }
@@ -1028,8 +1030,13 @@ export class ComparisonController {
 
   private async assertKnownRepositoryRoot(repositoryRootPath: string): Promise<RepositoryIdentity> {
     const generation = this.workspaceRepositoryRefreshGeneration;
-    const expected = pathIdentityKey(repositoryRootPath);
-    const repositories = await this.repositoryDiscovery();
+    const [expected, repositories] = await Promise.all([
+      canonicalPathIdentityKey(repositoryRootPath),
+      this.repositoryDiscovery(),
+    ]);
+    if (!expected) {
+      throw new Error("The selected repository is not part of the current workspace.");
+    }
     if (generation !== this.workspaceRepositoryRefreshGeneration) {
       throw new Error("The workspace changed while validating the selected repository.");
     }

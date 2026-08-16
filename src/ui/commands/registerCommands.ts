@@ -177,9 +177,8 @@ export function registerCommands(
     [COMMAND_IDS.refreshAll]: () => {
       controller.refreshAll();
     },
-    [COMMAND_IDS.refreshComparison]: (node) => {
-      controller.refreshComparison(requireComparison(node));
-    },
+    [COMMAND_IDS.refreshComparison]: (node) =>
+      controller.refreshComparison(requireComparison(node)),
     [COMMAND_IDS.refreshFileHistory]: () => fileHistoryController.refresh(true),
     [COMMAND_IDS.refreshRepositoryNavigation]: () => repositoryNavigationController.refresh(),
     [COMMAND_IDS.refreshStashes]: () => stashController.refresh(),

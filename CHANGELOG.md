@@ -52,6 +52,10 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ### Fixed
 
+- Treat equivalent canonical and aliased Windows repository paths as one
+  workspace identity across file actions, comparisons, browser links, hover,
+  and single-file stash, while continuing to reject symlinks and junctions
+  inside paths touched by worktree mutations.
 - Isolate the executable Git-driver security fixture from VS Code's background
   repository polling so the release gate cannot report third-party filter
   execution as a RefHaven failure.

@@ -11,6 +11,7 @@ import {
 } from "../../domain/pathValidation";
 import { isFileChange, isFileDiffScope } from "../../domain/validation";
 import {
+  canonicalPathIdentityKey,
   discoverRepositories,
   resolveWorkspaceRepositoryFile,
 } from "../../infrastructure/git/GitCli";
@@ -55,8 +56,12 @@ export async function resolveKnownGitTarget(
   } catch {
     return null;
   }
-  const expectedRoot = pathIdentityKey(repositoryRoot);
-  const repository = (await discoverRepositories()).find(
+  const [expectedRoot, repositories] = await Promise.all([
+    canonicalPathIdentityKey(repositoryRoot),
+    discoverRepositories(),
+  ]);
+  if (!expectedRoot) return null;
+  const repository = repositories.find(
     ({ rootPath }) => pathIdentityKey(rootPath) === expectedRoot,
   );
   return repository ? { filePath, repositoryRoot: repository.rootPath } : null;

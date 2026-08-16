@@ -4,7 +4,10 @@ import { dirname, join } from "node:path";
 import * as vscode from "vscode";
 
 import { pathIdentityKey } from "../../src/domain/pathValidation";
-import { discoverRepositories } from "../../src/infrastructure/git/GitCli";
+import {
+  canonicalPathIdentityKey,
+  discoverRepositories,
+} from "../../src/infrastructure/git/GitCli";
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
 
 const EXTENSION_ID = "patriziofilloramo.refhaven";
@@ -18,16 +21,18 @@ suite("ancestor repository workspace", () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder);
     const repositoryRoot = dirname(workspaceFolder.uri.fsPath);
+    const repositoryKey = await canonicalPathIdentityKey(repositoryRoot);
+    assert.ok(repositoryKey);
     const uri = vscode.Uri.file(join(workspaceFolder.uri.fsPath, "fixture.txt"));
 
     const target = await resolveFileContextTarget(uri);
     assert.ok(target);
-    assert.equal(pathIdentityKey(target.repositoryRoot), pathIdentityKey(repositoryRoot));
+    assert.equal(pathIdentityKey(target.repositoryRoot), repositoryKey);
     assert.equal(target.filePath, "opened-folder/fixture.txt");
 
     const repositories = await discoverRepositories();
     assert.equal(repositories.length, 1);
-    assert.equal(pathIdentityKey(repositories[0]?.rootPath ?? ""), pathIdentityKey(repositoryRoot));
+    assert.equal(pathIdentityKey(repositories[0]?.rootPath ?? ""), repositoryKey);
 
     const document = await vscode.workspace.openTextDocument(uri);
     const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
@@ -54,7 +59,7 @@ suite("ancestor repository workspace", () => {
         readonly revisionPath: string;
       },
     ];
-    assert.equal(pathIdentityKey(actionTarget.repositoryRoot), pathIdentityKey(repositoryRoot));
+    assert.equal(pathIdentityKey(actionTarget.repositoryRoot), repositoryKey);
     assert.equal(actionTarget.filePath, "opened-folder/fixture.txt");
     assert.equal(actionTarget.revisionPath, "opened-folder/fixture.txt");
     assert.equal(actionTarget.lineNumber, 1);

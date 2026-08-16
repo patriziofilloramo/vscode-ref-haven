@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 
@@ -29,7 +29,7 @@ suite("worktree metadata discovery", () => {
       git(repositoryRoot, "worktree", "add", "-b", "feature/worktree-test", worktreeRoot);
 
       const metadataPaths = (await resolveGitMetadataPaths(worktreeRoot)).map(normalize);
-      const commonDir = normalize(join(repositoryRoot, ".git"));
+      const commonDir = normalize(realpathSync(join(repositoryRoot, ".git")));
       assert.ok(metadataPaths.includes(commonDir));
       assert.ok(metadataPaths.some((path) => path !== commonDir && path.includes("worktrees")));
     } finally {

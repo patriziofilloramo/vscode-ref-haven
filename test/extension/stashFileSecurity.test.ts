@@ -21,6 +21,7 @@ import {
   listPendingStashFileRecoveries,
   type StashFileResult,
 } from "../../src/infrastructure/git/stashFile";
+import { assertOrdinaryDirectory } from "../../src/infrastructure/git/stashFileTransaction";
 
 suite("single-file stash security regressions", () => {
   const roots: string[] = [];
@@ -93,6 +94,24 @@ suite("single-file stash security regressions", () => {
     assert.equal(read(repository, "selected.txt"), "changed\n");
     assert.deepEqual(readFileSync(indexPath), indexBefore);
     assert.equal(resolveOptionalStash(repository), undefined);
+  });
+
+  test("accepts an ordinary repository below an aliased ancestor", async () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "refhaven-directory-boundary-"));
+    roots.push(fixtureRoot);
+    const targetRoot = join(fixtureRoot, "target");
+    const repositoryRoot = join(targetRoot, "repository");
+    const aliasRoot = join(fixtureRoot, "alias");
+    mkdirSync(repositoryRoot, { recursive: true });
+    symlinkSync(targetRoot, aliasRoot, process.platform === "win32" ? "junction" : "dir");
+
+    await assert.doesNotReject(
+      assertOrdinaryDirectory(join(aliasRoot, "repository"), "Repository root"),
+    );
+    await assert.rejects(
+      assertOrdinaryDirectory(aliasRoot, "Repository root"),
+      /without symbolic links/iu,
+    );
   });
 
   test("fails closed when a tracked path's parent is a symlink or junction", async () => {

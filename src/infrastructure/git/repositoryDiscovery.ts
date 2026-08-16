@@ -35,6 +35,12 @@ export async function canonicalPath(filePath: string): Promise<string | null> {
   return realpath(filePath).catch(() => null);
 }
 
+/** Produces a stable identity for an existing path, including filesystem aliases. */
+export async function canonicalPathIdentityKey(filePath: string): Promise<string | null> {
+  const canonical = await canonicalPath(filePath);
+  return canonical ? pathIdentityKey(canonical) : null;
+}
+
 /** Builds stable workspace-scoped identities for Git roots discovered by any adapter. */
 export function buildRepositoryIdentities(
   rootPaths: readonly string[],

@@ -14,7 +14,7 @@ import {
 } from "./GitProcess";
 import {
   acquireIndexTransaction,
-  assertCanonicalDirectory,
+  assertOrdinaryDirectory,
   captureIndexSnapshot,
   cleanWorktreePermissions,
   deleteRecoveryRefWhenStashIsCurrent,
@@ -142,8 +142,8 @@ async function createPathLimitedStashUnlocked(
   if (!isAbsolute(gitDirectory) || gitDirectory.includes("\0")) {
     throw new Error("Git returned an invalid metadata directory.");
   }
-  await assertCanonicalDirectory(repositoryRoot, "Repository root");
-  await assertCanonicalDirectory(gitDirectory, "Git metadata");
+  await assertOrdinaryDirectory(repositoryRoot, "Repository root");
+  await assertOrdinaryDirectory(gitDirectory, "Git metadata");
   if ((await listPendingRecoveriesInGitDirectory(gitDirectory)).length > 0) {
     throw new Error(
       "RefHaven found an unfinished single-file stash recovery. Review it before creating another file stash.",

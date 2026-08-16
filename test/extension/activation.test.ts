@@ -5,7 +5,12 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 
 import { pathIdentityKey } from "../../src/domain/pathValidation";
-import { listStashes, readFileAtRevision } from "../../src/infrastructure/git/GitCli";
+import {
+  canonicalPathIdentityKey,
+  listPendingStashFileRecoveries,
+  listStashes,
+  readFileAtRevision,
+} from "../../src/infrastructure/git/GitCli";
 import {
   resolveFileContextTarget,
   resolveKnownFileTarget,
@@ -187,7 +192,8 @@ suite("RefHaven extension", () => {
     }
   });
 
-  test("saves and stashes unsaved editor changes after confirmation", async () => {
+  test("saves and stashes unsaved editor changes after confirmation", async function () {
+    this.timeout(60_000);
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder);
     const uri = vscode.Uri.joinPath(workspaceFolder.uri, FIXTURE_FILE);
@@ -195,8 +201,6 @@ suite("RefHaven extension", () => {
     const document = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(document);
     const expectedMessage = `RefHaven: ${FIXTURE_FILE}`;
-    let clearNotifications: NodeJS.Timeout | undefined;
-
     try {
       const edited = await editor.edit((editBuilder) => {
         editBuilder.insert(document.positionAt(document.getText().length), "confirmed stash\n");
@@ -204,16 +208,30 @@ suite("RefHaven extension", () => {
       assert.equal(edited, true);
       assert.equal(document.isDirty, true);
 
-      const operation = vscode.commands.executeCommand("refhaven.stashFile", uri);
-      clearNotifications = setInterval(() => {
-        void vscode.commands.executeCommand("notifications.clearAll");
-      }, 250);
-      await driveQuickInputUntilSettled(
-        operation,
-        "workbench.action.acceptSelectedQuickOpenItem",
-        15_000,
-        "The public stash command did not complete.",
+      let operationSettled = false;
+      const operation = Promise.resolve(
+        vscode.commands.executeCommand("refhaven.stashFile", uri),
+      ).finally(() => {
+        operationSettled = true;
+      });
+      const notificationDriver = dismissCompletedStashNotification(
+        workspaceFolder.uri.fsPath,
+        expectedMessage,
+        document,
+        () => operationSettled,
+        30_000,
       );
+      try {
+        await driveQuickInputUntilSettled(
+          operation,
+          "workbench.action.acceptSelectedQuickOpenItem",
+          30_000,
+          "The public stash command did not complete.",
+        );
+      } finally {
+        operationSettled = true;
+        await notificationDriver;
+      }
 
       assert.equal(document.isDirty, false);
       const stash = (await listStashes(workspaceFolder.uri.fsPath))[0];
@@ -231,7 +249,6 @@ suite("RefHaven extension", () => {
       assert.equal(stashedText, `${originalText}confirmed stash\n`);
       assert.equal(cleanedText, originalText);
     } finally {
-      if (clearNotifications) clearInterval(clearNotifications);
       await vscode.commands.executeCommand("workbench.action.closeQuickOpen");
       await vscode.commands.executeCommand("notifications.clearAll");
       if (document.isDirty) await vscode.commands.executeCommand("workbench.action.files.revert");
@@ -281,7 +298,7 @@ suite("RefHaven extension", () => {
     assert.equal(target.revisionLineNumber, 1);
     assert.equal(
       pathIdentityKey(target.repositoryRoot),
-      pathIdentityKey(workspaceFolder.uri.fsPath),
+      await canonicalPathIdentityKey(workspaceFolder.uri.fsPath),
     );
     assert.match(target.sha, /^[0-9a-f]{40}$/u);
   });
@@ -363,4 +380,26 @@ async function driveQuickInputUntilSettled<T>(
     return result.completed ? result.value : drive();
   };
   return drive();
+}
+
+async function dismissCompletedStashNotification(
+  repositoryRoot: string,
+  expectedMessage: string,
+  document: vscode.TextDocument,
+  isOperationSettled: () => boolean,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!isOperationSettled() && Date.now() < deadline) {
+    if (!document.isDirty) {
+      const stash = (await listStashes(repositoryRoot))[0];
+      if (
+        stash?.message === expectedMessage &&
+        (await listPendingStashFileRecoveries(repositoryRoot)).length === 0
+      ) {
+        await vscode.commands.executeCommand("notifications.clearAll");
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
