@@ -6,7 +6,7 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.14.0] — 2026-08-16
+## [0.14.0] — 2026-08-17
 
 ### Added
 
