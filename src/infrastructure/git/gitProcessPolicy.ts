@@ -72,11 +72,11 @@ const UNSAFE_FILTER_CONFIGURATION_MESSAGE =
 /**
  * Git subcommands that cannot invoke a clean, smudge, process, or textconv
  * command under any argument, not merely the arguments RefHaven passes today:
- * they read or write refs, configuration, attribute metadata, or existing
- * objects without converting working-tree content. Subcommands that gain
- * conversion behaviour from a flag — `ls-files --eol`, `cat-file --filters`,
- * `hash-object` — are deliberately absent. Every other subcommand keeps the
- * per-command filter probe and neutralization.
+ * they read or write refs, configuration, identity variables, attribute
+ * metadata, or existing objects without converting working-tree content.
+ * Subcommands that gain conversion behaviour from a flag — `ls-files --eol`,
+ * `cat-file --filters`, `hash-object` — are deliberately absent. Every other
+ * subcommand keeps the per-command filter probe and neutralization.
  */
 const FILTER_INERT_SUBCOMMANDS = new Set([
   "check-attr",
@@ -87,6 +87,7 @@ const FILTER_INERT_SUBCOMMANDS = new Set([
   "rev-parse",
   "symbolic-ref",
   "update-ref",
+  "var",
   "write-tree",
 ]);
 

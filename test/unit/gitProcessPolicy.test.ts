@@ -124,6 +124,7 @@ suite("local-only Git process policy", () => {
       ["rev-parse", "--verify", "HEAD^{commit}"],
       ["symbolic-ref", "--short", "HEAD"],
       ["update-ref", "--stdin", "--create-reflog"],
+      ["var", "GIT_AUTHOR_IDENT"],
       ["write-tree"],
     ]) {
       assert.equal(isFilterInertGitInvocation(inert), true, inert.join(" "));

@@ -5,6 +5,8 @@ import * as vscode from "vscode";
 const CONFIGURATION_SECTION = "refhaven";
 const MODE_SETTING = "fileAnnotations.mode";
 const TOGGLE_MODE_SETTING = "fileAnnotations.heatmap.toggleMode";
+const POLL_INTERVAL_MS = 25;
+const POLL_TIMEOUT_MS = 2_000;
 
 suite("File annotations", () => {
   teardown(async () => {
@@ -24,6 +26,7 @@ suite("File annotations", () => {
     const uri = vscode.Uri.joinPath(workspaceFolder.uri, "fixture.txt");
     const document = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(document);
+    await waitForActiveEditor(uri);
 
     await vscode.commands.executeCommand("refhaven.toggleFileHeatmap", uri);
     assert.equal(readSetting(MODE_SETTING), "off", "file scope must not persist a mode");
@@ -36,6 +39,7 @@ suite("File annotations", () => {
 
     await configuration.update(TOGGLE_MODE_SETTING, "window", vscode.ConfigurationTarget.Global);
     await waitForSetting(TOGGLE_MODE_SETTING, "window");
+    await waitForActiveEditor(uri);
     await vscode.commands.executeCommand("refhaven.toggleFileHeatmap", uri);
     await waitForSetting(MODE_SETTING, "heatmap");
 
@@ -48,14 +52,33 @@ suite("File annotations", () => {
   });
 });
 
+/**
+ * Toggling the heatmap needs an active tracked editor: without one the command
+ * warns and changes nothing, which every later assertion in this test would
+ * report as an unrelated timeout. `showTextDocument` can resolve before the
+ * editor becomes active, so wait for it and fail here with the real cause.
+ */
+async function waitForActiveEditor(uri: vscode.Uri): Promise<void> {
+  const expected = uri.toString();
+  await waitFor(() => vscode.window.activeTextEditor?.document.uri.toString() === expected);
+  assert.equal(
+    vscode.window.activeTextEditor?.document.uri.toString(),
+    expected,
+    "the toggled file must be the active editor",
+  );
+}
+
 async function waitForSetting(setting: string, expected: string): Promise<void> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    const value = readSetting(setting);
-    if (value === expected) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+  await waitFor(() => readSetting(setting) === expected);
   assert.equal(readSetting(setting), expected);
+}
+
+async function waitFor(satisfied: () => boolean): Promise<void> {
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (satisfied()) return;
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
 }
 
 function readSetting(setting: string): unknown {
