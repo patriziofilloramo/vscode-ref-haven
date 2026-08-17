@@ -6,6 +6,13 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Explain an empty branch comparison in the tree instead of only in the section
+  tooltip. Branch-changes mode diffs the merge base against the target, so a
+  target already contained in the base is legitimately empty; the view now
+  names that cause and points to swapping the refs or switching to tip-to-tip.
+
 ## [0.14.0] — 2026-08-17
 
 ### Added

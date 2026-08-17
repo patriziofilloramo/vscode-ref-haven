@@ -29,6 +29,7 @@ import {
   type FolderNode,
   type MessageNode,
 } from "./changeNodes";
+import { emptyComparisonDescription, emptyComparisonExplanation } from "./emptyComparison";
 
 export const COMPARISON_VIEW_ID = "refhaven.comparisons";
 export const COMPARISON_VIEW_FOCUS_COMMAND = `${COMPARISON_VIEW_ID}.focus`;
@@ -445,7 +446,8 @@ export class ComparisonTreeProvider
       this.fileFilter,
       this.fileSort,
     );
-    if (files.length === 0 && result.files.length > 0) {
+    if (result.files.length === 0) return emptyFilesNodes(result);
+    if (files.length === 0) {
       return [
         {
           icon: "filter",
@@ -664,32 +666,18 @@ function mergePreviewTooltipLine(result: ComparisonResult): string[] {
   ];
 }
 
-/** Explains WHY a comparison legitimately has no changed files. */
-function emptyFilesDescription(result: ComparisonResult): string {
-  const target = result.comparison.targetRef.displayName;
-  if (result.aheadCount === 0 && result.behindCount === 0) {
-    return "branches point at the same commit";
-  }
-  if (result.comparison.mode === "branchChanges" && result.aheadCount === 0) {
-    return `${target} has no commits of its own`;
-  }
-  return "no differences";
+function emptyFilesTooltip(result: ComparisonResult): string {
+  const { cause, remedy } = emptyComparisonExplanation(result);
+  return remedy ? `${cause} ${remedy}` : cause;
 }
 
-function emptyFilesTooltip(result: ComparisonResult): string {
-  const base = result.comparison.baseRef.displayName;
-  const target = result.comparison.targetRef.displayName;
-  if (result.aheadCount === 0 && result.behindCount === 0) {
-    return `${target} and ${base} point at the same commit, so there is nothing to diff.`;
-  }
-  if (result.comparison.mode === "branchChanges" && result.aheadCount === 0) {
-    return (
-      `Branch-changes mode diffs the merge base against ${target}, and every commit of ` +
-      `${target} is already part of ${base}. Swap base and target to see what ${base} adds, ` +
-      `or switch the comparison to tip-to-tip mode to see the full difference.`
-    );
-  }
-  return `The trees of ${base} and ${target} are identical for this comparison mode.`;
+/** Surfaces the empty-comparison reason in the tree instead of only on hover. */
+function emptyFilesNodes(result: ComparisonResult): MessageNode[] {
+  const { cause, remedy } = emptyComparisonExplanation(result);
+  return [
+    { icon: "info", kind: "message", label: cause },
+    ...(remedy ? [{ icon: "lightbulb", kind: "message" as const, label: remedy }] : []),
+  ];
 }
 
 function comparisonTooltip(
@@ -748,11 +736,10 @@ function createSectionItem(
 
   if (section === "files") {
     const totals = sumDiffTotals(result.files);
+    // An empty comparison still has children: the reason it is empty.
     const item = new vscode.TreeItem(
       `${pluralize(result.files.length, "file")} changed`,
-      result.files.length > 0
-        ? vscode.TreeItemCollapsibleState.Expanded
-        : vscode.TreeItemCollapsibleState.None,
+      vscode.TreeItemCollapsibleState.Expanded,
     );
     item.description =
       result.files.length > 0
@@ -761,7 +748,7 @@ function createSectionItem(
             formatDiffStats(totals.additions, totals.deletions),
             ...(filter === "all" ? [] : [`filter: ${filter}`]),
           ].join(" · ")
-        : emptyFilesDescription(result);
+        : emptyComparisonDescription(result);
     if (result.files.length === 0) item.tooltip = emptyFilesTooltip(result);
     item.iconPath = new vscode.ThemeIcon("request-changes");
     item.id = `${result.comparison.id}:section:files`;
