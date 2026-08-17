@@ -6,6 +6,8 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-08-17
+
 ### Changed
 
 - Explain an empty branch comparison in the tree instead of only in the section
