@@ -443,17 +443,24 @@ suite("composite native views", () => {
         inspectorSections.map((node) => inspector.getTreeItem(node).label),
         ["File History", "Commit Details"],
       );
-      fileHistory.setTarget({ filePath: "src/example.ts", repositoryRoot: resolve("repository") });
+      fileHistory.setTarget({
+        filePath: "src/example.ts",
+        kind: "file",
+        repositoryRoot: resolve("repository"),
+      });
       fileHistory.setFilter("alice");
       const historySection = inspectorSections.find(
         (node) => node.kind === "inspectorSection" && node.section === "fileHistory",
       );
       assert.ok(historySection);
-      assert.equal(inspector.getTreeItem(historySection).description, "example.ts · Filter: alice");
+      assert.equal(
+        inspector.getTreeItem(historySection).description,
+        "example.ts · Follow on · Filter: alice",
+      );
       const filteredHistory = await inspector.getChildren(historySection);
       assert.deepEqual(
         filteredHistory.map((node) => inspector.getTreeItem(node).label),
-        ["No revisions match “alice”."],
+        ["No loaded revisions match “alice”."],
       );
       const repositorySections = await repository.getChildren();
       assert.deepEqual(repositorySections, []);
@@ -473,6 +480,105 @@ suite("composite native views", () => {
       commitDetails.dispose();
       branches.dispose();
       worktrees.dispose();
+    }
+  });
+
+  test("pages history, exposes state, and cancels stale targets", async () => {
+    const provider = new FileHistoryTreeProvider();
+    const requests: { readonly followRenames: boolean; readonly page: number }[] = [];
+    provider.setLoader((_target, request) => {
+      const page = request.cursor ? 1 : 0;
+      requests.push({ followRenames: request.followRenames, page });
+      const commit = createCommitInfo(page === 0 ? "a" : "b", "revision");
+      return Promise.resolve({
+        entries: [
+          {
+            change: { newPath: "src/example.ts", status: "modified" },
+            commit,
+            parentSha: page === 0 ? "0".repeat(40) : null,
+          },
+        ],
+        hasMore: page === 0,
+        nextCursor:
+          page === 0
+            ? { filePath: "src/example.ts", kind: "file", revision: "0".repeat(40) }
+            : undefined,
+      });
+    });
+
+    try {
+      provider.setTarget({
+        filePath: "src/example.ts",
+        kind: "file",
+        repositoryRoot: resolve("repository"),
+      });
+      const firstPage = await provider.getChildren();
+      assert.deepEqual(
+        firstPage.map(({ kind }) => kind),
+        ["fileHistoryCommit", "historyLoadMore"],
+      );
+      const loadMore = firstPage.find(({ kind }) => kind === "historyLoadMore");
+      assert.ok(loadMore?.kind === "historyLoadMore");
+      await provider.loadMore(loadMore);
+      assert.deepEqual(
+        (await provider.getChildren()).map(({ kind }) => kind),
+        ["fileHistoryCommit", "fileHistoryCommit"],
+      );
+      assert.deepEqual(requests, [
+        { followRenames: true, page: 0 },
+        { followRenames: true, page: 1 },
+      ]);
+
+      provider.setFollowRenames(false);
+      await provider.getChildren();
+      assert.deepEqual(requests.at(-1), { followRenames: false, page: 0 });
+      assert.match(provider.getTargetLabel() ?? "", /Follow off/u);
+      provider.setTarget({
+        endLine: 3,
+        filePath: "src/example.ts",
+        kind: "line",
+        repositoryRoot: resolve("repository"),
+        startLine: 2,
+      });
+      provider.setPinned(true);
+      assert.equal(provider.getHistoryLabel(), "Line History");
+      assert.match(provider.getTargetLabel() ?? "", /example\.ts:2–3 · Pinned/u);
+    } finally {
+      provider.dispose();
+    }
+
+    const cancellable = new FileHistoryTreeProvider();
+    let staleSignal: AbortSignal | undefined;
+    cancellable.setLoader((target, _request, signal) => {
+      if (target.filePath === "stale.ts") {
+        staleSignal = signal;
+        return new Promise((resolvePage) => {
+          signal.addEventListener(
+            "abort",
+            () => resolvePage({ entries: [], hasMore: false, nextCursor: undefined }),
+            { once: true },
+          );
+        });
+      }
+      return Promise.resolve({ entries: [], hasMore: false, nextCursor: undefined });
+    });
+    try {
+      cancellable.setTarget({
+        filePath: "stale.ts",
+        kind: "file",
+        repositoryRoot: resolve("repository"),
+      });
+      const staleLoad = cancellable.getChildren();
+      cancellable.setTarget({
+        filePath: "current.ts",
+        kind: "file",
+        repositoryRoot: resolve("repository"),
+      });
+      await staleLoad;
+      assert.equal(staleSignal?.aborted, true);
+      assert.deepEqual(await cancellable.getChildren(), []);
+    } finally {
+      cancellable.dispose();
     }
   });
 });

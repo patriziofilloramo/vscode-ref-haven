@@ -251,17 +251,60 @@ suite("native branch diff", () => {
 
   test("loads file and line history without leaving the repository", async () => {
     const fileHistory = await listFileHistory(repositoryRoot, "rename-new.txt");
-    assert.equal(fileHistory.length, 2);
-    const [latestEntry, originalEntry] = fileHistory;
+    assert.equal(fileHistory.entries.length, 2);
+    assert.equal(fileHistory.hasMore, false);
+    const [latestEntry, originalEntry] = fileHistory.entries;
     assert.ok(latestEntry);
     assert.ok(originalEntry);
     assert.equal(latestEntry.change.status, "renamed");
     assert.equal(latestEntry.change.oldPath, "rename-old.txt");
     assert.equal(originalEntry.change.newPath, "rename-old.txt");
 
+    const firstPage = await listFileHistory(repositoryRoot, "rename-new.txt", {
+      cursor: undefined,
+      followRenames: true,
+      limit: 1,
+    });
+    const secondPage = await listFileHistory(repositoryRoot, "rename-new.txt", {
+      cursor: firstPage.nextCursor,
+      followRenames: true,
+      limit: 1,
+    });
+    assert.equal(firstPage.hasMore, true);
+    assert.equal(secondPage.hasMore, false);
+    assert.equal(firstPage.entries[0]?.commit.sha, latestEntry.commit.sha);
+    assert.equal(secondPage.entries[0]?.commit.sha, originalEntry.commit.sha);
+
+    const withoutRenameTracking = await listFileHistory(repositoryRoot, "rename-new.txt", {
+      cursor: undefined,
+      followRenames: false,
+      limit: 50,
+    });
+    assert.deepEqual(
+      withoutRenameTracking.entries.map(({ commit }) => commit.subject),
+      [latestEntry.commit.subject],
+    );
+
     const lineHistory = await listLineHistory(repositoryRoot, "modified.txt", 1, 1);
     assert.deepEqual(
-      lineHistory.map(({ subject }) => subject),
+      lineHistory.entries.map(({ commit }) => commit.subject),
+      ["feature changes", "base"],
+    );
+    assert.ok(lineHistory.entries[0]?.parentSha);
+    const firstLinePage = await listLineHistory(repositoryRoot, "modified.txt", 1, 1, {
+      cursor: undefined,
+      followRenames: false,
+      limit: 1,
+    });
+    const secondLinePage = await listLineHistory(repositoryRoot, "modified.txt", 1, 1, {
+      cursor: firstLinePage.nextCursor,
+      followRenames: false,
+      limit: 1,
+    });
+    assert.equal(firstLinePage.hasMore, true);
+    assert.equal(secondLinePage.hasMore, false);
+    assert.deepEqual(
+      [firstLinePage.entries[0]?.commit.subject, secondLinePage.entries[0]?.commit.subject],
       ["feature changes", "base"],
     );
   });

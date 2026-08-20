@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   FILE_HISTORY_LOG_FORMAT,
   GitFileHistoryParseError,
+  LINE_HISTORY_LOG_FORMAT,
   parseFileHistory,
+  parseLineHistory,
 } from "../../src/infrastructure/git/fileHistory";
 
 const NUL = "\0";
@@ -19,6 +21,29 @@ function historyRecord(
 suite("file history parser", () => {
   test("declares a NUL-delimited metadata format", () => {
     assert.equal(FILE_HISTORY_LOG_FORMAT, "%H%x00%P%x00%an%x00%at%x00%s%x00");
+    assert.equal(LINE_HISTORY_LOG_FORMAT, "%H%x00%P%x00%an%x00%at%x00%s%x00");
+  });
+
+  test("parses line history with first-parent information", () => {
+    const sha = "1".repeat(40);
+    const parentSha = "2".repeat(40);
+    const output = `${[sha, parentSha, "Ada", "10", "change line"].join(NUL)}${NUL}`;
+
+    assert.deepEqual(parseLineHistory(output), [
+      {
+        commit: {
+          authorDate: 10_000,
+          authorName: "Ada",
+          sha,
+          subject: "change line",
+        },
+        parentSha,
+      },
+    ]);
+    assert.throws(
+      () => parseLineHistory(`${[sha, "bad", "Ada", "10", "subject"].join(NUL)}${NUL}`),
+      GitFileHistoryParseError,
+    );
   });
 
   test("parses modified and renamed file history entries", () => {

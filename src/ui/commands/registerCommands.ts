@@ -15,7 +15,7 @@ import type { SavedComparisonV1 } from "../../domain/comparison";
 import type { CommitInfo } from "../../domain/comparisonResult";
 import type { FileNode } from "../tree/changeNodes";
 import type { ComparisonTreeNode } from "../tree/ComparisonTreeProvider";
-import type { FileHistoryNode } from "../tree/FileHistoryTreeProvider";
+import type { FileHistoryNode, HistoryLoadMoreNode } from "../tree/FileHistoryTreeProvider";
 import type { BranchCommitNode, BranchNode, BranchesTreeNode } from "../tree/BranchesTreeProvider";
 import type { DetailNode } from "../tree/CommitDetailsTreeProvider";
 import type { StashNode, StashTreeNode } from "../tree/StashTreeProvider";
@@ -105,6 +105,10 @@ export function registerCommands(
     [COMMAND_IDS.copyWorktreePath]: (node) =>
       repositoryNavigationController.copyWorktreePath(requireWorktree(node)),
     [COMMAND_IDS.dismissFileAnnotations]: () => fileActionsController.dismissFileAnnotations(),
+    [COMMAND_IDS.disableFileHistoryFollowRenames]: () =>
+      fileHistoryController.setFollowRenames(false),
+    [COMMAND_IDS.enableFileHistoryFollowRenames]: () =>
+      fileHistoryController.setFollowRenames(true),
     [COMMAND_IDS.findOtherStashesContainingFile]: (node) =>
       fileActionsController.findOtherStashesContainingFile(node),
     [COMMAND_IDS.markAllComparisonFilesReviewed]: (node) =>
@@ -113,6 +117,8 @@ export function registerCommands(
       controller.markFileReviewed(requireReviewFile(node), true),
     [COMMAND_IDS.markFileUnreviewed]: (node) =>
       controller.markFileReviewed(requireReviewFile(node), false),
+    [COMMAND_IDS.loadMoreFileHistory]: (node) =>
+      fileHistoryController.loadMore(requireHistoryLoadMoreNode(node)),
     [COMMAND_IDS.newComparison]: () => controller.newComparison(),
     [COMMAND_IDS.nextUnreviewedFile]: (node) =>
       controller.openAdjacentUnreviewedFile("next", reviewNavigationCandidate(node)),
@@ -171,6 +177,7 @@ export function registerCommands(
     [COMMAND_IDS.openWorktree]: (node) =>
       repositoryNavigationController.openWorktree(requireWorktree(node)),
     [COMMAND_IDS.pinComparison]: (node) => controller.setPinned(requireComparison(node), true),
+    [COMMAND_IDS.pinFileHistory]: () => fileHistoryController.setPinned(true),
     [COMMAND_IDS.previousUnreviewedFile]: (node) =>
       controller.openAdjacentUnreviewedFile("previous", reviewNavigationCandidate(node)),
     [COMMAND_IDS.quickOpenComparisonFile]: (node) =>
@@ -205,17 +212,21 @@ export function registerCommands(
       });
     },
     [COMMAND_IDS.showFileHistory]: (resource, filePath) =>
-      typeof resource === "string" && typeof filePath === "string"
-        ? fileActionsController.showFileHistoryAt(resource, filePath)
-        : fileActionsController.showFileHistory(resource),
+      isInspectorHistorySection(resource)
+        ? fileHistoryController.showCurrentFileHistory()
+        : typeof resource === "string" && typeof filePath === "string"
+          ? fileActionsController.showFileHistoryAt(resource, filePath)
+          : fileActionsController.showFileHistory(resource),
     [COMMAND_IDS.showFileHeatmapLegend]: (resource) =>
       fileActionsController.showFileHeatmapLegend(resource),
     [COMMAND_IDS.showLineBlameActions]: (target) => blameController.showLineBlameActions(target),
     [COMMAND_IDS.inspectCurrentLine]: () => blameController.showLineBlameActions(),
     [COMMAND_IDS.showLineHistory]: (resource, filePath, lineNumber) =>
-      typeof resource === "string" && typeof filePath === "string"
-        ? fileActionsController.showLineHistoryAt(resource, filePath, lineNumber)
-        : fileActionsController.showLineHistory(resource),
+      isInspectorHistorySection(resource)
+        ? fileHistoryController.showLineHistory()
+        : typeof resource === "string" && typeof filePath === "string"
+          ? fileActionsController.showLineHistoryAt(resource, filePath, lineNumber)
+          : fileActionsController.showLineHistory(resource),
     [COMMAND_IDS.showRefHavenMenu]: (resource) => fileActionsController.showMenu(resource),
     [COMMAND_IDS.stashFile]: (resource) => fileActionsController.stashFile(resource),
     [COMMAND_IDS.swapComparison]: (node) => controller.swapComparison(requireComparison(node)),
@@ -223,6 +234,7 @@ export function registerCommands(
     [COMMAND_IDS.toggleFileHeatmap]: (resource) =>
       fileActionsController.toggleFileHeatmap(resource),
     [COMMAND_IDS.unpinComparison]: (node) => controller.setPinned(requireComparison(node), false),
+    [COMMAND_IDS.unpinFileHistory]: () => fileHistoryController.setPinned(false),
     [COMMAND_IDS.viewFilesAsList]: () => controller.setFilesLayout("list"),
     [COMMAND_IDS.viewFilesAsTree]: () => controller.setFilesLayout("tree"),
   };
@@ -263,7 +275,11 @@ function requireCommit(node: unknown): CommitInfo {
   const candidate = node as Partial<ComparisonTreeNode> | undefined;
   if (candidate?.kind === "commit" && candidate.commit !== undefined) return candidate.commit;
   const historyCandidate = node as Partial<FileHistoryNode> | undefined;
-  if (historyCandidate?.kind === "fileHistoryCommit" && historyCandidate.entry !== undefined) {
+  if (
+    (historyCandidate?.kind === "fileHistoryCommit" ||
+      historyCandidate?.kind === "lineHistoryCommit") &&
+    historyCandidate.entry !== undefined
+  ) {
     return historyCandidate.entry.commit;
   }
   const branchCandidate = node as Partial<BranchCommitNode> | undefined;
@@ -287,7 +303,7 @@ function requireCommitSelection(node: unknown): {
   }
   const historyNode = node as Partial<FileHistoryNode> | undefined;
   if (
-    historyNode?.kind === "fileHistoryCommit" &&
+    (historyNode?.kind === "fileHistoryCommit" || historyNode?.kind === "lineHistoryCommit") &&
     historyNode.entry !== undefined &&
     historyNode.target !== undefined
   ) {
@@ -307,13 +323,27 @@ function requireCommitSelection(node: unknown): {
 function requireFileHistoryNode(node: unknown): FileHistoryNode {
   const candidate = node as Partial<FileHistoryNode> | undefined;
   if (
-    candidate?.kind === "fileHistoryCommit" &&
+    (candidate?.kind === "fileHistoryCommit" || candidate?.kind === "lineHistoryCommit") &&
     candidate.entry !== undefined &&
     candidate.target !== undefined
   ) {
     return candidate as FileHistoryNode;
   }
   throw new Error("Select a commit under Inspector > File History first.");
+}
+
+function requireHistoryLoadMoreNode(node: unknown): HistoryLoadMoreNode {
+  const candidate = node as Partial<HistoryLoadMoreNode> | undefined;
+  if (candidate?.kind === "historyLoadMore" && candidate.target !== undefined) {
+    return candidate as HistoryLoadMoreNode;
+  }
+  throw new Error("Select Load older revisions under Inspector history first.");
+}
+
+function isInspectorHistorySection(node: unknown): boolean {
+  const candidate = node as
+    { readonly kind?: unknown; readonly section?: unknown } | null | undefined;
+  return candidate?.kind === "inspectorSection" && candidate.section === "fileHistory";
 }
 
 function requireCommitDetail(node: unknown): DetailNode {

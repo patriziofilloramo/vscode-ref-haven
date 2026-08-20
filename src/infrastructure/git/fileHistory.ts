@@ -1,4 +1,4 @@
-import type { FileHistoryEntry } from "../../domain/history";
+import type { FileHistoryEntry, LineHistoryEntry } from "../../domain/history";
 import type { FileChange } from "../../domain/comparisonResult";
 import { isGitObjectId } from "../../domain/gitObjectId";
 import { parseGitEpochSeconds } from "./gitTimestamp";
@@ -8,6 +8,8 @@ const FIELD_SEPARATOR = "\0";
 
 /** `git log --name-status -z --format` template matching {@link parseFileHistory}. */
 export const FILE_HISTORY_LOG_FORMAT = "%H%x00%P%x00%an%x00%at%x00%s%x00";
+/** `git log --no-patch -z --format` template matching {@link parseLineHistory}. */
+export const LINE_HISTORY_LOG_FORMAT = "%H%x00%P%x00%an%x00%at%x00%s%x00";
 
 export class GitFileHistoryParseError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
@@ -77,6 +79,49 @@ export function parseFileHistory(stdout: string): FileHistoryEntry[] {
     }
     entries.push({
       change,
+      commit: {
+        authorDate: authorDateSeconds * 1000,
+        authorName,
+        sha,
+        subject,
+      },
+      parentSha,
+    });
+  }
+  return entries;
+}
+
+/** Parses NUL-delimited line-history metadata, including the first parent for native diffs. */
+export function parseLineHistory(stdout: string): LineHistoryEntry[] {
+  const fields = stdout.split(FIELD_SEPARATOR);
+  const entries: LineHistoryEntry[] = [];
+  for (let index = 0; index < fields.length;) {
+    const sha = fields[index++]?.replace(/^\r?\n/u, "");
+    if (sha === "" && index === fields.length) break;
+    const parents = fields[index++];
+    const authorName = fields[index++];
+    const epochSeconds = fields[index++];
+    const subject = fields[index++];
+    if (
+      !sha ||
+      parents === undefined ||
+      authorName === undefined ||
+      epochSeconds === undefined ||
+      subject === undefined ||
+      !isGitObjectId(sha)
+    ) {
+      throw new GitFileHistoryParseError("Malformed line history metadata.");
+    }
+    const authorDateSeconds = parseGitEpochSeconds(epochSeconds);
+    if (authorDateSeconds === null) {
+      throw new GitFileHistoryParseError("Invalid line history timestamp.");
+    }
+    const firstParent = parents.split(" ")[0] ?? "";
+    const parentSha = firstParent === "" ? null : firstParent;
+    if (parentSha !== null && !isGitObjectId(parentSha)) {
+      throw new GitFileHistoryParseError("Invalid line history parent.");
+    }
+    entries.push({
       commit: {
         authorDate: authorDateSeconds * 1000,
         authorName,

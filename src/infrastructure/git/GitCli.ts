@@ -4,7 +4,12 @@ import type { FileBlameLine, LineBlame } from "../../domain/blame";
 import type { BranchRef, RepositoryIdentity } from "../../domain/comparison";
 import type { CommitDetails, CommitSearchQuery } from "../../domain/commitDetails";
 import { COMMIT_PAGE_SIZE, type CommitInfo, type FileChange } from "../../domain/comparisonResult";
-import type { FileHistoryEntry } from "../../domain/history";
+import type {
+  FileHistoryEntry,
+  HistoryPage,
+  HistoryPageCursor,
+  HistoryPageRequest,
+} from "../../domain/history";
 import { MAX_INTERACTIVE_INPUT_LENGTH, MAX_STASH_MESSAGE_LENGTH } from "../../domain/inputLimits";
 import type { ChangedLineRange } from "../../domain/fileAnnotations";
 import { isGitObjectId, requireGitObjectId } from "../../domain/gitObjectId";
@@ -25,7 +30,12 @@ import { COMMIT_DETAILS_FORMAT, parseCommitDetails } from "./commitDetails";
 import { assertValidCommitSearchQuery, buildCommitSearchCriteria } from "./commitSearch";
 import { assertNoActiveContentFilters } from "./contentFilterGuard";
 import { parseChangedLineRanges } from "./diffHunks";
-import { FILE_HISTORY_LOG_FORMAT, parseFileHistory } from "./fileHistory";
+import {
+  FILE_HISTORY_LOG_FORMAT,
+  LINE_HISTORY_LOG_FORMAT,
+  parseFileHistory,
+  parseLineHistory,
+} from "./fileHistory";
 import { parseNameStatusZ } from "./nameStatus";
 import { mergeChangesWithStats, parseNumstatZ } from "./numstat";
 import { STASH_LOG_FORMAT, parseStashList } from "./stashList";
@@ -439,27 +449,52 @@ export async function listRecentCommits(
 export async function listFileHistory(
   repositoryRoot: string,
   filePath: string,
-  limit = COMMIT_PAGE_SIZE,
+  request: HistoryPageRequest = {
+    cursor: undefined,
+    followRenames: true,
+    limit: COMMIT_PAGE_SIZE,
+  },
   signal?: AbortSignal,
-): Promise<FileHistoryEntry[]> {
+): Promise<HistoryPage<FileHistoryEntry>> {
   assertRepositoryRelativeGitPath(filePath);
+  const limit = validateHistoryPageLimit(request);
+  if (request.cursor?.kind === "line") {
+    throw new Error("A line history cursor cannot continue file history.");
+  }
+  const queryPath = request.cursor?.filePath ?? filePath;
+  assertRepositoryRelativeGitPath(queryPath);
+  const revision = request.cursor?.revision;
+  if (revision) requireGitObjectId(revision, "history cursor revision");
   const stdout = await runGit(
     repositoryRoot,
     withPortableLiteralPathspecs(
       [
         "log",
-        "--follow",
-        `--max-count=${limit.toString()}`,
+        ...(request.followRenames ? ["--follow"] : []),
+        `--max-count=${(limit + (revision ? 2 : 1)).toString()}`,
         `--format=${FILE_HISTORY_LOG_FORMAT}`,
         "--name-status",
         "-z",
         "--find-renames",
+        ...(revision ? [revision] : []),
       ],
-      [filePath],
+      [queryPath],
     ),
     signal,
   ).catch((error: unknown) => failGitOperation(error, "Git could not load the file history."));
-  return parseFileHistory(stdout);
+  const parsed = continueFileHistory(parseFileHistory(stdout), revision);
+  const entries = parsed.slice(0, limit);
+  const nextCursor = fileHistoryCursor(
+    entries.at(-1),
+    parsed.length > limit,
+    queryPath,
+    request.followRenames,
+  );
+  return {
+    entries,
+    hasMore: nextCursor !== undefined,
+    nextCursor,
+  };
 }
 
 export async function listLineHistory(
@@ -467,9 +502,13 @@ export async function listLineHistory(
   filePath: string,
   startLine: number,
   endLine: number,
-  limit = COMMIT_PAGE_SIZE,
+  request: HistoryPageRequest = {
+    cursor: undefined,
+    followRenames: false,
+    limit: COMMIT_PAGE_SIZE,
+  },
   signal?: AbortSignal,
-): Promise<CommitInfo[]> {
+): Promise<HistoryPage> {
   assertRepositoryRelativeGitPath(filePath);
   if (
     !Number.isInteger(startLine) ||
@@ -479,19 +518,66 @@ export async function listLineHistory(
   ) {
     throw new Error("The selected line range is invalid.");
   }
+  const limit = validateHistoryPageLimit(request);
+  if (request.cursor?.kind === "file") {
+    throw new Error("A file history cursor cannot continue line history.");
+  }
+  const offset = request.cursor?.offset ?? 0;
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error("History page offset must be a non-negative integer.");
+  }
   const stdout = await runGit(
     repositoryRoot,
     [
       "log",
       "--no-patch",
-      `--max-count=${limit.toString()}`,
-      `--format=${COMMIT_LOG_FORMAT}`,
+      `--skip=${offset.toString()}`,
+      `--max-count=${(limit + 1).toString()}`,
+      `--format=${LINE_HISTORY_LOG_FORMAT}`,
       "-L",
       `${startLine.toString()},${endLine.toString()}:${filePath}`,
     ],
     signal,
   ).catch((error: unknown) => failGitOperation(error, "Git could not load the line history."));
-  return parseCommitLog(stdout);
+  const parsed = parseLineHistory(stdout);
+  const hasMore = parsed.length > limit;
+  return {
+    entries: parsed.slice(0, limit),
+    hasMore,
+    nextCursor: hasMore ? { kind: "line", offset: offset + limit } : undefined,
+  };
+}
+
+function validateHistoryPageLimit(request: HistoryPageRequest): number {
+  if (!Number.isInteger(request.limit) || request.limit < 1 || request.limit > COMMIT_PAGE_SIZE) {
+    throw new Error(`History page size must be between 1 and ${COMMIT_PAGE_SIZE.toString()}.`);
+  }
+  return request.limit;
+}
+
+function fileHistoryCursor(
+  boundary: FileHistoryEntry | undefined,
+  hasAdditionalEntry: boolean,
+  queryPath: string,
+  followRenames: boolean,
+): HistoryPageCursor | undefined {
+  if (!boundary || !hasAdditionalEntry) return undefined;
+  return {
+    filePath: followRenames ? boundary.change.newPath : queryPath,
+    kind: "file",
+    revision: boundary.commit.sha,
+  };
+}
+
+function continueFileHistory(
+  entries: readonly FileHistoryEntry[],
+  cursorRevision: string | undefined,
+): readonly FileHistoryEntry[] {
+  if (!cursorRevision) return entries;
+  if (entries[0]?.commit.sha.toLocaleLowerCase() !== cursorRevision.toLocaleLowerCase()) {
+    throw new Error("Git could not continue file history from the requested revision.");
+  }
+  return entries.slice(1);
 }
 
 export async function readCommitDetails(

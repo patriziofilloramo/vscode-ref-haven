@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 
 import type { CommitDetailsTreeNode, CommitDetailsTreeProvider } from "./CommitDetailsTreeProvider";
-import type { FileHistoryNode, FileHistoryTreeProvider } from "./FileHistoryTreeProvider";
+import type { FileHistoryTreeProvider, HistoryTreeNode } from "./FileHistoryTreeProvider";
 
 export const INSPECTOR_VIEW_ID = "refhaven.inspector";
 export const INSPECTOR_FOCUS_COMMAND = `${INSPECTOR_VIEW_ID}.focus`;
@@ -19,7 +19,7 @@ interface InspectorMessageNode {
 }
 
 export type InspectorTreeNode =
-  CommitDetailsTreeNode | FileHistoryNode | InspectorMessageNode | InspectorSectionNode;
+  CommitDetailsTreeNode | HistoryTreeNode | InspectorMessageNode | InspectorSectionNode;
 
 const FILE_HISTORY_SECTION: InspectorSectionNode = {
   kind: "inspectorSection",
@@ -64,7 +64,7 @@ export class InspectorTreeProvider
     if (node.kind === "inspectorSection") {
       const isHistory = node.section === "fileHistory";
       const item = new vscode.TreeItem(
-        isHistory ? "File History" : "Commit Details",
+        isHistory ? this.fileHistoryProvider.getHistoryLabel() : "Commit Details",
         vscode.TreeItemCollapsibleState.Expanded,
       );
       const description = isHistory
@@ -73,6 +73,10 @@ export class InspectorTreeProvider
       if (description) item.description = description;
       item.iconPath = new vscode.ThemeIcon(isHistory ? "history" : "inspect");
       item.id = `inspector:${node.section}`;
+      if (isHistory) {
+        item.contextValue = this.fileHistoryProvider.getSectionContextValue();
+        item.tooltip = this.fileHistoryProvider.getSectionTooltip();
+      }
       return item;
     }
     if (node.kind === "inspectorMessage") {
@@ -81,7 +85,9 @@ export class InspectorTreeProvider
       item.tooltip = node.tooltip;
       return item;
     }
-    return node.kind === "fileHistoryCommit"
+    return node.kind === "fileHistoryCommit" ||
+      node.kind === "lineHistoryCommit" ||
+      node.kind === "historyLoadMore"
       ? this.fileHistoryProvider.getTreeItem(node)
       : this.commitDetailsProvider.getTreeItem(node);
   }
@@ -93,7 +99,14 @@ export class InspectorTreeProvider
         ? this.fileHistoryChildren()
         : this.commitDetailsChildren();
     }
-    if (node.kind === "fileHistoryCommit" || node.kind === "inspectorMessage") return [];
+    if (
+      node.kind === "fileHistoryCommit" ||
+      node.kind === "lineHistoryCommit" ||
+      node.kind === "historyLoadMore" ||
+      node.kind === "inspectorMessage"
+    ) {
+      return [];
+    }
     return this.commitDetailsProvider.getChildren(node);
   }
 
@@ -103,7 +116,13 @@ export class InspectorTreeProvider
    * carry a parent reference, and nothing reveals them.
    */
   public getParent(node: InspectorTreeNode): InspectorTreeNode | undefined {
-    if (node.kind === "fileHistoryCommit") return FILE_HISTORY_SECTION;
+    if (
+      node.kind === "fileHistoryCommit" ||
+      node.kind === "lineHistoryCommit" ||
+      node.kind === "historyLoadMore"
+    ) {
+      return FILE_HISTORY_SECTION;
+    }
     if (node.kind === "detail" || node.kind === "commitFiles") return COMMIT_DETAILS_SECTION;
     return undefined;
   }
@@ -120,7 +139,7 @@ export class InspectorTreeProvider
         },
       ];
     } catch (error) {
-      return [errorMessage(error, "Could not load file history. Use Refresh to try again.")];
+      return [errorMessage(error, "Could not load history. Use Refresh to try again.")];
     }
   }
 
@@ -155,5 +174,5 @@ function errorMessage(error: unknown, fallback: string): InspectorMessageNode {
 function fileHistoryEmptyMessage(provider: FileHistoryTreeProvider): string {
   if (!provider.hasTarget()) return "Open a tracked file to view its history.";
   const filter = provider.getFilter();
-  return filter ? `No revisions match “${filter}”.` : "No file revisions found.";
+  return filter ? `No loaded revisions match “${filter}”.` : "No revisions found.";
 }

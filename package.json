@@ -405,14 +405,45 @@
       },
       {
         "command": "refhaven.refreshFileHistory",
-        "title": "Refresh File History",
+        "title": "Refresh History",
         "category": "RefHaven",
         "icon": "$(refresh)"
       },
       {
+        "command": "refhaven.loadMoreFileHistory",
+        "title": "Load Older Revisions",
+        "category": "RefHaven",
+        "icon": "$(fold-down)"
+      },
+      {
+        "command": "refhaven.pinFileHistory",
+        "title": "Pin History",
+        "category": "RefHaven",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "refhaven.unpinFileHistory",
+        "title": "Unpin History",
+        "category": "RefHaven",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "refhaven.enableFileHistoryFollowRenames",
+        "title": "Enable Rename Tracking",
+        "category": "RefHaven",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "refhaven.disableFileHistoryFollowRenames",
+        "title": "Disable Rename Tracking",
+        "category": "RefHaven",
+        "icon": "$(circle-slash)"
+      },
+      {
         "command": "refhaven.showLineHistory",
         "title": "Show Line History",
-        "category": "RefHaven"
+        "category": "RefHaven",
+        "icon": "$(selection)"
       },
       {
         "command": "refhaven.openFileHistoryDiff",
@@ -1108,6 +1139,18 @@
           "when": "false"
         },
         {
+          "command": "refhaven.loadMoreFileHistory",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.pinFileHistory",
+          "when": "false"
+        },
+        {
+          "command": "refhaven.unpinFileHistory",
+          "when": "false"
+        },
+        {
           "command": "refhaven.changeStashFilter",
           "when": "false"
         },
@@ -1472,48 +1515,78 @@
           "group": "1_open@1"
         },
         {
+          "command": "refhaven.pinFileHistory",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistorySection\\..*\\.unpinned$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "refhaven.unpinFileHistory",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistorySection\\..*\\.pinned$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "refhaven.enableFileHistoryFollowRenames",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.fileHistorySection\\.followOff/",
+          "group": "inline@2"
+        },
+        {
+          "command": "refhaven.disableFileHistoryFollowRenames",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.fileHistorySection\\.followOn/",
+          "group": "inline@2"
+        },
+        {
+          "command": "refhaven.showLineHistory",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.fileHistorySection/",
+          "group": "inline@3"
+        },
+        {
+          "command": "refhaven.showFileHistory",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.lineHistorySection/",
+          "group": "inline@3"
+        },
+        {
           "command": "refhaven.openFileHistoryDiff",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "1_open@1"
         },
         {
           "command": "refhaven.openFileHistoryAtRevision",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "1_open@2"
         },
         {
           "command": "refhaven.openPreviousFileHistoryRevision",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "1_open@3"
         },
         {
           "command": "refhaven.openNextFileHistoryRevision",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "1_open@4"
         },
         {
           "command": "refhaven.copyCommitSha",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "2_copy@1"
         },
         {
           "command": "refhaven.copyCommitMessage",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "2_copy@2"
         },
         {
           "command": "refhaven.showCommitDetails",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "1_open@5"
         },
         {
           "command": "refhaven.openBrowserCommit",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "1_open@6"
         },
         {
           "command": "refhaven.copyBrowserCommitUrl",
-          "when": "view == refhaven.inspector && viewItem == refhaven.fileHistoryCommit",
+          "when": "view == refhaven.inspector && viewItem =~ /^refhaven\\.(file|line)HistoryCommit$/",
           "group": "2_copy@3"
         },
         {

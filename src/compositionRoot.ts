@@ -19,6 +19,7 @@ import { StashController } from "./application/StashController";
 import {
   discoverRepositories,
   listFileHistory,
+  listLineHistory,
   listChangedFiles,
   listCommitFileChanges,
   listStashes,
@@ -113,6 +114,7 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   const fileHistoryController = new FileHistoryController(
     fileHistoryTreeProvider,
     controller,
+    context.workspaceState,
     logger,
   );
   const blameController = new BlameController(logger);
@@ -248,8 +250,17 @@ export function createCompositionRoot(context: vscode.ExtensionContext): void {
   treeProvider.setCommitFilesLoader((repositoryRoot, sha, signal) =>
     listCommitFileChanges(repositoryRoot, sha, signal),
   );
-  fileHistoryTreeProvider.setLoader((repositoryRoot, filePath, signal) =>
-    listFileHistory(repositoryRoot, filePath, undefined, signal),
+  fileHistoryTreeProvider.setLoader((target, request, signal) =>
+    target.kind === "file"
+      ? listFileHistory(target.repositoryRoot, target.filePath, request, signal)
+      : listLineHistory(
+          target.repositoryRoot,
+          target.filePath,
+          target.startLine,
+          target.endLine,
+          request,
+          signal,
+        ),
   );
   commitDetailsTreeProvider.setLoaders(
     (repositoryRoot, sha, signal) => readCommitDetails(repositoryRoot, sha, signal),

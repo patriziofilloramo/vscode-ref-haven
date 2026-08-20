@@ -213,9 +213,12 @@ suite("extension manifest", () => {
       "refhaven.copyStashMessage",
       "refhaven.copyStashSha",
       "refhaven.copyWorktreePath",
+      "refhaven.disableFileHistoryFollowRenames",
       "refhaven.dismissFileAnnotations",
+      "refhaven.enableFileHistoryFollowRenames",
       "refhaven.findOtherStashesContainingFile",
       "refhaven.inspectCurrentLine",
+      "refhaven.loadMoreFileHistory",
       "refhaven.markAllComparisonFilesReviewed",
       "refhaven.markFileReviewed",
       "refhaven.markFileUnreviewed",
@@ -241,6 +244,7 @@ suite("extension manifest", () => {
       "refhaven.openStashFileAtRevision",
       "refhaven.openWorktree",
       "refhaven.pinComparison",
+      "refhaven.pinFileHistory",
       "refhaven.previousUnreviewedFile",
       "refhaven.quickOpenComparisonFile",
       "refhaven.refreshAll",
@@ -265,6 +269,7 @@ suite("extension manifest", () => {
       "refhaven.toggleFileHeatmap",
       "refhaven.toggleInlineBlame",
       "refhaven.unpinComparison",
+      "refhaven.unpinFileHistory",
       "refhaven.viewFilesAsList",
       "refhaven.viewFilesAsTree",
     ]);
@@ -289,6 +294,8 @@ suite("extension manifest", () => {
       "refhaven.compareCurrentBranch",
       "refhaven.compareFileWithRevision",
       "refhaven.configureBrowserOrigin",
+      "refhaven.disableFileHistoryFollowRenames",
+      "refhaven.enableFileHistoryFollowRenames",
       "refhaven.inspectCurrentLine",
       "refhaven.newComparison",
       "refhaven.openFileAtRevision",
@@ -425,6 +432,40 @@ suite("extension manifest", () => {
         ),
       );
     }
+  });
+
+  test("keeps history paging, pinning, and rename tracking visible in the native tree", () => {
+    const itemMenus = loadManifest().contributes.menus["view/item/context"] ?? [];
+    for (const [command, state] of [
+      ["refhaven.pinFileHistory", "unpinned"],
+      ["refhaven.unpinFileHistory", "pinned"],
+      ["refhaven.enableFileHistoryFollowRenames", "followOff"],
+      ["refhaven.disableFileHistoryFollowRenames", "followOn"],
+    ] as const) {
+      assert.ok(
+        itemMenus.some(
+          ({ command: candidate, group, when }) =>
+            candidate === command && group?.startsWith("inline") && when?.includes(state),
+        ),
+      );
+    }
+    assert.ok(
+      loadManifest().contributes.commands.some(
+        ({ command }) => command === "refhaven.loadMoreFileHistory",
+      ),
+    );
+    assert.ok(
+      itemMenus.some(
+        ({ command, when }) =>
+          command === "refhaven.showLineHistory" && when?.includes("fileHistorySection"),
+      ),
+    );
+    assert.ok(
+      itemMenus.some(
+        ({ command, when }) =>
+          command === "refhaven.showFileHistory" && when?.includes("lineHistorySection"),
+      ),
+    );
   });
 
   test("keeps the comparison toolbar focused and moves display controls to overflow", () => {

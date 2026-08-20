@@ -72,6 +72,11 @@ suite("RefHaven extension", () => {
     assert.ok(commands.includes("refhaven.nextUnreviewedFile"));
     assert.ok(commands.includes("refhaven.changeStashFilter"));
     assert.ok(commands.includes("refhaven.changeFileHistoryFilter"));
+    assert.ok(commands.includes("refhaven.loadMoreFileHistory"));
+    assert.ok(commands.includes("refhaven.enableFileHistoryFollowRenames"));
+    assert.ok(commands.includes("refhaven.disableFileHistoryFollowRenames"));
+    assert.ok(commands.includes("refhaven.pinFileHistory"));
+    assert.ok(commands.includes("refhaven.unpinFileHistory"));
     assert.ok(commands.includes("refhaven.compareCommitWithParent"));
     assert.ok(commands.includes("refhaven.renameComparison"));
     assert.ok(commands.includes("refhaven.copyComparisonPatch"));
