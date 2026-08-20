@@ -31,7 +31,7 @@ The project-owned `scripts/clean.mjs` replaces `rimraf`. The project-owned Exten
 - `@vscode/test-electron` stays exact-pinned on 2.5.2 until an upgrade
   passes the full minimum/stable VS Code Extension Host matrix.
 - `mocha` stays on 11.3.0 while later 11.x versions resolve to a `diff` release covered by GHSA-73rr-hh4g-fpgx. Security takes precedence over version number.
-- `brace-expansion` is centrally overridden to exact version 5.0.8 so all
+- `brace-expansion` is centrally overridden to exact version 5.0.9 so all
   transitive consumers use one audited release instead of a floating range.
 - `serialize-javascript` is centrally overridden to the current patched release instead of accepting Mocha's older transitive range.
 

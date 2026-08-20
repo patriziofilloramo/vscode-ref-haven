@@ -6,6 +6,8 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-08-20
+
 ### Added
 
 - Add incremental 50-revision paging, cancellable **Load older revisions…**,

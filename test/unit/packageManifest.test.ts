@@ -112,7 +112,7 @@ suite("extension manifest", () => {
     assert.equal(manifest.name, "refhaven");
     assert.equal(manifest.displayName, "RefHaven");
     assert.equal(manifest.publisher, "patriziofilloramo");
-    assert.equal(manifest.version, "0.15.0");
+    assert.equal(manifest.version, "0.16.0");
     assert.match(manifest.description, /local processing/u);
   });
 
