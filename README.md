@@ -192,12 +192,18 @@ so there is no repository-wide blame work unless you opt in.
 <details>
 <summary><strong>📚 File and line history</strong></summary>
 
-- The **Inspector → File History** section follows the active file across
-  renames.
-- Filter revisions by commit, author, SHA, or path metadata.
-- Open historical changes as native diffs.
-- Navigate older and newer visible revisions.
-- Run **Show Line History** for the current editor selection.
+- **Inspector → File History** follows the active editor until you pin it.
+- Rename tracking uses local `git log --follow`, is on by default, and is shown
+  directly in the section header. Use its inline action or **Enable/Disable
+  Rename Tracking** from the Command Palette; the choice is kept per workspace.
+- Histories load 50 revisions at a time. **Load older revisions…** appends the
+  next page without discarding the current one and can be cancelled.
+- Filters cover the revisions already loaded and match commit, author, SHA, or
+  path metadata.
+- Run **Show Line History** to replace the section with the selected line range;
+  it is pinned automatically so opening a diff cannot lose the selection.
+- Open file and line changes as native diffs, then navigate newer or older
+  loaded revisions.
 - Open any tracked file at a locally available revision.
 - Compare the working-tree file with a selected revision.
 
@@ -327,22 +333,22 @@ concise data-handling notice.
 
 Open `Ctrl+Shift+P` and type `RefHaven`.
 
-| Command                                 | Use it when you want to...                          |
-| --------------------------------------- | --------------------------------------------------- |
-| `New Comparison`                        | Review any two locally available refs               |
-| `Compare Current Branch With...`        | Start from the checked-out branch                   |
-| `Search Commits`                        | Find local history by metadata or changed content   |
-| `Show File History`                     | Follow the active file across revisions and renames |
-| `Show Line History`                     | Trace the current selection                         |
-| `Inspect Current Line`                  | Open rich blame actions for the cursor line         |
-| `Open File at Revision...`              | Read a historical version                           |
-| `Compare File with Revision...`         | Diff the current file against a local ref           |
-| `Change File Annotations...`            | Enable blame, heatmap, or changes markers           |
-| `Toggle File Heatmap`                   | Enable or disable the heatmap directly              |
-| `Show File Actions`                     | Open the context-sensitive native action menu       |
-| `Stash This File...`                    | Safely set aside one tracked file                   |
-| `Configure Restricted Remote Origin...` | Enable or clear the strict remote-origin policy     |
-| `Line Intelligence`                     | Choose Full, Hover only, or Off                     |
+| Command                                 | Use it when you want to...                         |
+| --------------------------------------- | -------------------------------------------------- |
+| `New Comparison`                        | Review any two locally available refs              |
+| `Compare Current Branch With...`        | Start from the checked-out branch                  |
+| `Search Commits`                        | Find local history by metadata or changed content  |
+| `Show File History`                     | Follow the active file through paged local history |
+| `Show Line History`                     | Trace and pin the current selection in Inspector   |
+| `Inspect Current Line`                  | Open rich blame actions for the cursor line        |
+| `Open File at Revision...`              | Read a historical version                          |
+| `Compare File with Revision...`         | Diff the current file against a local ref          |
+| `Change File Annotations...`            | Enable blame, heatmap, or changes markers          |
+| `Toggle File Heatmap`                   | Enable or disable the heatmap directly             |
+| `Show File Actions`                     | Open the context-sensitive native action menu      |
+| `Stash This File...`                    | Safely set aside one tracked file                  |
+| `Configure Restricted Remote Origin...` | Enable or clear the strict remote-origin policy    |
+| `Line Intelligence`                     | Choose Full, Hover only, or Off                    |
 
 The editor, Explorer, Source Control resources, tree nodes, and blame status
 entry also expose context-sensitive RefHaven actions.

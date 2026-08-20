@@ -107,6 +107,16 @@ The same non-echo rule applies to malformed object IDs, status codes, numstat
 records, and worktree metadata: parser errors describe the failed contract but
 never interpolate repository-controlled fields.
 
+File and line history request one record beyond the 50-row UI page so the tree
+can expose **Load older revisions…** without first counting the repository.
+Followed file history restarts from the last displayed commit and path, verifies
+that boundary, then removes its single duplicate row. It does not use `--skip`:
+skipping a simplified `--follow` walk can lose the continuation at a rename
+boundary. Line history replays the same bounded `git log -L` query with a
+validated offset because Git owns the historical line-range mapping. A new
+target, refresh, follow-mode change, or user cancellation aborts the active Git
+process; completed pages remain available when loading a later page fails.
+
 ## Numstat
 
 Statistics are obtained separately:

@@ -34,8 +34,10 @@ enforces this matrix and validates VSIX packaging on Linux and Windows.
 
 ## Milestone acceptance coverage
 
-History coverage includes delimiter-safe `--follow` parser tests, rename-aware
-File History integration, and real `git log -L` execution in the Extension Host.
+History coverage includes delimiter-safe file/line parsers, cursor paging across
+a real rename boundary, explicit follow-on/follow-off behavior, real
+`git log -L` execution, stale-target cancellation, pin state, and incremental
+tree presentation in the Extension Host.
 Reference/search coverage includes tag parsing, strict typed-ref validation,
 real Working Tree comparison, local commit search with literal/regex and case
 semantics, content-filter isolation, and full commit-detail loading in the
@@ -319,8 +321,11 @@ Before delivering `refhaven-x.y.z.vsix`:
     and regular-expression modes with both case options; resolve a SHA prefix.
     Confirm no query text appears in the RefHaven output log.
 16. Filter Stashes and File History, expand a stash and local branch, navigate
-    commit parents and adjacent file revisions, and confirm Worktrees reports
-    clean/dirty state without changing repository state or contacting a remote.
+    commit parents and adjacent file revisions, then load at least three older
+    history pages. Cancel a fourth page, toggle visible rename tracking off and
+    on across an actual rename, pin/unpin the section, and confirm already loaded
+    rows remain stable. Confirm Worktrees reports clean/dirty state without
+    changing repository state or contacting a remote.
 17. Enable whole-file blame on a file containing several contiguous commit
     blocks. Verify author, relative age, and summary are readable, block markers
     are coherent, every line has hover details, compact/detailed and repeated
@@ -339,7 +344,7 @@ Before delivering `refhaven-x.y.z.vsix`:
 21. Repeat whole-file blame and heatmap checks in light, dark, high-contrast,
     and high-contrast-light themes, with edge/overview and optional line tint.
     Record screenshots only from the real installed VSIX.
-22. Repeat annotation, hover, file history, and comparison checks in a multi-root
+22. Repeat annotation, hover, paged file/line history, and comparison checks in a multi-root
     `.code-workspace`, a folder nested below the repository root, and Remote SSH
     with the extension installed on the remote side. Confirm no repository-root
     workspace assumption and no background network access.

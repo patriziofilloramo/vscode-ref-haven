@@ -6,6 +6,25 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add incremental 50-revision paging, cancellable **Load older revisions…**,
+  and pin/unpin controls to native file and line history.
+- Show rename tracking directly on File History, keep its explicit on/off choice
+  per workspace, and leave it enabled by default.
+
+### Changed
+
+- Move Line History from a blocking revision picker into the Inspector, pinned
+  to the selected range, with native commit-to-parent diffs and paging.
+- Continue followed file history with a validated revision/path cursor so pages
+  remain correct when a rename crosses the page boundary.
+
+### Fixed
+
+- Stop filters and navigation from making long histories appear complete after
+  the first 50 revisions, and preserve history while inspecting virtual diffs.
+
 ## [0.15.0] — 2026-08-17
 
 ### Changed

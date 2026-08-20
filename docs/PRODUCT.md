@@ -109,9 +109,10 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   is preserved rather than overwritten. The Stashes view lists existing
   stashes per repository with expandable file trees, native diffs,
   copy-message, revision actions, and recent-stash search.
-- **Native view enrichment:** Stashes and File History have in-memory filters;
-  expanded stashes show local change statistics; file history exposes parent,
-  rename-follow, and adjacent-revision navigation; Commit Details supports
+- **Native view enrichment:** Stashes and history have in-memory filters;
+  expanded stashes show local change statistics; file and line history expose
+  incremental paging, pinning, native diffs, parent navigation, and explicit
+  rename-follow state; Commit Details supports
   metadata copy and parent drill-down/diff; Branches show upstream divergence,
   tip metadata, and bounded expandable history; Worktrees show a local
   staged/unstaged/untracked/conflicted summary.
@@ -136,8 +137,13 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   default, an explicit window scope persists the choice, and Escape dismisses
   the active file without rewriting that preference. Computation is
   cancellable, bounded to 5,000 editor lines, and never persisted.
-- **File history:** an active-file Source Control view backed by `git log --follow`, with native per-revision diffs, rename tracking, copy actions, and open-at-revision.
-- **Line history:** a selection-aware quickpick backed by `git log -L`, opening the selected historical revision locally.
+- **File history:** an active-file Source Control section backed by paged local
+  `git log`, with native per-revision diffs, pinning, copy/open actions, and
+  visible rename tracking. `--follow` is on by default and its per-workspace
+  choice is controlled from the section or Command Palette.
+- **Line history:** a selection-aware, automatically pinned Inspector section
+  backed by paged `git log -L`; entries open the actual commit-to-parent file
+  diff instead of a detached revision picker.
 - **Flexible local references:** comparisons accept branches, tags, HEAD, typed locally resolvable revisions, and the live Working Tree; typed revisions are resolved and persisted as immutable SHAs.
 - **Commit search and details:** local history can be searched by message,
   author, SHA, or added/removed content, with explicit literal/extended-regex
