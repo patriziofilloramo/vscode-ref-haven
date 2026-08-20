@@ -24,6 +24,9 @@ All notable changes to RefHaven are recorded here. The format follows
 
 - Stop filters and navigation from making long histories appear complete after
   the first 50 revisions, and preserve history while inspecting virtual diffs.
+- Open added-line history rows with an empty parent side instead of requesting
+  a blob that did not yet exist, and make deletion rows' **Open File at This
+  Revision** action open the last existing parent revision.
 
 ## [0.15.0] — 2026-08-17
 

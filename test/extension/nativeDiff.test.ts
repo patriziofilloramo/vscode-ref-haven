@@ -32,6 +32,10 @@ import { previewMerge } from "../../src/infrastructure/git/mergePreview";
 import { resolveFileContextTarget } from "../../src/ui/commands/fileContext";
 import { GitRevisionContentProvider } from "../../src/ui/documents/GitRevisionContentProvider";
 import { ComparisonTreeProvider } from "../../src/ui/tree/ComparisonTreeProvider";
+import {
+  type FileHistoryNode,
+  FileHistoryTreeProvider,
+} from "../../src/ui/tree/FileHistoryTreeProvider";
 
 const EXTENSION_ID = "patriziofilloramo.refhaven";
 
@@ -307,6 +311,110 @@ suite("native branch diff", () => {
       [firstLinePage.entries[0]?.commit.subject, secondLinePage.entries[0]?.commit.subject],
       ["feature changes", "base"],
     );
+  });
+
+  test("opens file and line history rows against the correct revisions", async function () {
+    this.timeout(15_000);
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+
+    const renameHistory = await listFileHistory(repositoryRoot, "rename-new.txt");
+    const modifiedHistory = await listFileHistory(repositoryRoot, "modified.txt");
+    const deletedHistory = await listFileHistory(repositoryRoot, "deleted.txt");
+    const addedLineHistory = await listLineHistory(repositoryRoot, "added.txt", 1, 1);
+    const renamed = renameHistory.entries.find(({ change }) => change.status === "renamed");
+    const original = renameHistory.entries.find(({ change }) => change.status === "added");
+    const modified = modifiedHistory.entries.find(({ change }) => change.status === "modified");
+    const deleted = deletedHistory.entries.find(({ change }) => change.status === "deleted");
+    const addedLine = addedLineHistory.entries[0];
+    assert.ok(renamed);
+    assert.ok(original);
+    assert.ok(modified);
+    assert.ok(deleted);
+    assert.ok(addedLine);
+
+    await assertHistoryRowDiff(
+      {
+        entry: modified,
+        kind: "fileHistoryCommit",
+        target: { filePath: "modified.txt", kind: "file", repositoryRoot },
+      },
+      "before\n",
+      "after\n",
+    );
+    await assertHistoryRowDiff(
+      {
+        entry: renamed,
+        kind: "fileHistoryCommit",
+        target: { filePath: "rename-new.txt", kind: "file", repositoryRoot },
+      },
+      "renamed\n",
+      "renamed\n",
+      { leftFile: "rename-old.txt", rightFile: "rename-new.txt" },
+    );
+    await assertHistoryRowDiff(
+      {
+        entry: original,
+        kind: "fileHistoryCommit",
+        target: { filePath: "rename-new.txt", kind: "file", repositoryRoot },
+      },
+      "",
+      "renamed\n",
+    );
+    await assertHistoryRowDiff(
+      {
+        entry: deleted,
+        kind: "fileHistoryCommit",
+        target: { filePath: "deleted.txt", kind: "file", repositoryRoot },
+      },
+      "deleted\n",
+      "",
+    );
+    await assertHistoryRowDiff(
+      {
+        entry: addedLine,
+        kind: "lineHistoryCommit",
+        target: {
+          endLine: 1,
+          filePath: "added.txt",
+          kind: "line",
+          repositoryRoot,
+          startLine: 1,
+        },
+      },
+      "",
+      "added\n",
+    );
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    await vscode.commands.executeCommand("refhaven.openFileHistoryAtRevision", {
+      entry: deleted,
+      kind: "fileHistoryCommit",
+      target: { filePath: "deleted.txt", kind: "file", repositoryRoot },
+    });
+    assert.equal(vscode.window.activeTextEditor?.document.getText(), "deleted\n");
+    assert.match(vscode.window.activeTextEditor.document.uri.path, /deleted\.txt$/u);
+
+    let pickerTimeout: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        vscode.commands.executeCommand(
+          "refhaven.showLineHistory",
+          repositoryRoot,
+          "modified.txt",
+          1,
+        ),
+        new Promise<never>((_resolve, reject) => {
+          pickerTimeout = setTimeout(
+            () => reject(new Error("Show Line History opened a blocking picker.")),
+            2_000,
+          );
+        }),
+      ]);
+    } finally {
+      if (pickerTimeout) clearTimeout(pickerTimeout);
+    }
   });
 
   test("compares a reference with the live working tree", async () => {
@@ -791,4 +899,43 @@ function createComparison(repositoryRoot: string): SavedComparisonV1 {
     },
     updatedAt: 1,
   };
+}
+
+async function assertHistoryRowDiff(
+  node: FileHistoryNode,
+  expectedLeft: string,
+  expectedRight: string,
+  expectedFiles?: { readonly leftFile: string; readonly rightFile: string },
+): Promise<void> {
+  const provider = new FileHistoryTreeProvider();
+  provider.setLoader(() =>
+    Promise.resolve({ entries: [node.entry], hasMore: false, nextCursor: undefined }),
+  );
+  provider.setTarget(node.target);
+  try {
+    const [renderedNode] = await provider.getChildren();
+    assert.ok(renderedNode);
+    const command = provider.getTreeItem(renderedNode).command;
+    assert.ok(command);
+    assert.equal(command.command, "refhaven.openFileHistoryDiff");
+
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+    const commandArguments = (command.arguments ?? []) as readonly unknown[];
+    await vscode.commands.executeCommand(command.command, ...commandArguments);
+
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    assert.ok(input instanceof vscode.TabInputTextDiff, "Expected a native history diff tab");
+    const [leftDocument, rightDocument] = await Promise.all([
+      vscode.workspace.openTextDocument(input.original),
+      vscode.workspace.openTextDocument(input.modified),
+    ]);
+    assert.equal(leftDocument.getText(), expectedLeft);
+    assert.equal(rightDocument.getText(), expectedRight);
+    if (expectedFiles) {
+      assert.match(input.original.path, new RegExp(`/${expectedFiles.leftFile}$`, "u"));
+      assert.match(input.modified.path, new RegExp(`/${expectedFiles.rightFile}$`, "u"));
+    }
+  } finally {
+    provider.dispose();
+  }
 }

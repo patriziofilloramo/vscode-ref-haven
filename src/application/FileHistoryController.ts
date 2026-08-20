@@ -1,8 +1,12 @@
 import * as vscode from "vscode";
 
+import type { FileChange } from "../domain/comparisonResult";
 import { isFileHistoryEntry } from "../domain/history";
 import { MAX_INTERACTIVE_INPUT_LENGTH } from "../domain/inputLimits";
-import { resolveWorkspaceRepositoryFile } from "../infrastructure/git/GitCli";
+import {
+  listChangedFilesForPath,
+  resolveWorkspaceRepositoryFile,
+} from "../infrastructure/git/GitCli";
 import { GitOperationError } from "../infrastructure/git/GitProcess";
 import {
   FILE_HISTORY_FOCUS_COMMAND,
@@ -105,13 +109,11 @@ export class FileHistoryController implements vscode.Disposable {
     await this.showFileHistory(target.repositoryRoot, target.filePath, false);
   }
 
-  public openFileDiff(node: FileHistoryNode): Promise<void> {
-    const change = isFileHistoryEntry(node.entry)
-      ? node.entry.change
-      : { newPath: node.target.filePath, status: "modified" as const };
+  public async openFileDiff(node: FileHistoryNode): Promise<void> {
+    const { change, parentSha } = await this.resolveHistoryChange(node);
     return this.comparisonController.openFileDiff(
       {
-        fromSha: node.entry.parentSha,
+        fromSha: parentSha,
         label: node.entry.commit.subject || node.entry.commit.sha.slice(0, 8),
         repositoryRootPath: node.target.repositoryRoot,
         toSha: node.entry.commit.sha,
@@ -120,13 +122,28 @@ export class FileHistoryController implements vscode.Disposable {
     );
   }
 
-  public openFileAtRevision(node: FileHistoryNode): Promise<void> {
-    const filePath = isFileHistoryEntry(node.entry)
-      ? node.entry.change.newPath
+  public async openFileAtRevision(node: FileHistoryNode): Promise<void> {
+    const fileEntry = isFileHistoryEntry(node.entry) ? node.entry : undefined;
+    const opensBeforeDeletion = fileEntry?.change.status === "deleted";
+    const revision = opensBeforeDeletion ? fileEntry.parentSha : node.entry.commit.sha;
+    if (!revision) {
+      void vscode.window.showInformationMessage("This revision does not contain the file.");
+      return;
+    }
+    const filePath = fileEntry
+      ? opensBeforeDeletion
+        ? (fileEntry.change.oldPath ?? fileEntry.change.newPath)
+        : fileEntry.change.newPath
       : node.target.filePath;
+    if (opensBeforeDeletion) {
+      void vscode.window.setStatusBarMessage(
+        "RefHaven: Opened the last revision before the file was deleted",
+        3_000,
+      );
+    }
     return this.comparisonController.openFileAtRevision(
       node.target.repositoryRoot,
-      node.entry.commit.sha,
+      revision,
       filePath,
     );
   }
@@ -208,5 +225,34 @@ export class FileHistoryController implements vscode.Disposable {
   public dispose(): void {
     this.disposed = true;
     this.generation += 1;
+  }
+
+  private async resolveHistoryChange(node: FileHistoryNode): Promise<{
+    readonly change: FileChange;
+    readonly parentSha: string | null;
+  }> {
+    if (isFileHistoryEntry(node.entry)) {
+      return { change: node.entry.change, parentSha: node.entry.parentSha };
+    }
+    if (node.entry.parentSha === null) {
+      return {
+        change: { newPath: node.target.filePath, status: "added" },
+        parentSha: null,
+      };
+    }
+    const changes = await listChangedFilesForPath(
+      node.target.repositoryRoot,
+      node.entry.parentSha,
+      node.entry.commit.sha,
+      node.target.filePath,
+    );
+    const change = changes.find(
+      ({ newPath, oldPath }) =>
+        newPath === node.target.filePath || oldPath === node.target.filePath,
+    );
+    if (!change) {
+      throw new Error("Git did not report a change for the selected line-history revision.");
+    }
+    return { change, parentSha: node.entry.parentSha };
   }
 }

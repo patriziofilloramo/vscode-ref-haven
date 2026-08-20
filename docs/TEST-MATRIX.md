@@ -84,8 +84,11 @@ read file content or mutate a repository.
 Native-view-enrichment coverage includes delimiter-safe branch tracking
 metadata, gone-upstream handling, porcelain-v2 worktree state including rename
 continuations, real branch tip/history/status reads, exact command/manifest
-registration, and local-only lazy loading. Filters are in-memory presentation
-state and introduce no persistence or network path.
+registration, and local-only lazy loading. Native history-row tests execute the
+actual tree commands and verify both diff sides for modified, added, deleted,
+renamed, and line-history entries, including opening the last existing revision
+of a deleted file. Filters are in-memory presentation state and introduce no
+persistence or network path.
 Maintenance-hardening coverage includes trusted Markdown command arguments
 containing unbalanced parentheses, unchanged blame-origin suppression,
 fallback inline hover behavior, separate selected-index/worktree stash
@@ -324,8 +327,12 @@ Before delivering `refhaven-x.y.z.vsix`:
     commit parents and adjacent file revisions, then load at least three older
     history pages. Cancel a fourth page, toggle visible rename tracking off and
     on across an actual rename, pin/unpin the section, and confirm already loaded
-    rows remain stable. Confirm Worktrees reports clean/dirty state without
-    changing repository state or contacting a remote.
+    rows remain stable. Click modified, added, deleted, and renamed File History
+    rows and verify the native diff sides; use **Open File at This Revision** on
+    the deletion row and verify the last existing content opens. Run **Show Line
+    History** directly and verify Inspector opens without a commit picker, then
+    click a row that introduced a file. Confirm Worktrees reports clean/dirty
+    state without changing repository state or contacting a remote.
 17. Enable whole-file blame on a file containing several contiguous commit
     blocks. Verify author, relative age, and summary are readable, block markers
     are coherent, every line has hover details, compact/detailed and repeated
