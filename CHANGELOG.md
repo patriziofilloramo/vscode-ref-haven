@@ -6,6 +6,8 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-08-21
+
 ### Changed
 
 - Make direct file-heatmap activation observable by reporting the rendered line
