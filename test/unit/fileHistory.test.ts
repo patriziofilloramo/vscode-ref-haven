@@ -18,16 +18,26 @@ function historyRecord(
   return `${metadata.join(NUL)}${NUL}${NUL}\n${[status, ...paths].join(NUL)}${NUL}`;
 }
 
+function lineHistoryRecord(
+  metadata: readonly [string, string, string, string, string],
+  patch: string,
+): string {
+  return `${NUL}${metadata.join(NUL)}${NUL}${patch}`;
+}
+
 suite("file history parser", () => {
   test("declares a NUL-delimited metadata format", () => {
     assert.equal(FILE_HISTORY_LOG_FORMAT, "%H%x00%P%x00%an%x00%at%x00%s%x00");
-    assert.equal(LINE_HISTORY_LOG_FORMAT, "%H%x00%P%x00%an%x00%at%x00%s%x00");
+    assert.equal(LINE_HISTORY_LOG_FORMAT, "%x00%H%x00%P%x00%an%x00%at%x00%s%x00");
   });
 
-  test("parses line history with first-parent information", () => {
+  test("parses line history with first-parent information and tracked hunk ranges", () => {
     const sha = "1".repeat(40);
     const parentSha = "2".repeat(40);
-    const output = `${[sha, parentSha, "Ada", "10", "change line"].join(NUL)}${NUL}`;
+    const output = lineHistoryRecord(
+      [sha, parentSha, "Ada", "10", "change line"],
+      "\n\ndiff --git a/file.ts b/file.ts\n@@ -80,2 +63,3 @@ context\n-old\n+new\n",
+    );
 
     assert.deepEqual(parseLineHistory(output), [
       {
@@ -37,12 +47,20 @@ suite("file history parser", () => {
           sha,
           subject: "change line",
         },
+        lineChanges: [{ lineCount: 3, startLine: 63 }],
         parentSha,
       },
     ]);
     assert.throws(
-      () => parseLineHistory(`${[sha, "bad", "Ada", "10", "subject"].join(NUL)}${NUL}`),
+      () =>
+        parseLineHistory(
+          lineHistoryRecord([sha, "bad", "Ada", "10", "subject"], "@@ -1 +1 @@\n-old\n+new\n"),
+        ),
       GitFileHistoryParseError,
+    );
+    assert.throws(
+      () => parseLineHistory(lineHistoryRecord([sha, "", "Ada", "10", "subject"], "no hunk")),
+      /no tracked-line hunk/u,
     );
   });
 

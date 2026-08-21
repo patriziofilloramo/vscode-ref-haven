@@ -1,6 +1,7 @@
 import type { FileHistoryEntry, LineHistoryEntry } from "../../domain/history";
 import type { FileChange } from "../../domain/comparisonResult";
 import { isGitObjectId } from "../../domain/gitObjectId";
+import { parseChangedLineRanges } from "./diffHunks";
 import { parseGitEpochSeconds } from "./gitTimestamp";
 import { nameStatusPathCount, parseNameStatusZ } from "./nameStatus";
 
@@ -8,8 +9,8 @@ const FIELD_SEPARATOR = "\0";
 
 /** `git log --name-status -z --format` template matching {@link parseFileHistory}. */
 export const FILE_HISTORY_LOG_FORMAT = "%H%x00%P%x00%an%x00%at%x00%s%x00";
-/** `git log --no-patch -z --format` template matching {@link parseLineHistory}. */
-export const LINE_HISTORY_LOG_FORMAT = "%H%x00%P%x00%an%x00%at%x00%s%x00";
+/** Leading NUL separates each metadata record from its following `git log -L` patch. */
+export const LINE_HISTORY_LOG_FORMAT = "%x00%H%x00%P%x00%an%x00%at%x00%s%x00";
 
 export class GitFileHistoryParseError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
@@ -91,23 +92,28 @@ export function parseFileHistory(stdout: string): FileHistoryEntry[] {
   return entries;
 }
 
-/** Parses NUL-delimited line-history metadata, including the first parent for native diffs. */
+/** Parses NUL-delimited line-history metadata and its exact tracked-line hunks. */
 export function parseLineHistory(stdout: string): LineHistoryEntry[] {
+  if (stdout === "") return [];
   const fields = stdout.split(FIELD_SEPARATOR);
+  if (fields[0] !== "") {
+    throw new GitFileHistoryParseError("Malformed line history record boundary.");
+  }
   const entries: LineHistoryEntry[] = [];
-  for (let index = 0; index < fields.length;) {
-    const sha = fields[index++]?.replace(/^\r?\n/u, "");
-    if (sha === "" && index === fields.length) break;
+  for (let index = 1; index < fields.length;) {
+    const sha = fields[index++];
     const parents = fields[index++];
     const authorName = fields[index++];
     const epochSeconds = fields[index++];
     const subject = fields[index++];
+    const patch = fields[index++];
     if (
       !sha ||
       parents === undefined ||
       authorName === undefined ||
       epochSeconds === undefined ||
       subject === undefined ||
+      patch === undefined ||
       !isGitObjectId(sha)
     ) {
       throw new GitFileHistoryParseError("Malformed line history metadata.");
@@ -121,6 +127,15 @@ export function parseLineHistory(stdout: string): LineHistoryEntry[] {
     if (parentSha !== null && !isGitObjectId(parentSha)) {
       throw new GitFileHistoryParseError("Invalid line history parent.");
     }
+    let lineChanges: LineHistoryEntry["lineChanges"];
+    try {
+      lineChanges = parseChangedLineRanges(patch);
+    } catch (error) {
+      throw new GitFileHistoryParseError("Malformed line history patch.", { cause: error });
+    }
+    if (lineChanges.length === 0) {
+      throw new GitFileHistoryParseError("Line history entry has no tracked-line hunk.");
+    }
     entries.push({
       commit: {
         authorDate: authorDateSeconds * 1000,
@@ -128,6 +143,7 @@ export function parseLineHistory(stdout: string): LineHistoryEntry[] {
         sha,
         subject,
       },
+      lineChanges,
       parentSha,
     });
   }

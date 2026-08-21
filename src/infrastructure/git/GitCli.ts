@@ -9,6 +9,7 @@ import type {
   HistoryPage,
   HistoryPageCursor,
   HistoryPageRequest,
+  LineHistoryEntry,
 } from "../../domain/history";
 import { MAX_INTERACTIVE_INPUT_LENGTH, MAX_STASH_MESSAGE_LENGTH } from "../../domain/inputLimits";
 import type { ChangedLineRange } from "../../domain/fileAnnotations";
@@ -508,7 +509,7 @@ export async function listLineHistory(
     limit: COMMIT_PAGE_SIZE,
   },
   signal?: AbortSignal,
-): Promise<HistoryPage> {
+): Promise<HistoryPage<LineHistoryEntry>> {
   assertRepositoryRelativeGitPath(filePath);
   if (
     !Number.isInteger(startLine) ||
@@ -530,7 +531,10 @@ export async function listLineHistory(
     repositoryRoot,
     [
       "log",
-      "--no-patch",
+      "--patch",
+      "--unified=0",
+      "--no-ext-diff",
+      "--no-textconv",
       `--skip=${offset.toString()}`,
       `--max-count=${(limit + 1).toString()}`,
       `--format=${LINE_HISTORY_LOG_FORMAT}`,

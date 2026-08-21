@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 
 import type { FileChange } from "../domain/comparisonResult";
-import { isFileHistoryEntry } from "../domain/history";
+import { isFileHistoryEntry, isLineHistoryEntry } from "../domain/history";
 import { MAX_INTERACTIVE_INPUT_LENGTH } from "../domain/inputLimits";
 import {
   listChangedFilesForPath,
@@ -111,7 +111,14 @@ export class FileHistoryController implements vscode.Disposable {
 
   public async openFileDiff(node: FileHistoryNode): Promise<void> {
     const { change, parentSha } = await this.resolveHistoryChange(node);
-    return this.comparisonController.openFileDiff(
+    const revealRange =
+      node.kind === "lineHistoryCommit" && isLineHistoryEntry(node.entry)
+        ? node.entry.lineChanges[0]
+        : undefined;
+    if (node.kind === "lineHistoryCommit" && !revealRange) {
+      throw new Error("The selected line-history revision has no tracked-line range.");
+    }
+    await this.comparisonController.openFileDiff(
       {
         fromSha: parentSha,
         label: node.entry.commit.subject || node.entry.commit.sha.slice(0, 8),
@@ -119,7 +126,15 @@ export class FileHistoryController implements vscode.Disposable {
         toSha: node.entry.commit.sha,
       },
       change,
+      revealRange,
     );
+    if (revealRange) {
+      this.logger.debug("Centered line history diff", {
+        lineCount: revealRange.lineCount,
+        operation: "openLineHistoryDiff",
+        startLine: revealRange.startLine,
+      });
+    }
   }
 
   public async openFileAtRevision(node: FileHistoryNode): Promise<void> {

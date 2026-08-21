@@ -39,6 +39,11 @@ import type { FileDiffScope } from "../domain/fileDiffScope";
 import { pathIdentityKey, resolvePathWithinRepository } from "../domain/pathValidation";
 import { formatDiffStats, pluralize } from "../ui/format";
 import { showTransientSuccess } from "../ui/feedback";
+import {
+  historyDiffSelection,
+  revealHistoryDiffRange,
+  type FileDiffRevealRange,
+} from "../ui/historyDiffNavigation";
 import { isFileChange, isFileDiffScope } from "../domain/validation";
 import {
   canonicalPathIdentityKey,
@@ -62,6 +67,7 @@ import {
   BinaryRevisionError,
   type GitRevisionContentProvider,
 } from "../ui/documents/GitRevisionContentProvider";
+import { createFileDiffUris } from "../ui/documents/fileDiffUris";
 
 const FILES_LAYOUT_STORAGE_KEY = "refhaven.view.filesLayout";
 const FILES_LAYOUT_CONTEXT_KEY = "refhaven.filesLayout";
@@ -866,13 +872,17 @@ export class ComparisonController {
     return calculateComparison({ ...current, repository }, signal);
   }
 
-  public async openFileDiff(scope: FileDiffScope, file: FileChange): Promise<void> {
+  public async openFileDiff(
+    scope: FileDiffScope,
+    file: FileChange,
+    revealRange?: FileDiffRevealRange,
+  ): Promise<void> {
     if (!isFileDiffScope(scope) || !isFileChange(file)) {
       throw new Error("RefHaven file selection is invalid.");
     }
     await this.assertKnownRepositoryRoot(scope.repositoryRootPath);
 
-    const { left, right } = this.createFileDiffUris(scope, file);
+    const { left, right } = createFileDiffUris(this.revisionProvider, scope, file);
 
     try {
       await this.revisionProvider.prepareTextDiff(left, right);
@@ -885,7 +895,12 @@ export class ComparisonController {
     }
 
     const title = `${file.newPath} (${scope.label})`;
-    await vscode.commands.executeCommand("vscode.diff", left, right, title, { preview: true });
+    const selection = revealRange ? historyDiffSelection(revealRange) : undefined;
+    await vscode.commands.executeCommand("vscode.diff", left, right, title, {
+      preview: true,
+      ...(selection ? { selection } : {}),
+    });
+    if (selection) revealHistoryDiffRange(right, selection);
   }
 
   public async openAllComparisonChanges(comparison: SavedComparisonV1): Promise<void> {
@@ -905,7 +920,7 @@ export class ComparisonController {
       return;
     }
     const resources: [vscode.Uri, vscode.Uri, vscode.Uri][] = textFiles.map((file) => {
-      const { left, right } = this.createFileDiffUris(scope, file);
+      const { left, right } = createFileDiffUris(this.revisionProvider, scope, file);
       return [
         scope.toSha === null
           ? vscode.Uri.file(resolvePathWithinRepository(scope.repositoryRootPath, file.newPath))
@@ -921,25 +936,6 @@ export class ComparisonController {
         `Opened ${pluralize(textFiles.length, "text change")}; ${pluralize(omitted, "binary change")} omitted`,
       );
     }
-  }
-
-  private createFileDiffUris(
-    scope: FileDiffScope,
-    file: FileChange,
-  ): { readonly left: vscode.Uri; readonly right: vscode.Uri } {
-    const repositoryRoot = scope.repositoryRootPath;
-    const oldPath = file.oldPath ?? file.newPath;
-    const left =
-      file.status === "added" || scope.fromSha === null
-        ? this.revisionProvider.createEmptyUri(file.newPath)
-        : this.revisionProvider.createRevisionUri(repositoryRoot, scope.fromSha, oldPath);
-    const right =
-      file.status === "deleted"
-        ? this.revisionProvider.createEmptyUri(file.newPath)
-        : scope.toSha === null
-          ? vscode.Uri.file(resolvePathWithinRepository(repositoryRoot, file.newPath))
-          : this.revisionProvider.createRevisionUri(repositoryRoot, scope.toSha, file.newPath);
-    return { left, right };
   }
 
   private applyFilesLayout(layout: FilesLayout): void {

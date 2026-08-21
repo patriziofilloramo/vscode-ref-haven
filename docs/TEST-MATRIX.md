@@ -36,8 +36,10 @@ enforces this matrix and validates VSIX packaging on Linux and Windows.
 
 History coverage includes delimiter-safe file/line parsers, cursor paging across
 a real rename boundary, explicit follow-on/follow-off behavior, real
-`git log -L` execution, stale-target cancellation, pin state, and incremental
-tree presentation in the Extension Host.
+`git log -L` execution and hunk coordinates, stale-target cancellation, pin
+state, and incremental tree presentation in the Extension Host. A 90-line real
+repository fixture verifies that a Line History row opens and selects its
+tracked hunk at line 63 rather than the beginning of the file.
 Reference/search coverage includes tag parsing, strict typed-ref validation,
 real Working Tree comparison, local commit search with literal/regex and case
 semantics, content-filter isolation, and full commit-detail loading in the
@@ -333,8 +335,10 @@ Before delivering `refhaven-x.y.z.vsix`:
     rows and verify the native diff sides; use **Open File at This Revision** on
     the deletion row and verify the last existing content opens. Run **Show Line
     History** directly and verify Inspector opens without a commit picker, then
-    click a row that introduced a file. Confirm Worktrees reports clean/dirty
-    state without changing repository state or contacting a remote.
+    click a row that introduced a file. On a long file whose selected line moved
+    across revisions, verify each row centers the diff on that commit's tracked
+    hunk. Confirm Worktrees reports clean/dirty state without changing repository
+    state or contacting a remote.
 17. Enable whole-file blame on a file containing several contiguous commit
     blocks. Verify author, relative age, and summary are readable, block markers
     are coherent, every line has hover details, compact/detailed and repeated

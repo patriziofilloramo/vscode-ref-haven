@@ -217,8 +217,9 @@ picker.
   path metadata.
 - Run **Show Line History** to replace the section with the selected line range;
   it is pinned automatically so opening a diff cannot lose the selection.
-- Open file and line changes as native diffs, then navigate newer or older
-  loaded revisions.
+- Open file and line changes as native diffs. Line History records open centered
+  on the exact tracked hunk in that historical revision, even when earlier
+  edits moved the line; then navigate newer or older loaded revisions.
 - Open any tracked file at a locally available revision.
 - Compare the working-tree file with a selected revision.
 

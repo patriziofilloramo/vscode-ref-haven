@@ -311,6 +311,14 @@ and asks Git only for the selected path. Added and deleted sides reuse the
 empty revision document; unchanged files still open a valid native diff
 without a repository-wide calculation.
 
+`FileHistoryController` keeps Line History pinned to the original selection,
+while each parsed `git log -L` record carries its own target-side zero-context
+hunk ranges. Opening a line-history record passes its first tracked range into
+the shared native diff pipeline. VS Code receives the range as the initial
+selection, and the modified-side editor is explicitly centered after opening;
+the current working-tree line number is never assumed to be valid in an older
+revision.
+
 ### Refresh scheduler and cache
 
 The scheduler enforces two concurrent Git processes per repository and four globally. Queued work is abortable, and `AbortSignal` is passed to running child processes. Repository events invalidate active results; expansion then resolves refs again. There is no background polling.

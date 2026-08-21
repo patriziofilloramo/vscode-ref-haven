@@ -9,7 +9,17 @@ export interface FileHistoryEntry extends HistoryEntry {
   readonly change: FileChange;
 }
 
-export type LineHistoryEntry = HistoryEntry;
+export interface LineHistoryRange {
+  /** One-based first line on the commit side of the history diff. */
+  readonly startLine: number;
+  /** Zero represents a deletion positioned between surviving lines. */
+  readonly lineCount: number;
+}
+
+export interface LineHistoryEntry extends HistoryEntry {
+  /** Hunk ranges emitted by `git log -L` for this specific revision. */
+  readonly lineChanges: readonly LineHistoryRange[];
+}
 
 interface HistoryTargetBase {
   readonly filePath: string;
@@ -53,4 +63,8 @@ export interface HistoryPageRequest {
 
 export function isFileHistoryEntry(entry: HistoryEntry): entry is FileHistoryEntry {
   return "change" in entry;
+}
+
+export function isLineHistoryEntry(entry: HistoryEntry): entry is LineHistoryEntry {
+  return "lineChanges" in entry;
 }

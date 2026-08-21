@@ -113,9 +113,12 @@ Followed file history restarts from the last displayed commit and path, verifies
 that boundary, then removes its single duplicate row. It does not use `--skip`:
 skipping a simplified `--follow` walk can lose the continuation at a rename
 boundary. Line history replays the same bounded `git log -L` query with a
-validated offset because Git owns the historical line-range mapping. A new
-target, refresh, follow-mode change, or user cancellation aborts the active Git
-process; completed pages remain available when loading a later page fails.
+validated offset because Git owns the historical line-range mapping. Its
+zero-context patches are parsed with the NUL-delimited commit metadata, and the
+target-side hunk range is retained so a selected row can center its native diff
+on the historical location rather than the current line number. A new target,
+refresh, follow-mode change, or user cancellation aborts the active Git process;
+completed pages remain available when loading a later page fails.
 
 ## Numstat
 

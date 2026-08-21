@@ -111,8 +111,8 @@ while keeping the native-UI, no-webview, no-telemetry principles:
   copy-message, revision actions, and recent-stash search.
 - **Native view enrichment:** Stashes and history have in-memory filters;
   expanded stashes show local change statistics; file and line history expose
-  incremental paging, pinning, native diffs, parent navigation, and explicit
-  rename-follow state; Commit Details supports
+  incremental paging, pinning, native diffs centered on historical line hunks,
+  parent navigation, and explicit rename-follow state; Commit Details supports
   metadata copy and parent drill-down/diff; Branches show upstream divergence,
   tip metadata, and bounded expandable history; Worktrees show a local
   staged/unstaged/untracked/conflicted summary.

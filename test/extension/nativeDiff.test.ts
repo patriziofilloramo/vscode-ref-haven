@@ -38,6 +38,10 @@ import {
 } from "../../src/ui/tree/FileHistoryTreeProvider";
 
 const EXTENSION_ID = "patriziofilloramo.refhaven";
+const LINE_HISTORY_BASE_TARGET_LINE = 40;
+const LINE_HISTORY_TARGET_LINE = 63;
+const LINE_HISTORY_BASE = lineHistoryBaseFixture();
+const LINE_HISTORY_FEATURE = lineHistoryFeatureFixture();
 
 suite("native branch diff", () => {
   let repositoryRoot: string;
@@ -52,12 +56,14 @@ suite("native branch diff", () => {
     git("config", "user.email", "refhaven@example.invalid");
     git("config", "remote.origin.url", "git@gitlab.example.invalid:group/project.git");
     writeFileSync(join(repositoryRoot, "modified.txt"), "before\n", "utf8");
+    writeFileSync(join(repositoryRoot, "line-history.txt"), LINE_HISTORY_BASE, "utf8");
     writeFileSync(join(repositoryRoot, "deleted.txt"), "deleted\n", "utf8");
     writeFileSync(join(repositoryRoot, "rename-old.txt"), "renamed\n", "utf8");
     git("add", ".");
     git("commit", "-m", "base");
     git("switch", "-c", "feature/native-diff");
     writeFileSync(join(repositoryRoot, "modified.txt"), "after\n", "utf8");
+    writeFileSync(join(repositoryRoot, "line-history.txt"), LINE_HISTORY_FEATURE, "utf8");
     writeFileSync(join(repositoryRoot, "added.txt"), "added\n", "utf8");
     git("rm", "deleted.txt");
     git("mv", "rename-old.txt", "rename-new.txt");
@@ -87,6 +93,7 @@ suite("native branch diff", () => {
       [
         { newPath: "added.txt", oldPath: undefined, status: "added" },
         { newPath: "deleted.txt", oldPath: undefined, status: "deleted" },
+        { newPath: "line-history.txt", oldPath: undefined, status: "modified" },
         { newPath: "modified.txt", oldPath: undefined, status: "modified" },
         { newPath: "rename-new.txt", oldPath: "rename-old.txt", status: "renamed" },
       ],
@@ -311,6 +318,19 @@ suite("native branch diff", () => {
       [firstLinePage.entries[0]?.commit.subject, secondLinePage.entries[0]?.commit.subject],
       ["feature changes", "base"],
     );
+    const positionedLineHistory = await listLineHistory(
+      repositoryRoot,
+      "line-history.txt",
+      LINE_HISTORY_TARGET_LINE,
+      LINE_HISTORY_TARGET_LINE,
+    );
+    const [latestPositionedLine, originalPositionedLine] = positionedLineHistory.entries;
+    assert.deepEqual(latestPositionedLine?.lineChanges, [
+      { lineCount: 1, startLine: LINE_HISTORY_TARGET_LINE },
+    ]);
+    assert.deepEqual(originalPositionedLine?.lineChanges, [
+      { lineCount: 1, startLine: LINE_HISTORY_BASE_TARGET_LINE },
+    ]);
   });
 
   test("opens file and line history rows against the correct revisions", async function () {
@@ -323,16 +343,25 @@ suite("native branch diff", () => {
     const modifiedHistory = await listFileHistory(repositoryRoot, "modified.txt");
     const deletedHistory = await listFileHistory(repositoryRoot, "deleted.txt");
     const addedLineHistory = await listLineHistory(repositoryRoot, "added.txt", 1, 1);
+    const positionedLineHistory = await listLineHistory(
+      repositoryRoot,
+      "line-history.txt",
+      LINE_HISTORY_TARGET_LINE,
+      LINE_HISTORY_TARGET_LINE,
+    );
     const renamed = renameHistory.entries.find(({ change }) => change.status === "renamed");
     const original = renameHistory.entries.find(({ change }) => change.status === "added");
     const modified = modifiedHistory.entries.find(({ change }) => change.status === "modified");
     const deleted = deletedHistory.entries.find(({ change }) => change.status === "deleted");
     const addedLine = addedLineHistory.entries[0];
+    const [positionedLine, originalPositionedLine] = positionedLineHistory.entries;
     assert.ok(renamed);
     assert.ok(original);
     assert.ok(modified);
     assert.ok(deleted);
     assert.ok(addedLine);
+    assert.ok(positionedLine);
+    assert.ok(originalPositionedLine);
 
     await assertHistoryRowDiff(
       {
@@ -385,6 +414,38 @@ suite("native branch diff", () => {
       },
       "",
       "added\n",
+    );
+    await assertHistoryRowDiff(
+      {
+        entry: positionedLine,
+        kind: "lineHistoryCommit",
+        target: {
+          endLine: LINE_HISTORY_TARGET_LINE,
+          filePath: "line-history.txt",
+          kind: "line",
+          repositoryRoot,
+          startLine: LINE_HISTORY_TARGET_LINE,
+        },
+      },
+      LINE_HISTORY_BASE,
+      LINE_HISTORY_FEATURE,
+      { revealLine: LINE_HISTORY_TARGET_LINE - 1 },
+    );
+    await assertHistoryRowDiff(
+      {
+        entry: originalPositionedLine,
+        kind: "lineHistoryCommit",
+        target: {
+          endLine: LINE_HISTORY_TARGET_LINE,
+          filePath: "line-history.txt",
+          kind: "line",
+          repositoryRoot,
+          startLine: LINE_HISTORY_TARGET_LINE,
+        },
+      },
+      "",
+      LINE_HISTORY_BASE,
+      { revealLine: LINE_HISTORY_BASE_TARGET_LINE - 1 },
     );
 
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
@@ -905,7 +966,11 @@ async function assertHistoryRowDiff(
   node: FileHistoryNode,
   expectedLeft: string,
   expectedRight: string,
-  expectedFiles?: { readonly leftFile: string; readonly rightFile: string },
+  options?: {
+    readonly leftFile?: string;
+    readonly revealLine?: number;
+    readonly rightFile?: string;
+  },
 ): Promise<void> {
   const provider = new FileHistoryTreeProvider();
   provider.setLoader(() =>
@@ -931,11 +996,44 @@ async function assertHistoryRowDiff(
     ]);
     assert.equal(leftDocument.getText(), expectedLeft);
     assert.equal(rightDocument.getText(), expectedRight);
-    if (expectedFiles) {
-      assert.match(input.original.path, new RegExp(`/${expectedFiles.leftFile}$`, "u"));
-      assert.match(input.modified.path, new RegExp(`/${expectedFiles.rightFile}$`, "u"));
+    if (options?.leftFile && options.rightFile) {
+      assert.match(input.original.path, new RegExp(`/${options.leftFile}$`, "u"));
+      assert.match(input.modified.path, new RegExp(`/${options.rightFile}$`, "u"));
+    }
+    if (options?.revealLine !== undefined) {
+      const modifiedEditor = vscode.window.visibleTextEditors.find(
+        ({ document }) => document.uri.toString() === input.modified.toString(),
+      );
+      assert.ok(modifiedEditor, "Expected the modified history side to be visible");
+      assert.equal(
+        modifiedEditor.selection.active.line,
+        options.revealLine,
+        "Line History must select the tracked hunk instead of the start of the file",
+      );
     }
   } finally {
     provider.dispose();
   }
+}
+
+function lineHistoryBaseFixture(): string {
+  return `${Array.from({ length: 67 }, (_, index) =>
+    index + 1 === LINE_HISTORY_BASE_TARGET_LINE
+      ? "before target"
+      : `stable line ${String(index + 1).padStart(2, "0")}`,
+  ).join("\n")}\n`;
+}
+
+function lineHistoryFeatureFixture(): string {
+  const lines = lineHistoryBaseFixture().trimEnd().split("\n");
+  lines[LINE_HISTORY_BASE_TARGET_LINE - 1] = "after target";
+  lines.splice(
+    10,
+    0,
+    ...Array.from(
+      { length: 23 },
+      (_, index) => `inserted line ${String(index + 1).padStart(2, "0")}`,
+    ),
+  );
+  return `${lines.join("\n")}\n`;
 }

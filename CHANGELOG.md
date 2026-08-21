@@ -18,6 +18,10 @@ All notable changes to RefHaven are recorded here. The format follows
   editor-update debounce.
 - Cover real committed and unsaved heatmap lines plus legend navigation in the
   Extension Host test suite.
+- Open Line History diffs centered on the tracked hunk for the selected commit
+  instead of leaving the editor at the beginning of the file. Historical
+  positions come from `git log -L`, so intervening insertions do not shift the
+  destination incorrectly.
 
 ## [0.16.0] — 2026-08-20
 
