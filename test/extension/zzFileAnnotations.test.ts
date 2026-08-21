@@ -50,6 +50,42 @@ suite("File annotations", () => {
       "dismissal must not rewrite the persisted window preference",
     );
   });
+
+  test("renders committed and unsaved lines into a navigable heatmap legend", async function () {
+    this.timeout(5_000);
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder);
+    const configuration = vscode.workspace.getConfiguration(CONFIGURATION_SECTION);
+    await configuration.update(MODE_SETTING, "off", vscode.ConfigurationTarget.Global);
+    await configuration.update(TOGGLE_MODE_SETTING, "file", vscode.ConfigurationTarget.Global);
+
+    const uri = vscode.Uri.joinPath(workspaceFolder.uri, "fixture.txt");
+    const document = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(document);
+    await waitForActiveEditor(uri);
+    const end = document.lineAt(document.lineCount - 1).range.end;
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(uri, end, "\nunsaved heatmap line");
+    assert.equal(await vscode.workspace.applyEdit(edit), true);
+
+    try {
+      await vscode.commands.executeCommand("refhaven.toggleFileHeatmap", uri);
+      editor.selection = new vscode.Selection(0, 0, 0, 0);
+
+      const legend = vscode.commands.executeCommand("refhaven.showFileHeatmapLegend", uri);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await vscode.commands.executeCommand("workbench.action.acceptSelectedQuickOpenItem");
+      await legend;
+
+      assert.equal(
+        vscode.window.activeTextEditor?.selection.active.line,
+        1,
+        "the Working tree legend entry must navigate to the unsaved line",
+      );
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
 });
 
 /**

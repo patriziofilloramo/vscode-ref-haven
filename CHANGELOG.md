@@ -6,6 +6,19 @@ All notable changes to RefHaven are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Make direct file-heatmap activation observable by reporting the rendered line
+  count, number of populated age bands, and active visual placements.
+
+### Fixed
+
+- Refresh stale heatmap data before opening its legend, explain inactive or
+  non-blameable files, and prevent an interactive refresh from racing a pending
+  editor-update debounce.
+- Cover real committed and unsaved heatmap lines plus legend navigation in the
+  Extension Host test suite.
+
 ## [0.16.0] — 2026-08-20
 
 ### Added

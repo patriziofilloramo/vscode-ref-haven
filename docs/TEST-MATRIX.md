@@ -52,8 +52,10 @@ zero-context diff hunks, unsaved-buffer blame, saved/unsaved changed-line range
 calculation, and a validated serialized changes baseline. The Extension Host
 verifies file-scoped toggles do not persist,
 window-scoped toggles do persist, dismissal stays temporary, and all annotation
-commands are registered. A 5,000-line presentation benchmark guards the bounded
-render-preparation path.
+commands are registered. It also renders committed and unsaved lines through
+real Git blame, opens the populated legend, and verifies that selecting its
+working-tree band navigates to the correct line. A 5,000-line presentation
+benchmark guards the bounded render-preparation path.
 Interaction-surface coverage includes exact command and submenu contributions,
 Extension Host command registration, canonical URI/tree-node file resolution,
 and a real path-limited working-tree comparison that excludes changes in other

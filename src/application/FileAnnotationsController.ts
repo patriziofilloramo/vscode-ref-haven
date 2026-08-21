@@ -303,7 +303,8 @@ export class FileAnnotationsController implements vscode.Disposable {
       this.changesBase = undefined;
     }
     await this.update(true);
-    showTransientSuccess(`File heatmap ${enabled ? "enabled" : "off"} for this ${toggleMode}`);
+    if (enabled) this.showHeatmapEnabledFeedback(toggleMode);
+    else showTransientSuccess(`File heatmap off for this ${toggleMode}`);
   }
 
   public async dismiss(): Promise<void> {
@@ -314,26 +315,43 @@ export class FileAnnotationsController implements vscode.Disposable {
   }
 
   public async showHeatmapLegend(): Promise<void> {
-    const activeUri = vscode.window.activeTextEditor?.document.uri.toString();
-    const summary =
-      this.heatmapSummary?.documentUri === activeUri ? this.heatmapSummary : undefined;
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor?.document.uri.scheme !== "file") {
+      void vscode.window.showInformationMessage(
+        "Open a tracked file before viewing its heatmap legend.",
+      );
+      return;
+    }
+    const activeUri = activeEditor.document.uri.toString();
+    if (this.effectiveMode(activeUri) !== "heatmap") {
+      void vscode.window.showInformationMessage(
+        "The file heatmap is off for this file. Enable it before opening the legend.",
+      );
+      return;
+    }
+    if (activeEditor.document.lineCount > MAX_ANNOTATED_LINES) {
+      this.showAnnotationLineLimit();
+      return;
+    }
+    if (!this.currentHeatmapSummary(activeEditor)) await this.update(true);
+    const summaryEditor = vscode.window.activeTextEditor;
+    const summary = summaryEditor ? this.currentHeatmapSummary(summaryEditor) : undefined;
+    if (!summary || summary.total === 0) {
+      void vscode.window.showInformationMessage(
+        "The active file has no blameable lines to show in the heatmap.",
+      );
+      return;
+    }
     const selected = await vscode.window.showQuickPick<HeatmapLegendItem>(
       HEATMAP_BUCKETS.map((bucket) => {
         const details = HEATMAP_BUCKET_DETAILS[bucket];
-        const count = summary?.counts[bucket];
-        const countDetail =
-          count === undefined || !summary || summary.total === 0
-            ? undefined
-            : `${count.toLocaleString()} ${count === 1 ? "line" : "lines"} (${Math.round((count / summary.total) * 100).toString()}%)`;
-        const firstLine = summary?.firstLines[bucket];
+        const count = summary.counts[bucket];
+        const countDetail = `${count.toLocaleString()} ${count === 1 ? "line" : "lines"} (${Math.round((count / summary.total) * 100).toString()}%)`;
+        const firstLine = summary.firstLines[bucket];
         return {
           bucket,
           description: details.age,
-          ...(countDetail
-            ? {
-                detail: `${countDetail}${firstLine === null || firstLine === undefined ? "" : " · Select to jump"}`,
-              }
-            : {}),
+          detail: `${countDetail}${firstLine === null ? "" : " · Select to jump"}`,
           label: `$(${HEATMAP_BUCKET_ICONS[bucket]}) ${details.label}`,
         };
       }),
@@ -342,9 +360,9 @@ export class FileAnnotationsController implements vscode.Disposable {
         title: "RefHaven: File Heatmap Legend",
       },
     );
-    const line = selected && summary ? summary.firstLines[selected.bucket] : null;
+    const line = selected ? summary.firstLines[selected.bucket] : null;
     const editor = vscode.window.activeTextEditor;
-    if (!summary || line === null || !editor) return;
+    if (line === null || !editor) return;
     if (
       editor.document.uri.toString() !== summary.documentUri ||
       editor.document.version !== summary.documentVersion
@@ -361,6 +379,7 @@ export class FileAnnotationsController implements vscode.Disposable {
     this.generation += 1;
     if (this.updateTimer) clearTimeout(this.updateTimer);
     this.updateTimer = setTimeout(() => {
+      this.updateTimer = undefined;
       runInBackground(
         this.update(false),
         this.logger,
@@ -371,6 +390,10 @@ export class FileAnnotationsController implements vscode.Disposable {
   }
 
   private async update(interactive: boolean): Promise<void> {
+    if (interactive && this.updateTimer) {
+      clearTimeout(this.updateTimer);
+      this.updateTimer = undefined;
+    }
     this.activeUpdate?.abort();
     const abortController = new AbortController();
     this.activeUpdate = abortController;
@@ -393,11 +416,7 @@ export class FileAnnotationsController implements vscode.Disposable {
     }
     if (target.editor.document.lineCount > MAX_ANNOTATED_LINES) {
       this.clearDecorations();
-      if (interactive) {
-        void vscode.window.showWarningMessage(
-          `File annotations are limited to ${MAX_ANNOTATED_LINES.toLocaleString()} lines to keep the editor responsive.`,
-        );
-      }
+      if (interactive) this.showAnnotationLineLimit();
       return;
     }
 
@@ -505,7 +524,14 @@ export class FileAnnotationsController implements vscode.Disposable {
       firstLines,
       total: Object.values(counts).reduce((total, count) => total + count, 0),
     };
-    this.setAnnotationsActive(true);
+    const bandCount = HEATMAP_BUCKETS.filter((bucket) => counts[bucket] > 0).length;
+    this.logger.debug("Rendered file heatmap", {
+      bandCount,
+      lineCount: this.heatmapSummary.total,
+      operation: "renderFileHeatmap",
+      placements: readHeatmapLocations().join(","),
+    });
+    this.setAnnotationsActive(this.heatmapSummary.total > 0);
   }
 
   private renderChanges(
@@ -589,6 +615,35 @@ export class FileAnnotationsController implements vscode.Disposable {
     return this.fileModeOverrides.get(documentUri) ?? this.mode;
   }
 
+  private currentHeatmapSummary(editor: vscode.TextEditor): HeatmapSummary | undefined {
+    const summary = this.heatmapSummary;
+    return summary?.documentUri === editor.document.uri.toString() &&
+      summary.documentVersion === editor.document.version
+      ? summary
+      : undefined;
+  }
+
+  private showHeatmapEnabledFeedback(toggleMode: HeatmapToggleMode): void {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.lineCount > MAX_ANNOTATED_LINES) return;
+    const summary = editor ? this.currentHeatmapSummary(editor) : undefined;
+    if (!summary || summary.total === 0) {
+      showTransientSuccess(`File heatmap on for this ${toggleMode} · no blameable lines`);
+      return;
+    }
+    const bandCount = HEATMAP_BUCKETS.filter((bucket) => summary.counts[bucket] > 0).length;
+    const placements = heatmapPlacementLabel(readHeatmapLocations());
+    showTransientSuccess(
+      `File heatmap on · ${summary.total.toLocaleString()} ${summary.total === 1 ? "line" : "lines"} · ${bandCount.toString()} ${bandCount === 1 ? "band" : "bands"} · ${placements}`,
+    );
+  }
+
+  private showAnnotationLineLimit(): void {
+    void vscode.window.showWarningMessage(
+      `File annotations are limited to ${MAX_ANNOTATED_LINES.toLocaleString()} lines to keep the editor responsive.`,
+    );
+  }
+
   private setAnnotationsActive(active: boolean): void {
     if (this.annotationsActive === active) return;
     this.annotationsActive = active;
@@ -617,6 +672,16 @@ export class FileAnnotationsController implements vscode.Disposable {
 function createHeatmapDecorations(): Record<HeatmapBucket, vscode.TextEditorDecorationType> {
   const locations = readHeatmapLocations();
   return heatmapBucketRecord((bucket) => heatmapDecoration(bucket, locations));
+}
+
+function heatmapPlacementLabel(locations: readonly HeatmapLocation[]): string {
+  return locations
+    .map((location) => {
+      if (location === "edge") return "right edge";
+      if (location === "overview") return "overview ruler";
+      return "line tint";
+    })
+    .join(" + ");
 }
 
 function heatmapDecoration(

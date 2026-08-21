@@ -494,7 +494,10 @@ translucent whole-line treatment. Changing locations disposes and recreates the
 decoration types before scheduling a fresh render. The controller retains only
 the active document's aggregate bucket counts and first matching line for the
 textual, navigable legend; blame results and line-level heatmap data are not
-persisted.
+persisted. Interactive activation reports only aggregate line/band counts and
+the configured placements. A path-free debug event records the same aggregate
+render evidence. The legend refreshes a missing or stale document-version
+summary before it opens and explains inactive or non-blameable states.
 
 The direct heatmap command defaults to a URI-keyed override for the active file.
 Window scope updates the persisted annotation setting instead. The same override
@@ -502,6 +505,10 @@ mechanism lets the Escape command dismiss an active annotation without changing
 the user's global preference; overrides are discarded when a document closes or
 the configured mode changes. A context key activates the Escape binding only
 while RefHaven annotations are visible.
+
+Interactive updates cancel and clear any pending debounced editor refresh before
+starting Git work. This prevents a delayed refresh from aborting a user-invoked
+toggle or legend refresh.
 
 Changes mode persists one schema-versioned symbolic baseline in VS Code
 workspace state, validates it again on load, and re-resolves it to an immutable

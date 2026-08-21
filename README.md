@@ -172,6 +172,14 @@ line:
 | Last year     | More than 30 and up to 365 days ago     |
 | Older         | Committed more than one year ago        |
 
+The default visualization is deliberately compact: a narrow strip at the
+right edge of each line plus markers in the overview ruler. It does not tint
+the code background, and a file whose lines have similar ages can therefore
+look almost uniform. For an unmistakable full-file view, add `"line"` to
+`refhaven.fileAnnotations.heatmap.locations`. The direct-toggle confirmation
+reports how many blameable lines and age bands were rendered, together with the
+active placements.
+
 Use **RefHaven: Toggle File Heatmap** for a direct on/off action. By default it
 affects only the active file; set `refhaven.fileAnnotations.heatmap.toggleMode`
 to `"window"` when you want the choice persisted for the whole window. Press
@@ -186,6 +194,13 @@ Annotations are native, cancellable, bounded to 5,000 editor lines, and their
 calculated results are never persisted. Only the selected changes baseline is
 stored in VS Code workspace state. Whole-file annotations remain off by default
 so there is no repository-wide blame work unless you opt in.
+
+If a heatmap appears empty, open a non-empty tracked file with at most 5,000
+lines and choose **RefHaven: Change File Annotations...** > **File heatmap**.
+This is deterministic; **Toggle File Heatmap** may instead turn an already
+active heatmap off. Then open **Show File Heatmap Legend**: it refreshes stale
+data and explains inactive or non-blameable files instead of showing an empty
+picker.
 
 </details>
 
